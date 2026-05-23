@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +51,7 @@ async def update_project(
         project.title = data.title
     if data.description is not None:
         project.description = data.description
+    project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
     await log_activity(db, user_id, "project.updated")
