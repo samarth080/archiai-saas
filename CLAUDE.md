@@ -124,7 +124,21 @@ archiai-saas/
 - [x] All 8 project tests passing
 - [x] All 8 auth tests still passing
 - [x] Alembic migrations 002 (projects) and 003 (activity_logs) added
-### Sprint 3 — Frontend Foundation ⏳ Not Started
+
+### Sprint 3 — Frontend Foundation ✅ Complete
+- [x] Shared Axios instance (`src/services/api.ts`) injects Bearer token on every request
+- [x] 401 responses log the user out and redirect to `/login`
+- [x] Dashboard rebuilt: sidebar + responsive card grid + real data from `GET /api/projects`
+- [x] "+ New Project" modal — calls `POST /api/projects`, prepends project to grid on success
+- [x] ProjectCard click navigates to `/projects/:id`
+- [x] Project workspace page (`src/pages/Project/index.tsx`) — loads from `GET /api/projects/:id`
+- [x] Edit mode updates title/description via `PUT /api/projects/:id`
+- [x] Delete button confirms, calls `DELETE /api/projects/:id`, redirects to dashboard
+- [x] Empty state, loading state, and inline error states throughout
+- [x] `/projects/:id` added as a protected route in `App.tsx`
+- [x] TypeScript compilation clean (`npx tsc --noEmit`)
+- [x] Canvas placeholder in place for Sprint 4
+
 ### Sprint 4 — Basic 3D Canvas ⏳ Not Started
 ### Sprint 5 — Basic 3D Layout Generation ⏳ Not Started
 ### Sprint 6 — 3D Editing Workflow ⏳ Not Started
