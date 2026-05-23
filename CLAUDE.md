@@ -112,7 +112,18 @@ archiai-saas/
 - [x] ProtectedRoute + PublicOnlyRoute wrappers
 - [x] `docker-compose up` runs full stack
 
-### Sprint 2 — Backend Foundation ⏳ Not Started
+### Sprint 2 — Backend Foundation ✅ Complete
+- [x] Global error handler returns `{ error, code, status }` for all HTTPExceptions
+- [x] RequestValidationError also returns `{ error, code, status }` shape (422)
+- [x] All existing auth tests updated and passing with new error format
+- [x] `POST /api/projects` creates a project and logs `"project.created"` to ActivityLog
+- [x] `GET /api/projects` returns only the authenticated user's projects
+- [x] `GET /api/projects/{id}` returns 403 for another user's project
+- [x] `PUT /api/projects/{id}` updates and logs `"project.updated"`
+- [x] `DELETE /api/projects/{id}` deletes and logs `"project.deleted"`, returns 204
+- [x] All 8 project tests passing
+- [x] All 8 auth tests still passing
+- [x] Alembic migrations 002 (projects) and 003 (activity_logs) added
 ### Sprint 3 — Frontend Foundation ⏳ Not Started
 ### Sprint 4 — Basic 3D Canvas ⏳ Not Started
 ### Sprint 5 — Basic 3D Layout Generation ⏳ Not Started
