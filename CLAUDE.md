@@ -93,24 +93,24 @@ archiai-saas/
 - [x] GitHub repo created: `github.com/samarth080/archiai-saas`
 - [x] CLAUDE.md created
 
-### Sprint 1 — Authentication and Project Setup 🔄 In Progress
-- [ ] Backend project scaffolded (FastAPI + SQLAlchemy + Alembic)
-- [ ] PostgreSQL via Docker Compose running
-- [ ] User model and migration
-- [ ] `POST /api/auth/register`
-- [ ] `POST /api/auth/login`
-- [ ] `POST /api/auth/logout`
-- [ ] `GET /api/auth/me`
-- [ ] JWT middleware
-- [ ] Auth tests passing (8 tests)
-- [ ] Frontend project scaffolded (React + TypeScript + Tailwind + Vite)
-- [ ] Landing page
-- [ ] Register page
-- [ ] Login page
-- [ ] Dashboard page (protected, stub)
-- [ ] Zustand auth store
-- [ ] ProtectedRoute + PublicOnlyRoute wrappers
-- [ ] `docker-compose up` runs full stack
+### Sprint 1 — Authentication and Project Setup ✅ Complete
+- [x] Backend project scaffolded (FastAPI + SQLAlchemy + Alembic)
+- [x] PostgreSQL via Docker Compose running
+- [x] User model and migration
+- [x] `POST /api/auth/register`
+- [x] `POST /api/auth/login`
+- [x] `POST /api/auth/logout`
+- [x] `GET /api/auth/me`
+- [x] JWT middleware
+- [x] Auth tests passing (8 tests)
+- [x] Frontend project scaffolded (React + TypeScript + Tailwind + Vite)
+- [x] Landing page
+- [x] Register page
+- [x] Login page
+- [x] Dashboard page (protected, stub)
+- [x] Zustand auth store
+- [x] ProtectedRoute + PublicOnlyRoute wrappers
+- [x] `docker-compose up` runs full stack
 
 ### Sprint 2 — Backend Foundation ⏳ Not Started
 ### Sprint 3 — Frontend Foundation ⏳ Not Started
