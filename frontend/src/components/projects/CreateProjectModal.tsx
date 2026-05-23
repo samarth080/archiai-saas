@@ -22,7 +22,6 @@ export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalPro
     try {
       const project = await projectService.create(data)
       onCreated(project)
-      onClose()
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       setSubmitError(apiErr.response?.data?.error ?? 'Failed to create project')

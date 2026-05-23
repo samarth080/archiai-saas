@@ -42,7 +42,7 @@ export default function Dashboard() {
           </div>
         </nav>
         <div className="p-4 border-t border-slate-700">
-          <p className="text-sm text-slate-300 truncate mb-2">{user?.email ?? user?.name ?? ''}</p>
+          <p className="text-sm text-slate-300 truncate mb-2">{user?.name ?? user?.email ?? ''}</p>
           <Button variant="secondary" onClick={logOut} className="w-full text-sm">
             Logout
           </Button>
