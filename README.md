@@ -71,21 +71,9 @@ SECRET_KEY=test DATABASE_URL=sqlite+aiosqlite:///:memory: pytest app/tests/ -v
 
 ---
 
-## License and Copyright
+## License
 
 Copyright (c) 2026 Samarth Chatli. All rights reserved.
 
-This software and all associated source code, documentation, assets, and materials (collectively, the "Software") are the exclusive intellectual property of Samarth Chatli.
-
-**No permission is granted to any individual or entity to:**
-- Copy, reproduce, or duplicate the Software or any part of it
-- Modify, adapt, translate, or create derivative works based on the Software
-- Distribute, publish, sublicense, sell, or transfer the Software or any part of it
-- Use the Software, in whole or in part, for any commercial or non-commercial purpose
-- Reverse engineer, decompile, or disassemble the Software
-
-Any unauthorized use, reproduction, distribution, or modification of this Software — in whole or in part — constitutes a violation of applicable intellectual property laws and will be subject to legal action, including but not limited to civil and criminal penalties.
-
-For licensing inquiries, contact the owner directly.
-
-**All rights reserved. Unauthorized use is strictly prohibited and will have legal consequences.**
+This project is proprietary software. See [LICENSE](LICENSE) for full terms.
+Unauthorized use, copying, or distribution is strictly prohibited and will have legal consequences.
