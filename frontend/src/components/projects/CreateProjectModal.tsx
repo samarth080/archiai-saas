@@ -23,8 +23,9 @@ export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalPro
       const project = await projectService.create(data)
       onCreated(project)
       onClose()
-    } catch (err: any) {
-      setSubmitError(err.response?.data?.error ?? 'Failed to create project')
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setSubmitError(apiErr.response?.data?.error ?? 'Failed to create project')
     }
   }
 
@@ -42,11 +43,12 @@ export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalPro
             })}
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
               Description{' '}
               <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <textarea
+              id="description"
               {...register('description')}
               rows={3}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
