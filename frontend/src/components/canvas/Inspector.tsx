@@ -25,11 +25,13 @@ export default function Inspector() {
           <span className="text-xs text-gray-500">X</span>
           <input
             type="number"
+            aria-label="Position X"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={room.position.x}
-            onChange={(e) =>
-              updateRoom(room.id, { position: { ...room.position, x: Number(e.target.value) } })
-            }
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { position: { ...room.position, x: n } })
+            }}
           />
         </label>
 
@@ -37,6 +39,8 @@ export default function Inspector() {
           <span className="text-xs text-gray-500">Y</span>
           <input
             type="number"
+            aria-label="Position Y (locked to floor)"
+            title="Rooms always sit on the floor grid"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={0}
             disabled
@@ -47,11 +51,13 @@ export default function Inspector() {
           <span className="text-xs text-gray-500">Z</span>
           <input
             type="number"
+            aria-label="Position Z"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={room.position.z}
-            onChange={(e) =>
-              updateRoom(room.id, { position: { ...room.position, z: Number(e.target.value) } })
-            }
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { position: { ...room.position, z: n } })
+            }}
           />
         </label>
       </div>
@@ -65,11 +71,13 @@ export default function Inspector() {
           <input
             type="number"
             min={1}
+            aria-label="Width"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={room.size.w}
-            onChange={(e) =>
-              updateRoom(room.id, { size: { ...room.size, w: Math.max(1, Number(e.target.value)) } })
-            }
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, w: Math.max(1, n) } })
+            }}
           />
         </label>
 
@@ -78,11 +86,13 @@ export default function Inspector() {
           <input
             type="number"
             min={1}
+            aria-label="Height"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={room.size.h}
-            onChange={(e) =>
-              updateRoom(room.id, { size: { ...room.size, h: Math.max(1, Number(e.target.value)) } })
-            }
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, h: Math.max(1, n) } })
+            }}
           />
         </label>
 
@@ -91,11 +101,13 @@ export default function Inspector() {
           <input
             type="number"
             min={1}
+            aria-label="Depth"
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
             value={room.size.d}
-            onChange={(e) =>
-              updateRoom(room.id, { size: { ...room.size, d: Math.max(1, Number(e.target.value)) } })
-            }
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, d: Math.max(1, n) } })
+            }}
           />
         </label>
       </div>
