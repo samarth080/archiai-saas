@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.auth.router import router as auth_router
+from app.api.projects.router import router as projects_router
 
 app = FastAPI(title="ArchiAI API", version="0.1.0")
 
@@ -51,6 +52,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(auth_router)
+app.include_router(projects_router)
 
 
 @app.get("/api/health")
