@@ -19,6 +19,7 @@ export default function ProjectPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -78,7 +79,9 @@ export default function ProjectPage() {
     try {
       await projectService.delete(id)
       navigate('/dashboard')
-    } catch (_err) {
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setDeleteError(apiErr.response?.data?.error ?? 'Failed to delete project')
       setDeleting(false)
     }
   }
@@ -160,7 +163,7 @@ export default function ProjectPage() {
                 <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
                   Cancel
                 </Button>
-                <Button variant="primary" onClick={handleSave} loading={saving}>
+                <Button variant="primary" onClick={handleSave} loading={saving} disabled={saving || !editTitle.trim()}>
                   Save
                 </Button>
               </>
@@ -169,14 +172,17 @@ export default function ProjectPage() {
                 <Button variant="secondary" onClick={enterEditMode}>
                   Edit
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleDelete}
-                  loading={deleting}
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                >
-                  Delete
-                </Button>
+                <div className="flex flex-col items-end">
+                  <Button
+                    variant="secondary"
+                    onClick={handleDelete}
+                    loading={deleting}
+                    className="text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Delete
+                  </Button>
+                  {deleteError && <p className="text-sm text-red-600 mt-1">{deleteError}</p>}
+                </div>
               </>
             )}
           </div>
