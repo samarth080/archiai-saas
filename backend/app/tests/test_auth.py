@@ -19,7 +19,9 @@ async def test_register_duplicate_email(client: AsyncClient):
     await client.post("/api/auth/register", json=payload)
     response = await client.post("/api/auth/register", json=payload)
     assert response.status_code == 409
-    assert response.json()["detail"] == "Email already registered"
+    data = response.json()
+    assert data["error"] == "Email already registered"
+    assert data["code"] == "CONFLICT"
 
 
 async def test_login_success(client: AsyncClient):
@@ -47,7 +49,9 @@ async def test_login_wrong_password(client: AsyncClient):
         json={"email": "wrongpass@example.com", "password": "wrongpassword"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    data = response.json()
+    assert data["error"] == "Invalid email or password"
+    assert data["code"] == "UNAUTHORIZED"
 
 
 async def test_login_unknown_email(client: AsyncClient):
@@ -56,7 +60,9 @@ async def test_login_unknown_email(client: AsyncClient):
         json={"email": "nobody@example.com", "password": "somepass12"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password"
+    data = response.json()
+    assert data["error"] == "Invalid email or password"
+    assert data["code"] == "UNAUTHORIZED"
 
 
 async def test_me_valid_token(client: AsyncClient):
@@ -75,7 +81,9 @@ async def test_me_valid_token(client: AsyncClient):
 async def test_me_no_token(client: AsyncClient):
     response = await client.get("/api/auth/me")
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    data = response.json()
+    assert data["error"] == "Not authenticated"
+    assert data["code"] == "UNAUTHORIZED"
 
 
 async def test_me_invalid_token(client: AsyncClient):
@@ -83,4 +91,6 @@ async def test_me_invalid_token(client: AsyncClient):
         "/api/auth/me", headers={"Authorization": "Bearer thisisnotavalidtoken"}
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    data = response.json()
+    assert data["error"] == "Not authenticated"
+    assert data["code"] == "UNAUTHORIZED"
