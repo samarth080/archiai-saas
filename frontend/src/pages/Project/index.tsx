@@ -4,6 +4,8 @@ import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
 import { Button } from '../../components/ui/Button'
 import { Sidebar } from '../../components/layout/Sidebar'
+import { Canvas3D } from '../../components/canvas/Canvas3D'
+import Inspector from '../../components/canvas/Inspector'
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -176,10 +178,10 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        {/* Canvas placeholder */}
-        <div className="flex-1 bg-gray-100 flex items-center justify-center flex-col gap-2">
-          <span className="text-4xl">🏗️</span>
-          <p className="text-gray-400 text-sm">3D canvas coming in Sprint 4</p>
+        {/* Canvas + Inspector */}
+        <div className="flex-1 flex overflow-hidden">
+          <Canvas3D className="flex-1 h-full" />
+          <Inspector />
         </div>
       </main>
     </div>
