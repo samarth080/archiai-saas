@@ -5,7 +5,7 @@ import projectService, { Project } from '../../services/project.service'
 import { Button } from '../../components/ui/Button'
 import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
-import Inspector from '../../components/canvas/Inspector'
+import { Inspector } from '../../components/canvas/Inspector'
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()

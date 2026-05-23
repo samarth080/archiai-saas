@@ -1,6 +1,6 @@
 import { useCanvasStore } from '../../store/canvasStore'
 
-export default function Inspector() {
+export function Inspector() {
   const selectedId = useCanvasStore((s) => s.selectedId)
   const rooms = useCanvasStore((s) => s.rooms)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
