@@ -139,7 +139,23 @@ archiai-saas/
 - [x] TypeScript compilation clean (`npx tsc --noEmit`)
 - [x] Canvas placeholder in place for Sprint 4
 
-### Sprint 4 — Basic 3D Canvas ⏳ Not Started
+### Sprint 4 — Basic 3D Canvas ✅ Complete
+
+- [x] Shared `<Sidebar>` component extracted; Dashboard and Project pages use it
+- [x] `three`, `@react-three/fiber@8`, `@react-three/drei@9`, `@types/three` installed
+- [x] R3F canvas renders in the Project workspace with correct lighting and grid
+- [x] Camera orbits, zooms, and pans with mouse (OrbitControls)
+- [x] 5 hardcoded room boxes visible, each a different color
+- [x] Clicking a room selects it (emissive highlight) and opens the Inspector panel
+- [x] Clicking empty canvas deselects (Inspector closes)
+- [x] TransformControls gizmo appears on selected room; dragging it moves the room
+- [x] OrbitControls disabled while TransformControls is active (no camera fighting)
+- [x] Inspector X/Z fields and size fields update/move the room in real time
+- [x] Delete button in inspector removes the room from the scene
+- [x] Canvas state is in-memory only (persistence in Sprint 7)
+- [x] `npx tsc --noEmit` passes with zero errors
+- [x] 8 canvas store tests passing
+
 ### Sprint 5 — Basic 3D Layout Generation ⏳ Not Started
 ### Sprint 6 — 3D Editing Workflow ⏳ Not Started
 ### Sprint 7 — Database and Project Management ⏳ Not Started
