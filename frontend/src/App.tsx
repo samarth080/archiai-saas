@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
 import Dashboard from './pages/Dashboard'
+import ProjectPage from './pages/Project'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -27,6 +28,7 @@ export default function App() {
         </Route>
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/projects/:id" element={<ProjectPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

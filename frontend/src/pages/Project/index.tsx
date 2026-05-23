@@ -1,0 +1,199 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
+import projectService, { Project } from '../../services/project.service'
+import { Button } from '../../components/ui/Button'
+
+export default function ProjectPage() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { logOut, user } = useAuth()
+
+  const [project, setProject] = useState<Project | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!id) return
+    projectService
+      .get(id)
+      .then((data) => {
+        setProject(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        const apiErr = err as { response?: { status?: number; data?: { error?: string } } }
+        if (apiErr.response?.status === 404) {
+          navigate('/dashboard')
+        } else {
+          setError(apiErr.response?.data?.error ?? 'Failed to load project')
+          setLoading(false)
+        }
+      })
+  }, [id, navigate])
+
+  const enterEditMode = () => {
+    if (!project) return
+    setEditTitle(project.title)
+    setEditDescription(project.description ?? '')
+    setSaveError(null)
+    setEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setEditing(false)
+    setSaveError(null)
+  }
+
+  const handleSave = async () => {
+    if (!id || !project) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await projectService.update(id, {
+        title: editTitle,
+        description: editDescription,
+      })
+      setProject(updated)
+      setEditing(false)
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setSaveError(apiErr.response?.data?.error ?? 'Failed to save project')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!id) return
+    if (!window.confirm('Delete this project?')) return
+    setDeleting(true)
+    try {
+      await projectService.delete(id)
+      navigate('/dashboard')
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setDeleteError(apiErr.response?.data?.error ?? 'Failed to delete project')
+      setDeleting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-gray-400">Loading...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-red-500">{error}</p>
+      </div>
+    )
+  }
+
+  if (!project) return null
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar */}
+      <aside className="w-52 flex-shrink-0 bg-slate-800 text-white flex flex-col">
+        <div className="p-4 border-b border-slate-700">
+          <span className="font-bold text-lg">ArchiAI</span>
+        </div>
+        <nav className="flex-1 p-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-sm font-medium">
+            <span>📁</span>
+            <span>Projects</span>
+          </div>
+        </nav>
+        <div className="p-4 border-t border-slate-700">
+          <p className="text-sm text-slate-300 truncate mb-2">{user?.name ?? user?.email ?? ''}</p>
+          <Button variant="secondary" onClick={logOut} className="w-full text-sm">
+            Logout
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="text-sm text-indigo-600 hover:text-indigo-800 mb-2 block"
+            >
+              ← Projects
+            </button>
+            {editing ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full text-xl font-bold border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={2}
+                  placeholder="Description (optional)"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+                {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+              </div>
+            ) : (
+              <h1 className="text-xl font-bold text-gray-900 truncate">{project.title}</h1>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 pt-6">
+            {editing ? (
+              <>
+                <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={handleSave} loading={saving} disabled={saving || !editTitle.trim()}>
+                  Save
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={enterEditMode}>
+                  Edit
+                </Button>
+                <div className="flex flex-col items-end">
+                  <Button
+                    variant="secondary"
+                    onClick={handleDelete}
+                    loading={deleting}
+                    className="text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Delete
+                  </Button>
+                  {deleteError && <p className="text-sm text-red-600 mt-1">{deleteError}</p>}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Canvas placeholder */}
+        <div className="flex-1 bg-gray-100 flex items-center justify-center flex-col gap-2">
+          <span className="text-4xl">🏗️</span>
+          <p className="text-gray-400 text-sm">3D canvas coming in Sprint 4</p>
+        </div>
+      </main>
+    </div>
+  )
+}
