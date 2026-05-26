@@ -156,7 +156,19 @@ archiai-saas/
 - [x] `npx tsc --noEmit` passes with zero errors
 - [x] 8 canvas store tests passing
 
-### Sprint 5 — Basic 3D Layout Generation ⏳ Not Started
+### Sprint 5 — Basic 3D Layout Generation ✅ Complete
+
+- [x] `prompt_service.py` extracts room types, counts, and size modifiers from natural language
+- [x] `layout_service.py` places rooms in two zones (public/private) with 1m gaps, 2m between zones
+- [x] `POST /api/design/generate` returns layout JSON; protected by JWT (DB-backed auth)
+- [x] Bottom prompt bar in Project workspace — textarea + Generate button
+- [x] Generated rooms replace hardcoded canvas rooms via `canvasStore.loadRooms`
+- [x] Loading state (button disabled + "Generating…") during API call
+- [x] Error message shown if generation fails or no rooms detected; API error propagated to user
+- [x] 9 prompt service tests + 8 layout service tests + 1 new store test (18 new tests)
+- [x] `npx tsc --noEmit` passes with zero errors
+- [x] No DB persistence (Design + DesignVersion deferred to Sprint 7)
+
 ### Sprint 6 — 3D Editing Workflow ⏳ Not Started
 ### Sprint 7 — Database and Project Management ⏳ Not Started
 ### Sprint 8 — Prompt Refinement ⏳ Not Started

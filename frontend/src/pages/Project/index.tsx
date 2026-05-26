@@ -6,6 +6,8 @@ import { Button } from '../../components/ui/Button'
 import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
+import { generateLayout } from '../../services/design.service'
+import { useCanvasStore } from '../../store/canvasStore'
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -23,6 +25,28 @@ export default function ProjectPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const [prompt, setPrompt] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const loadRooms = useCanvasStore((s) => s.loadRooms)
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return
+    setGenerating(true)
+    setGenerateError(null)
+    try {
+      const result = await generateLayout(prompt)
+      loadRooms(result.rooms)
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setGenerateError(
+        apiErr.response?.data?.error ?? 'Generation failed. Try a more detailed description.'
+      )
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -178,10 +202,39 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        {/* Canvas + Inspector */}
-        <div className="flex-1 flex overflow-hidden">
-          <Canvas3D className="flex-1 h-full" />
-          <Inspector />
+        {/* Canvas + Inspector + Prompt bar */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Canvas + Inspector row */}
+          <div className="flex-1 flex overflow-hidden">
+            <Canvas3D className="flex-1 h-full" />
+            <Inspector />
+          </div>
+
+          {/* Prompt bar */}
+          <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-1">
+            <div className="flex gap-2 items-end">
+              <textarea
+                aria-label="Layout prompt"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                rows={2}
+                placeholder="Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                disabled={generating}
+              />
+              <button
+                aria-busy={generating}
+                className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
+                onClick={handleGenerate}
+                disabled={generating || !prompt.trim()}
+              >
+                {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+            {generateError && (
+              <p className="text-xs text-red-500">{generateError}</p>
+            )}
+          </div>
         </div>
       </main>
     </div>
