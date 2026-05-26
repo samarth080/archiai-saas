@@ -25,9 +25,12 @@ function saveStatusLabel(status: SaveStatus, lastSavedAt: string | null) {
 export function EditorToolbar() {
   const [objectType, setObjectType] = useState<CanvasObjectType>('room')
   const selectedId = useCanvasStore((s) => s.selectedId)
+  const floors = useCanvasStore((s) => s.floors)
+  const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const snapToGrid = useCanvasStore((s) => s.snapToGrid)
   const saveStatus = useCanvasStore((s) => s.saveStatus)
   const lastSavedAt = useCanvasStore((s) => s.lastSavedAt)
+  const setSelectedFloor = useCanvasStore((s) => s.setSelectedFloor)
   const setSnapToGrid = useCanvasStore((s) => s.setSnapToGrid)
   const addObject = useCanvasStore((s) => s.addObject)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
@@ -57,6 +60,25 @@ export function EditorToolbar() {
         />
         Snap
       </label>
+
+      {floors.length > 1 && (
+        <select
+          aria-label="Selected floor"
+          className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          value={selectedFloor}
+          onChange={(event) => {
+            const value = event.target.value
+            setSelectedFloor(value === 'all' ? 'all' : Number(value))
+          }}
+        >
+          <option value="all">All Floors</option>
+          {floors.map((floor) => (
+            <option key={floor.id} value={floor.level}>
+              {floor.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <div className="flex items-center gap-1">
         <select

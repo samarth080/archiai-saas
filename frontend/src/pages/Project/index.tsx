@@ -7,7 +7,7 @@ import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
-import { generateLayout } from '../../services/design.service'
+import { generateLayout, getLatestProjectDesign, saveDesignLayout } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
 
 export default function ProjectPage() {
@@ -30,15 +30,20 @@ export default function ProjectPage() {
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
-  const loadRooms = useCanvasStore((s) => s.loadRooms)
+  const [layoutSaving, setLayoutSaving] = useState(false)
+  const [layoutSaveError, setLayoutSaveError] = useState<string | null>(null)
+  const designId = useCanvasStore((s) => s.designId)
+  const loadLayout = useCanvasStore((s) => s.loadLayout)
+  const serializeLayout = useCanvasStore((s) => s.serializeLayout)
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return
     setGenerating(true)
     setGenerateError(null)
+    setLayoutSaveError(null)
     try {
       const result = await generateLayout(prompt, id)
-      loadRooms(result.rooms)
+      loadLayout(result)
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       setGenerateError(
@@ -49,24 +54,61 @@ export default function ProjectPage() {
     }
   }
 
+  const handleSaveLayout = async () => {
+    if (!designId) return
+    setLayoutSaving(true)
+    setLayoutSaveError(null)
+    useCanvasStore.setState({ saveStatus: 'saving' })
+    try {
+      const result = await saveDesignLayout(designId, serializeLayout())
+      loadLayout(result)
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      useCanvasStore.setState({ saveStatus: 'error' })
+      setLayoutSaveError(apiErr.response?.data?.error ?? 'Failed to save layout')
+    } finally {
+      setLayoutSaving(false)
+    }
+  }
+
   useEffect(() => {
     if (!id) return
-    projectService
-      .get(id)
-      .then((data) => {
+    const projectId = id
+    let active = true
+
+    async function loadProject() {
+      try {
+        const data = await projectService.get(projectId)
+        if (!active) return
         setProject(data)
-        setLoading(false)
-      })
-      .catch((err) => {
+        try {
+          const latestDesign = await getLatestProjectDesign(projectId)
+          if (active) loadLayout(latestDesign)
+        } catch (designErr) {
+          const apiErr = designErr as { response?: { status?: number } }
+          if (apiErr.response?.status !== 404) {
+            console.warn('Failed to load latest project design', designErr)
+          }
+        }
+        if (active) setLoading(false)
+      } catch (err) {
         const apiErr = err as { response?: { status?: number; data?: { error?: string } } }
+        if (!active) return
         if (apiErr.response?.status === 404) {
           navigate('/dashboard')
         } else {
           setError(apiErr.response?.data?.error ?? 'Failed to load project')
           setLoading(false)
         }
-      })
-  }, [id, navigate])
+      }
+    }
+
+    loadProject()
+
+    return () => {
+      active = false
+    }
+  }, [id, navigate, loadLayout])
 
   const enterEditMode = () => {
     if (!project) return
@@ -184,6 +226,17 @@ export default function ProjectPage() {
               </>
             ) : (
               <>
+                <div className="flex flex-col items-end">
+                  <Button
+                    variant="secondary"
+                    onClick={handleSaveLayout}
+                    loading={layoutSaving}
+                    disabled={!designId || layoutSaving}
+                  >
+                    Save Layout
+                  </Button>
+                  {layoutSaveError && <p className="text-sm text-red-600 mt-1">{layoutSaveError}</p>}
+                </div>
                 <Button variant="secondary" onClick={enterEditMode}>
                   Edit
                 </Button>

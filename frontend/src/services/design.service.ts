@@ -1,7 +1,8 @@
 import api from './api'
-import type { Room } from '../store/canvasStore'
+import type { CanvasFloor, CanvasLayout, Room } from '../store/canvasStore'
 
 export interface GenerateMetadata {
+  [key: string]: unknown
   prompt: string
   building_type: string
   buildingType?: string
@@ -17,10 +18,27 @@ export interface GenerateResponse {
   designId?: string
   designVersionId?: string
   metadata: GenerateMetadata
+  building?: {
+    floorHeight?: number
+  }
+  floors?: CanvasFloor[]
   rooms: Room[]
 }
 
 export async function generateLayout(prompt: string, projectId?: string): Promise<GenerateResponse> {
   const { data } = await api.post<GenerateResponse>('/api/design/generate', { prompt, projectId })
+  return data
+}
+
+export async function getLatestProjectDesign(projectId: string): Promise<GenerateResponse> {
+  const { data } = await api.get<GenerateResponse>(`/api/design/project/${projectId}/latest`)
+  return data
+}
+
+export async function saveDesignLayout(
+  designId: string,
+  layout: CanvasLayout
+): Promise<GenerateResponse> {
+  const { data } = await api.put<GenerateResponse>(`/api/design/${designId}`, { layout })
   return data
 }

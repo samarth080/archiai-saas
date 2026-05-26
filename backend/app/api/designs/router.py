@@ -3,9 +3,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import get_db
-from app.schemas.design import GenerateRequest, GenerateResponse
+from app.schemas.design import GenerateRequest, GenerateResponse, SaveDesignRequest
 from app.services.auth_service import get_current_user
-from app.services.design_service import save_generated_design
+from app.services.design_service import (
+    get_latest_project_design,
+    save_generated_design,
+    update_design_layout,
+)
 from app.services.layout_service import generate_layout
 from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_floors
 from app.utils.activity import log_activity
@@ -56,4 +60,36 @@ async def generate(
         layout["designVersionId"] = version.id
 
     await log_activity(db, user_id, "design.generated")
+    return GenerateResponse(**layout)
+
+
+@router.get("/project/{project_id}/latest", response_model=GenerateResponse)
+async def latest_for_project(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> GenerateResponse:
+    design, version = await get_latest_project_design(db, user_id, project_id)
+    layout = {
+        **design.layout_json,
+        "designId": design.id,
+        "designVersionId": version.id if version else None,
+    }
+    return GenerateResponse(**layout)
+
+
+@router.put("/{design_id}", response_model=GenerateResponse)
+async def save_design(
+    design_id: str,
+    request: SaveDesignRequest,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> GenerateResponse:
+    design, version = await update_design_layout(db, user_id, design_id, request.layout)
+    await log_activity(db, user_id, "layout.saved")
+    layout = {
+        **design.layout_json,
+        "designId": design.id,
+        "designVersionId": version.id,
+    }
     return GenerateResponse(**layout)

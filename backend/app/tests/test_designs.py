@@ -1,5 +1,5 @@
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.activity_log import ActivityLog
 from app.models.design import Design
@@ -62,3 +62,65 @@ async def test_generate_design_requires_auth(client: AsyncClient):
 
     assert response.status_code == 401
     assert response.json()["code"] == "UNAUTHORIZED"
+
+
+async def test_latest_design_returns_saved_layout(client: AsyncClient):
+    token = await _register_and_token(client, "latest-design@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Latest Design", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    latest = await client.get(
+        f"/api/design/project/{project_id}/latest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert latest.status_code == 200
+    assert latest.json()["designId"] == generated.json()["designId"]
+    assert latest.json()["rooms"] == generated.json()["rooms"]
+
+
+async def test_save_design_updates_layout_and_creates_new_version(client: AsyncClient):
+    token = await _register_and_token(client, "save-design@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Save Design", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    data = generated.json()
+    data["rooms"][0]["label"] = "Edited Room"
+
+    saved = await client.put(
+        f"/api/design/{data['designId']}",
+        json={"layout": data},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["rooms"][0]["label"] == "Edited Room"
+
+    async with TestSessionLocal() as session:
+        version_count = await session.scalar(
+            select(func.count()).select_from(DesignVersion).where(
+                DesignVersion.design_id == data["designId"]
+            )
+        )
+        assert version_count == 2
+
+        activity_result = await session.scalars(select(ActivityLog.action))
+        assert "layout.saved" in activity_result.all()

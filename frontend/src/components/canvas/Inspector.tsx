@@ -1,4 +1,14 @@
-import { useCanvasStore } from '../../store/canvasStore'
+import { CanvasObjectType, useCanvasStore } from '../../store/canvasStore'
+
+const OBJECT_TYPES: { value: CanvasObjectType; label: string }[] = [
+  { value: 'room', label: 'Room' },
+  { value: 'wall', label: 'Wall' },
+  { value: 'door', label: 'Door' },
+  { value: 'window', label: 'Window' },
+  { value: 'stair', label: 'Stair' },
+  { value: 'floor', label: 'Floor' },
+  { value: 'open_space', label: 'Open Space' },
+]
 
 const ACTION_LABELS = {
   'object.added': 'Added',
@@ -14,6 +24,7 @@ const ACTION_LABELS = {
 export function Inspector() {
   const selectedId = useCanvasStore((s) => s.selectedId)
   const rooms = useCanvasStore((s) => s.rooms)
+  const floors = useCanvasStore((s) => s.floors)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
   const deleteRoom = useCanvasStore((s) => s.deleteRoom)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
@@ -47,9 +58,64 @@ export function Inspector() {
             }}
           />
         </label>
-        <p className="text-xs text-gray-500 capitalize">
-          {room.objectType.replace('_', ' ')}
-        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</span>
+          <select
+            aria-label="Object type"
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-700"
+            value={room.objectType}
+            onChange={(e) => {
+              const objectType = e.target.value as CanvasObjectType
+              updateRoom(
+                room.id,
+                {
+                  objectType,
+                  roomType: objectType === 'stair' ? 'stairs' : objectType,
+                },
+                { action: 'object.updated', previousValue: room.objectType }
+              )
+            }}
+          >
+            {OBJECT_TYPES.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {floors.length > 1 && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Floor</span>
+            <select
+              aria-label="Object floor"
+              className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-700"
+              value={room.floorLevel ?? 0}
+              onChange={(e) => {
+                const floor = floors.find((candidate) => candidate.level === Number(e.target.value))
+                if (!floor) return
+                updateRoom(
+                  room.id,
+                  {
+                    floorId: floor.id,
+                    floorLevel: floor.level,
+                    position: {
+                      ...room.position,
+                      y: floor.elevation + room.size.h / 2,
+                    },
+                  },
+                  { action: 'object.updated', previousValue: room.floorLevel ?? 0 }
+                )
+              }}
+            >
+              {floors.map((floor) => (
+                <option key={floor.id} value={floor.level}>
+                  {floor.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {/* Position */}
@@ -67,18 +133,6 @@ export function Inspector() {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) updateRoom(room.id, { position: { ...room.position, x: n } })
             }}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Y</span>
-          <input
-            type="number"
-            aria-label="Position Y (locked to floor)"
-            title="Rooms always sit on the floor grid"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            value={0}
-            disabled
           />
         </label>
 
@@ -117,21 +171,6 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">H</span>
-          <input
-            type="number"
-            min={1}
-            aria-label="Height"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            value={room.size.h}
-            onChange={(e) => {
-              const n = Number(e.target.value)
-              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, h: Math.max(1, n) } })
-            }}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
           <span className="text-xs text-gray-500">D</span>
           <input
             type="number"
@@ -142,6 +181,21 @@ export function Inspector() {
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, d: Math.max(1, n) } })
+            }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-gray-500">H</span>
+          <input
+            type="number"
+            min={1}
+            aria-label="Height"
+            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            value={room.size.h}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, h: Math.max(1, n) } })
             }}
           />
         </label>

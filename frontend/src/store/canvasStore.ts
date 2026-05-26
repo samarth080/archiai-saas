@@ -17,11 +17,34 @@ export type SaveStatus = 'saved' | 'saving' | 'error'
 export interface Room {
   id: string
   label: string
+  roomType?: string
   objectType: CanvasObjectType
+  floorId?: string
+  floorLevel?: number
   position: { x: number; y: number; z: number }
   size: { w: number; h: number; d: number }
   rotation: { x: number; y: number; z: number }
   color: string
+}
+
+export interface CanvasFloor {
+  id: string
+  name: string
+  level: number
+  elevation: number
+  rooms?: Room[]
+}
+
+export interface CanvasLayout {
+  version: string
+  designId?: string
+  designVersionId?: string
+  metadata?: Record<string, unknown>
+  building?: {
+    floorHeight?: number
+  }
+  floors?: CanvasFloor[]
+  rooms: Room[]
 }
 
 export interface CanvasActivityLogEntry {
@@ -42,6 +65,12 @@ interface UpdateOptions {
 
 interface CanvasState {
   rooms: Room[]
+  floors: CanvasFloor[]
+  selectedFloor: number | 'all'
+  floorHeight: number
+  designId: string | null
+  designVersionId: string | null
+  layoutMetadata: Record<string, unknown>
   selectedId: string | null
   snapToGrid: boolean
   gridSize: number
@@ -50,6 +79,7 @@ interface CanvasState {
   activityLog: CanvasActivityLogEntry[]
   selectRoom: (id: string) => void
   deselectAll: () => void
+  setSelectedFloor: (floor: number | 'all') => void
   setSnapToGrid: (enabled: boolean) => void
   updateRoom: (id: string, patch: Partial<Omit<Room, 'id'>>, options?: UpdateOptions) => void
   deleteRoom: (id: string) => void
@@ -57,6 +87,8 @@ interface CanvasState {
   duplicateSelected: () => void
   addObject: (objectType: CanvasObjectType) => void
   loadRooms: (rooms: Room[]) => void
+  loadLayout: (layout: CanvasLayout) => void
+  serializeLayout: () => CanvasLayout
 }
 
 const OBJECT_DEFAULTS: Record<CanvasObjectType, Pick<Room, 'label' | 'size' | 'color'>> = {
@@ -120,6 +152,14 @@ export const INITIAL_ROOMS: Room[] = [
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let idCounter = 0
 
+export const DEFAULT_FLOOR_HEIGHT = 3.2
+export const DEFAULT_FLOOR: CanvasFloor = {
+  id: 'floor_0',
+  name: 'Ground Floor',
+  level: 0,
+  elevation: 0,
+}
+
 function nextId(prefix: string) {
   idCounter += 1
   return `${prefix}-${Date.now()}-${idCounter}`
@@ -129,16 +169,82 @@ function snapValue(value: number, gridSize: number) {
   return Math.round(value / gridSize) * gridSize
 }
 
-function normalizeRoom(room: Room): Room {
+function normalizeObjectType(value?: string): CanvasObjectType {
+  if (value === 'stairs') return 'stair'
+  if (
+    value === 'room' ||
+    value === 'wall' ||
+    value === 'door' ||
+    value === 'window' ||
+    value === 'stair' ||
+    value === 'floor' ||
+    value === 'open_space'
+  ) {
+    return value
+  }
+  return 'room'
+}
+
+function floorName(level: number) {
+  const names: Record<number, string> = {
+    0: 'Ground Floor',
+    1: 'First Floor',
+    2: 'Second Floor',
+    3: 'Third Floor',
+  }
+  return names[level] ?? `Floor ${level}`
+}
+
+function normalizeRoom(room: Room, floor?: CanvasFloor): Room {
+  const normalizedFloor = floor ?? DEFAULT_FLOOR
+  const objectType = normalizeObjectType(room.objectType ?? room.roomType)
+  const roomType = room.roomType ?? objectType
+  const size = room.size ?? OBJECT_DEFAULTS[objectType].size
   return {
     ...room,
-    objectType: room.objectType ?? 'room',
+    roomType,
+    objectType,
+    floorId: room.floorId ?? normalizedFloor.id,
+    floorLevel: room.floorLevel ?? normalizedFloor.level,
     rotation: room.rotation ?? { x: 0, y: 0, z: 0 },
     position: {
-      ...room.position,
-      y: room.position.y ?? room.size.h / 2,
+      ...(room.position ?? { x: 0, z: 0 }),
+      y: room.position?.y ?? normalizedFloor.elevation + size.h / 2,
     },
+    size,
+    color: room.color ?? OBJECT_DEFAULTS[objectType].color,
   }
+}
+
+function normalizeLayout(layout: CanvasLayout) {
+  const floorHeight = layout.building?.floorHeight ?? DEFAULT_FLOOR_HEIGHT
+  const sourceFloors = layout.floors?.length
+    ? layout.floors
+    : [DEFAULT_FLOOR]
+  const floors = sourceFloors.map((floor) => ({
+    id: floor.id,
+    name: floor.name || floorName(floor.level),
+    level: floor.level,
+    elevation: floor.elevation ?? floor.level * floorHeight,
+  }))
+  const rooms = layout.floors?.length
+    ? layout.floors.flatMap((floor) =>
+        (floor.rooms ?? []).map((room) =>
+          normalizeRoom(room, {
+            id: floor.id,
+            name: floor.name,
+            level: floor.level,
+            elevation: floor.elevation,
+          })
+        )
+      )
+    : layout.rooms.map((room) => normalizeRoom(room, floors[0]))
+
+  return { floors, rooms, floorHeight }
+}
+
+function floorElevation(floors: CanvasFloor[], level: number | undefined) {
+  return floors.find((floor) => floor.level === level)?.elevation ?? 0
 }
 
 function inferAction(patch: Partial<Omit<Room, 'id'>>): CanvasEditAction {
@@ -150,7 +256,13 @@ function inferAction(patch: Partial<Omit<Room, 'id'>>): CanvasEditAction {
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
-  rooms: INITIAL_ROOMS,
+  rooms: INITIAL_ROOMS.map((room) => normalizeRoom(room, DEFAULT_FLOOR)),
+  floors: [DEFAULT_FLOOR],
+  selectedFloor: 0,
+  floorHeight: DEFAULT_FLOOR_HEIGHT,
+  designId: null,
+  designVersionId: null,
+  layoutMetadata: {},
   selectedId: null,
   snapToGrid: false,
   gridSize: 1,
@@ -159,6 +271,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activityLog: [],
   selectRoom: (id) => set({ selectedId: id }),
   deselectAll: () => set({ selectedId: null }),
+  setSelectedFloor: (floor) =>
+    set((state) => ({
+      selectedFloor: floor,
+      selectedId:
+        floor === 'all' ||
+        state.rooms.find((room) => room.id === state.selectedId)?.floorLevel === floor
+          ? state.selectedId
+          : null,
+    })),
   setSnapToGrid: (enabled) => set({ snapToGrid: enabled }),
   updateRoom: (id, patch, options) =>
     set((state) => {
@@ -176,11 +297,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
       let updated: Room = { ...room, ...nextPatch }
       if (nextPatch.size) {
+        const elevation = floorElevation(state.floors, updated.floorLevel)
         updated = {
           ...updated,
           position: {
             ...updated.position,
-            y: updated.size.h / 2,
+            y: elevation + updated.size.h / 2,
           },
         }
       }
@@ -270,11 +392,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addObject: (objectType) =>
     set((state) => {
       const defaults = OBJECT_DEFAULTS[objectType]
+      const floorLevel = state.selectedFloor === 'all' ? 0 : state.selectedFloor
+      const floor = state.floors.find((f) => f.level === floorLevel) ?? DEFAULT_FLOOR
       const newObject: Room = {
         id: nextId(objectType),
         label: defaults.label,
+        roomType: objectType === 'stair' ? 'stairs' : objectType,
         objectType,
-        position: { x: 0, y: defaults.size.h / 2, z: 0 },
+        floorId: floor.id,
+        floorLevel: floor.level,
+        position: { x: 0, y: floor.elevation + defaults.size.h / 2, z: 0 },
         size: defaults.size,
         rotation: { x: 0, y: 0, z: 0 },
         color: defaults.color,
@@ -298,13 +425,50 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ],
       }
     }),
-  loadRooms: (rooms) =>
+  loadRooms: (rooms) => {
+    const layout = {
+      version: '1.0',
+      rooms,
+      building: { floorHeight: DEFAULT_FLOOR_HEIGHT },
+    }
+    get().loadLayout(layout)
+  },
+  loadLayout: (layout) => {
+    const { floors, rooms, floorHeight } = normalizeLayout(layout)
     set({
-      rooms: rooms.map(normalizeRoom),
+      rooms,
+      floors,
+      selectedFloor: floors[0]?.level ?? 0,
+      floorHeight,
+      designId: layout.designId ?? null,
+      designVersionId: layout.designVersionId ?? null,
+      layoutMetadata: layout.metadata ?? {},
       selectedId: null,
       saveStatus: 'saved',
       lastSavedAt: new Date().toISOString(),
-    }),
+      activityLog: [],
+    })
+  },
+  serializeLayout: () => {
+    const state = get()
+    const floors = state.floors.map((floor) => ({
+      ...floor,
+      rooms: state.rooms.filter((room) => room.floorLevel === floor.level),
+    }))
+    return {
+      version: '1.0',
+      ...(state.designId ? { designId: state.designId } : {}),
+      ...(state.designVersionId ? { designVersionId: state.designVersionId } : {}),
+      metadata: {
+        ...state.layoutMetadata,
+        totalFloors: state.floors.length,
+        totalRooms: state.rooms.length,
+      },
+      building: { floorHeight: state.floorHeight },
+      floors,
+      rooms: state.rooms,
+    }
+  },
 }))
 
 function queueAutoSave() {

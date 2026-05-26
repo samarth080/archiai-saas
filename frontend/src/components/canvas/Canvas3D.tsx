@@ -11,7 +11,12 @@ interface Canvas3DProps {
 export function Canvas3D({ className }: Canvas3DProps) {
   const orbitRef = useRef<{ enabled: boolean }>(null)
   const rooms = useCanvasStore((s) => s.rooms)
+  const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const deselectAll = useCanvasStore((s) => s.deselectAll)
+  const visibleRooms =
+    selectedFloor === 'all'
+      ? rooms
+      : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -50,7 +55,7 @@ export function Canvas3D({ className }: Canvas3DProps) {
         onClick={deselectAll}
       >
         <Scene orbitRef={orbitRef} />
-        {rooms.map((r) => (
+        {visibleRooms.map((r) => (
           <RoomMesh key={r.id} room={r} orbitRef={orbitRef} />
         ))}
       </Canvas>

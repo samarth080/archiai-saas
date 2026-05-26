@@ -178,22 +178,32 @@ archiai-saas/
 - [x] Backend tests passing (56 tests)
 - [x] `npx tsc --noEmit` passes with zero errors
 
-### Sprint 6 — 3D Editing Workflow 🚧 In Progress
+### Sprint 6 — 3D Editing Workflow ✅ Complete
 
-- [x] Canvas state supports object type, rotation, grid snap, save status, and edit activity entries
-- [x] Inspector supports label editing, precise resize, precise rotation, duplicate, and delete
+- [x] Canvas state supports object type, rotation, grid snap, save status, floor assignment, and edit activity entries
+- [x] Inspector supports label editing, object type editing, floor assignment, precise X/Z movement, precise resize, precise rotation, duplicate, and delete
 - [x] Canvas renders object labels above rooms/components
-- [x] Transform drag movement respects snap-to-grid when enabled
+- [x] Clicking a room/component selects only that object and shows a visible highlight
+- [x] Direct mouse drag moves the selected object on the X/Z plane while preserving floor/elevation
+- [x] Orbit controls are disabled while direct object drag is active
+- [x] Direct drag and TransformControls movement respect snap-to-grid when enabled
 - [x] Ctrl+D / Cmd+D duplicates the selected object
 - [x] Delete / Backspace removes the selected object
-- [x] Editor toolbar supports snap toggle, add-object panel, duplicate, delete, and save status
-- [x] Add-object panel can create room, wall, door, window, stair, floor, and open space objects
+- [x] Editor toolbar supports snap toggle, floor selector, add-object panel, duplicate, delete, and save status
+- [x] Add-object panel can create room, wall, door, window, stair, floor, and open space objects on the selected floor
+- [x] Duplicate preserves type, dimensions, rotation, and floor assignment with a small X/Z offset
+- [x] Single-floor layouts continue to render and edit through the backward-compatible top-level `rooms` structure
+- [x] Multi-floor layouts render through `floors[]`; selected floor mode edits one floor, All Floors shows stacked elevations
+- [x] Project workspace loads the latest saved Design layout for the project when available
+- [x] Save Layout persists edited layout JSON to Design and creates a new DesignVersion
+- [x] `PUT /api/design/{design_id}` logs `"layout.saved"` through ActivityLog
 - [x] In-memory activity log records add, move, resize, rotate, rename, duplicate, and delete edits
 - [x] Debounced in-memory auto-save status shows Saving then Saved after edits
-- [x] Canvas store tests expanded to 16 passing tests
-- [x] Sprint 6 implementation note added at `docs/superpowers/plans/2026-05-27-sprint6-3d-editing-workflow.md`
-- [ ] Persistent design save/load remains deferred to Sprint 7
-- [ ] Persistent activity history/API remains deferred to Sprint 9
+- [x] Canvas store tests expanded to 20 passing tests
+- [x] Backend design save/load tests passing as part of 58 backend tests
+- [x] Frontend production build passes
+- [x] Sprint 6 implementation note exists at `docs/superpowers/plans/2026-05-27-sprint6-3d-editing-workflow.md`
+- [ ] Persistent per-object ActivityLog API remains deferred to Sprint 9
 
 ### Sprint 7 — Database and Project Management ⏳ Not Started
 ### Sprint 8 — Prompt Refinement ⏳ Not Started

@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -6,6 +8,10 @@ class GenerateRequest(BaseModel):
     project_id: str | None = Field(default=None, alias="projectId")
 
     model_config = {"populate_by_name": True}
+
+
+class SaveDesignRequest(BaseModel):
+    layout: dict[str, Any]
 
 
 class RoomPosition(BaseModel):
@@ -20,6 +26,12 @@ class RoomSize(BaseModel):
     d: float
 
 
+class RoomRotation(BaseModel):
+    x: float
+    y: float
+    z: float
+
+
 class RoomResponse(BaseModel):
     id: str
     label: str
@@ -29,6 +41,7 @@ class RoomResponse(BaseModel):
     floorLevel: int | None = None
     position: RoomPosition
     size: RoomSize
+    rotation: RoomRotation | None = None
     color: str
 
 
