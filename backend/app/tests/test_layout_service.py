@@ -84,3 +84,58 @@ def test_rooms_have_unique_ids():
     layout = generate_layout(_make_specs())
     ids = [r["id"] for r in layout["rooms"]]
     assert len(ids) == len(set(ids))
+
+
+def test_multi_floor_layout_returns_requested_floor_count():
+    layout = generate_layout(_make_specs(), total_floors=2)
+    assert layout["metadata"]["totalFloors"] == 2
+    assert len(layout["floors"]) == 2
+
+
+def test_stairs_are_added_to_each_multi_floor_level():
+    layout = generate_layout(_make_specs(), total_floors=3)
+    stairs = [
+        room
+        for floor in layout["floors"]
+        for room in floor["rooms"]
+        if room["roomType"] == "stairs"
+    ]
+    assert len(stairs) == 3
+
+
+def test_stairs_share_xz_position_across_floors():
+    layout = generate_layout(_make_specs(), total_floors=3)
+    stairs = [
+        room
+        for floor in layout["floors"]
+        for room in floor["rooms"]
+        if room["roomType"] == "stairs"
+    ]
+    positions = {(room["position"]["x"], room["position"]["z"]) for room in stairs}
+    assert len(positions) == 1
+
+
+def test_rooms_are_assigned_to_valid_floor_levels():
+    layout = generate_layout(_make_specs(), total_floors=2)
+    valid_levels = {floor["level"] for floor in layout["floors"]}
+    for room in layout["rooms"]:
+        assert room["floorLevel"] in valid_levels
+        assert room["floorId"] == f"floor_{room['floorLevel']}"
+
+
+def test_multi_floor_split_places_public_rooms_on_ground_and_bedrooms_upstairs():
+    specs = [
+        RoomSpec(label="Living Room", room_type="living_room", w=5.0, h=3.0, d=5.0),
+        RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 1", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 2", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 3", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bathroom", room_type="bathroom", w=3.0, h=3.0, d=3.0),
+    ]
+    layout = generate_layout(specs, total_floors=2)
+
+    ground_labels = {room["label"] for room in layout["floors"][0]["rooms"]}
+    first_labels = {room["label"] for room in layout["floors"][1]["rooms"]}
+
+    assert {"Living Room", "Kitchen", "Bathroom", "Stairs"}.issubset(ground_labels)
+    assert {"Master Bedroom", "Bedroom 2", "Bedroom 3", "Stairs"}.issubset(first_labels)

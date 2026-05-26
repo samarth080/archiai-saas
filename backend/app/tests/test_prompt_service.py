@@ -1,5 +1,10 @@
 import pytest
-from app.services.prompt_service import RoomSpec, detect_building_type, extract_rooms
+from app.services.prompt_service import (
+    RoomSpec,
+    detect_building_type,
+    extract_rooms,
+    extract_total_floors,
+)
 
 
 def test_extracts_bedroom_count():
@@ -56,3 +61,48 @@ def test_detect_building_type_house():
 def test_extract_rooms_returns_empty_for_unrecognised_prompt():
     specs = extract_rooms("a place to live")
     assert specs == []
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("2 floors apartment", 2),
+        ("2 floor apartment", 2),
+        ("two floors apartment", 2),
+        ("two floor apartment", 2),
+        ("2 storey house", 2),
+        ("two storey house", 2),
+        ("2 story house", 2),
+        ("two story house", 2),
+        ("3 floors villa", 3),
+        ("three floors villa", 3),
+    ],
+)
+def test_extract_total_floors_from_common_phrases(prompt: str, expected: int):
+    assert extract_total_floors(prompt) == expected
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("G+1 house with 4 bedrooms", 2),
+        ("G+2 house with 4 bedrooms", 3),
+        ("ground plus first apartment", 2),
+        ("ground plus two apartment", 3),
+    ],
+)
+def test_extract_total_floors_from_ground_plus(prompt: str, expected: int):
+    assert extract_total_floors(prompt) == expected
+
+
+def test_extract_total_floors_defaults_to_one():
+    assert extract_total_floors("3 bedroom apartment with kitchen") == 1
+
+
+def test_floor_count_does_not_break_room_extraction():
+    specs = extract_rooms("2 floor, 3 bedroom layout with kitchen, living room, bathroom")
+    types = [s.room_type for s in specs]
+    assert types.count("bedroom") == 3
+    assert "kitchen" in types
+    assert "living_room" in types
+    assert "bathroom" in types

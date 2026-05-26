@@ -7,6 +7,10 @@ WORD_TO_NUM = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 }
 
+ORDINAL_TO_NUM = {
+    "first": 1, "second": 2, "third": 3,
+}
+
 ROOM_DEFAULTS: dict[str, dict] = {
     "living_room":    {"label": "Living Room",   "w": 5.0, "d": 5.0},
     "kitchen":        {"label": "Kitchen",        "w": 4.0, "d": 4.0},
@@ -66,6 +70,43 @@ def detect_building_type(prompt: str) -> str:
         if any(kw in text for kw in keywords):
             return building_type
     return "apartment"
+
+
+def _parse_number(raw: str) -> int | None:
+    token = raw.lower()
+    if token.isdigit():
+        return int(token)
+    return WORD_TO_NUM.get(token) or ORDINAL_TO_NUM.get(token)
+
+
+def extract_total_floors(prompt: str) -> int:
+    text = prompt.lower()
+
+    g_plus = re.search(r"\bg\s*\+\s*(\d+)\b", text, re.IGNORECASE)
+    if g_plus:
+        return int(g_plus.group(1)) + 1
+
+    ground_plus = re.search(
+        r"\bground\s+plus\s+(first|second|third|one|two|three|\d+)\b",
+        text,
+        re.IGNORECASE,
+    )
+    if ground_plus:
+        extra_floors = _parse_number(ground_plus.group(1))
+        if extra_floors is not None:
+            return extra_floors + 1
+
+    floor_phrase = re.search(
+        r"\b(" + _COUNT_ALTS + r"|\d+)\s+(?:floors?|storeys?|story|stories)\b",
+        text,
+        re.IGNORECASE,
+    )
+    if floor_phrase:
+        total = _parse_number(floor_phrase.group(1))
+        if total is not None:
+            return max(1, total)
+
+    return 1
 
 
 def extract_rooms(prompt: str) -> list[RoomSpec]:

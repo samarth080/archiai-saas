@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=5)
+    project_id: str | None = Field(default=None, alias="projectId")
+
+    model_config = {"populate_by_name": True}
 
 
 class RoomPosition(BaseModel):
@@ -20,6 +23,10 @@ class RoomSize(BaseModel):
 class RoomResponse(BaseModel):
     id: str
     label: str
+    roomType: str | None = None
+    objectType: str | None = None
+    floorId: str | None = None
+    floorLevel: int | None = None
     position: RoomPosition
     size: RoomSize
     color: str
@@ -28,10 +35,31 @@ class RoomResponse(BaseModel):
 class GenerateMetadata(BaseModel):
     prompt: str
     building_type: str
+    buildingType: str | None = None
+    style: str | None = None
     room_count: int
+    totalFloors: int | None = None
+    totalRooms: int | None = None
+    totalAreaSqm: float | None = None
+
+
+class BuildingResponse(BaseModel):
+    floorHeight: float
+
+
+class FloorResponse(BaseModel):
+    id: str
+    name: str
+    level: int
+    elevation: float
+    rooms: list[RoomResponse]
 
 
 class GenerateResponse(BaseModel):
     version: str
+    designId: str | None = None
+    designVersionId: str | None = None
     metadata: GenerateMetadata
+    building: BuildingResponse | None = None
+    floors: list[FloorResponse] | None = None
     rooms: list[RoomResponse]

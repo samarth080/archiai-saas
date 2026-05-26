@@ -37,7 +37,7 @@ export default function ProjectPage() {
     setGenerating(true)
     setGenerateError(null)
     try {
-      const result = await generateLayout(prompt)
+      const result = await generateLayout(prompt, id)
       loadRooms(result.rooms)
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }

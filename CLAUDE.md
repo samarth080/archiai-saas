@@ -165,28 +165,28 @@ archiai-saas/
 - [x] Generated rooms replace hardcoded canvas rooms via `canvasStore.loadRooms`
 - [x] Loading state (button disabled + "Generating…") during API call
 - [x] Error message shown if generation fails or no rooms detected; API error propagated to user
-- [x] 9 prompt service tests + 8 layout service tests + 1 new store test (18 new tests)
+- [x] Floor count extraction supports numeric, word-based, storey/story, G+N, and ground-plus prompts
+- [x] Layout JSON includes `metadata.totalFloors`, `building.floorHeight`, and `floors[]`
+- [x] Multi-floor layouts assign each generated object to exactly one floor
+- [x] Multi-floor layouts add simple aligned `Stairs` placeholders on every floor
+- [x] Top-level `rooms` remains available for backward compatibility
+- [x] Design and first DesignVersion models/migration added for generated layouts
+- [x] Project-scoped generation saves layout JSON to Design and DesignVersion when `projectId` is supplied
+- [x] Project workspace generation sends `projectId` so generated layouts are saved for the project
+- [x] `POST /api/design/generate` logs `"design.generated"` through ActivityLog
+- [x] Prompt service, layout service, and design API tests cover generation behavior
+- [x] Backend tests passing (56 tests)
 - [x] `npx tsc --noEmit` passes with zero errors
-- [x] No DB persistence (Design + DesignVersion deferred to Sprint 7)
 
-### Sprint 6 — 3D Editing Workflow ⏳ Not Started
-### Sprint 7 — Database and Project Management ⏳ Not Started
-### Sprint 8 — Prompt Refinement ⏳ Not Started
-### Sprint 9 — Team Collaboration, Version Control, and Logging ⏳ Not Started
-### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
-### Sprint 11 — AI / Layout Improvement ⏳ Not Started
-### Sprint 12 — Export, Share, and Polish ⏳ Not Started
+### Sprint 6 — 3D Editing Workflow 🚧 In Progress
 
-### Sprint 6 Status Update - 2026-05-27
-
-- [x] Sprint 6 started from the roadmap in this file and `docs/PROJECT_STRATEGY.md`
-- [x] Canvas state now supports object type, rotation, grid snap, save status, and edit activity entries
-- [x] Inspector now supports label editing, precise resize, precise rotation, duplicate, and delete
-- [x] Canvas now renders object labels above rooms/components
+- [x] Canvas state supports object type, rotation, grid snap, save status, and edit activity entries
+- [x] Inspector supports label editing, precise resize, precise rotation, duplicate, and delete
+- [x] Canvas renders object labels above rooms/components
 - [x] Transform drag movement respects snap-to-grid when enabled
 - [x] Ctrl+D / Cmd+D duplicates the selected object
 - [x] Delete / Backspace removes the selected object
-- [x] Editor toolbar now supports snap toggle, add-object panel, duplicate, delete, and save status
+- [x] Editor toolbar supports snap toggle, add-object panel, duplicate, delete, and save status
 - [x] Add-object panel can create room, wall, door, window, stair, floor, and open space objects
 - [x] In-memory activity log records add, move, resize, rotate, rename, duplicate, and delete edits
 - [x] Debounced in-memory auto-save status shows Saving then Saved after edits
@@ -194,6 +194,13 @@ archiai-saas/
 - [x] Sprint 6 implementation note added at `docs/superpowers/plans/2026-05-27-sprint6-3d-editing-workflow.md`
 - [ ] Persistent design save/load remains deferred to Sprint 7
 - [ ] Persistent activity history/API remains deferred to Sprint 9
+
+### Sprint 7 — Database and Project Management ⏳ Not Started
+### Sprint 8 — Prompt Refinement ⏳ Not Started
+### Sprint 9 — Team Collaboration, Version Control, and Logging ⏳ Not Started
+### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
+### Sprint 11 — AI / Layout Improvement ⏳ Not Started
+### Sprint 12 — Export, Share, and Polish ⏳ Not Started
 
 ---
 

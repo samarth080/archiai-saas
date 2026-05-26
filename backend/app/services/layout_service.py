@@ -14,15 +14,39 @@ ROOM_COLORS: dict[str, str] = {
     "balcony":        "#4ade80",
     "garage":         "#78716c",
     "utility":        "#cbd5e1",
+    "stairs":         "#9ca3af",
 }
 
 _PUBLIC  = frozenset({"living_room", "kitchen", "dining_room", "hallway"})
 _PRIVATE = frozenset({"master_bedroom", "bedroom", "bathroom"})
 _GAP     = 1.0   # metres between rooms in same row
 _ZONE_GAP = 2.0  # metres between zone rows
+_FLOOR_HEIGHT = 3.2
+_STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
+_STAIRS_POSITION = {"x": 1.0, "z": 1.5}
 
 
-def _place_rooms(specs: list[RoomSpec]) -> list[dict]:
+def _floor_name(level: int) -> str:
+    names = {
+        0: "Ground Floor",
+        1: "First Floor",
+        2: "Second Floor",
+        3: "Third Floor",
+    }
+    return names.get(level, f"Floor {level}")
+
+
+def _room_area(specs: list[RoomSpec]) -> float:
+    return round(sum(room.w * room.d for room in specs), 2)
+
+
+def _place_rooms(
+    specs: list[RoomSpec],
+    floor_id: str = "floor_0",
+    floor_level: int = 0,
+    elevation: float = 0.0,
+    x_offset: float = 0.0,
+) -> list[dict]:
     public  = [r for r in specs if r.room_type in _PUBLIC]
     private = [r for r in specs if r.room_type in _PRIVATE]
     other   = [r for r in specs if r.room_type not in _PUBLIC and r.room_type not in _PRIVATE]
@@ -33,15 +57,19 @@ def _place_rooms(specs: list[RoomSpec]) -> list[dict]:
     for zone in (public, private, other):
         if not zone:
             continue
-        current_x = 0.0
+        current_x = x_offset
         zone_max_d = 0.0
         for room in zone:
             pos_x = round(current_x + room.w / 2, 2)
-            pos_y = round(room.h / 2, 2)
+            pos_y = round(elevation + room.h / 2, 2)
             pos_z = round(current_z + room.d / 2, 2)
             result.append({
                 "id":       str(uuid.uuid4()),
                 "label":    room.label,
+                "roomType": room.room_type,
+                "objectType": "room",
+                "floorId": floor_id,
+                "floorLevel": floor_level,
                 "position": {"x": pos_x, "y": pos_y, "z": pos_z},
                 "size":     {"w": room.w, "h": room.h, "d": room.d},
                 "color":    ROOM_COLORS.get(room.room_type, "#94a3b8"),
@@ -53,18 +81,126 @@ def _place_rooms(specs: list[RoomSpec]) -> list[dict]:
     return result
 
 
+def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "label": "Stairs",
+        "roomType": "stairs",
+        "objectType": "stair",
+        "floorId": floor_id,
+        "floorLevel": floor_level,
+        "position": {
+            "x": _STAIRS_POSITION["x"],
+            "y": round(elevation + _STAIRS_SIZE["h"] / 2, 2),
+            "z": _STAIRS_POSITION["z"],
+        },
+        "size": _STAIRS_SIZE.copy(),
+        "color": ROOM_COLORS["stairs"],
+    }
+
+
+def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[list[RoomSpec]]:
+    floors: list[list[RoomSpec]] = [[] for _ in range(total_floors)]
+    if total_floors <= 1:
+        floors[0].extend(specs)
+        return floors
+
+    upper_levels = list(range(1, total_floors))
+    next_upper = 0
+    ground_bathroom_added = False
+    has_master = any(room.room_type == "master_bedroom" for room in specs)
+    promoted_master = False
+
+    def add_to_next_upper(room: RoomSpec) -> None:
+        nonlocal next_upper
+        level = upper_levels[next_upper % len(upper_levels)]
+        floors[level].append(room)
+        next_upper += 1
+
+    for room in specs:
+        if room.room_type in {"living_room", "kitchen", "dining_room", "hallway", "garage"}:
+            floors[0].append(room)
+            continue
+
+        if room.room_type == "bathroom":
+            if not ground_bathroom_added:
+                floors[0].append(room)
+                ground_bathroom_added = True
+            else:
+                add_to_next_upper(room)
+            continue
+
+        if room.room_type in {"master_bedroom", "bedroom"}:
+            if room.room_type == "bedroom" and not has_master and not promoted_master:
+                room = RoomSpec(
+                    label="Master Bedroom",
+                    room_type="master_bedroom",
+                    w=room.w,
+                    h=room.h,
+                    d=room.d,
+                )
+                promoted_master = True
+            add_to_next_upper(room)
+            continue
+
+        if room.room_type in {"balcony", "utility"}:
+            floors[-1].append(room)
+            continue
+
+        add_to_next_upper(room)
+
+    return floors
+
+
 def generate_layout(
     room_specs: list[RoomSpec],
     prompt: str = "",
     building_type: str = "apartment",
+    total_floors: int = 1,
 ) -> dict:
-    rooms = _place_rooms(room_specs)
+    total_floors = max(1, total_floors)
+    floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
+    floors: list[dict] = []
+    flat_rooms: list[dict] = []
+
+    for level, specs in enumerate(floor_specs):
+        floor_id = f"floor_{level}"
+        elevation = round(level * _FLOOR_HEIGHT, 2)
+        rooms = _place_rooms(
+            specs,
+            floor_id=floor_id,
+            floor_level=level,
+            elevation=elevation,
+            x_offset=(_STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0),
+        )
+        if total_floors > 1:
+            rooms.insert(0, _add_stairs(floor_id, level, elevation))
+
+        floor = {
+            "id": floor_id,
+            "name": _floor_name(level),
+            "level": level,
+            "elevation": elevation,
+            "rooms": rooms,
+        }
+        floors.append(floor)
+        flat_rooms.extend(rooms)
+
     return {
         "version": "1.0",
         "metadata": {
             "prompt":        prompt,
             "building_type": building_type,
-            "room_count":    len(rooms),
+            "buildingType":  building_type,
+            "style":         "modern",
+            "room_count":    len(flat_rooms),
+            "totalFloors":   total_floors,
+            "totalRooms":    len(room_specs),
+            "totalAreaSqm":  _room_area(room_specs),
         },
-        "rooms": rooms,
+        "building": {
+            "floorHeight": _FLOOR_HEIGHT,
+        },
+        "floors": floors,
+        "rooms": flat_rooms,
     }
