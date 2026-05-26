@@ -25,26 +25,26 @@ ROOM_DEFAULTS: dict[str, dict] = {
 ROOM_PATTERNS: list[tuple[str, list[str]]] = [
     ("master_bedroom", ["master bedroom", "master bed", "primary bedroom"]),
     ("living_room",    ["living room", "lounge", "sitting room", "family room"]),
-    ("dining_room",    ["dining room", "dining area"]),
-    ("bathroom",       ["bathroom", "bath room", "en suite", "ensuite", "toilet", "washroom"]),
+    ("dining_room",    ["dining room", "dining area", "dining"]),
+    ("bathroom",       ["bathroom", "bath room", "en suite", "ensuite", "toilet", "washroom", "wc"]),
     ("kitchen",        ["kitchen", "kitchenette"]),
     ("bedroom",        ["bedroom", "bed room", "guest bedroom", "guest room", "kids room"]),
     ("office",         ["office", "study", "home office", "workspace"]),
-    ("hallway",        ["hallway", "corridor", "foyer", "entrance"]),
+    ("hallway",        ["hallway", "hall", "corridor", "foyer", "entrance"]),
     ("balcony",        ["balcony", "terrace", "porch"]),
     ("garage",         ["garage", "car park", "parking"]),
     ("utility",        ["utility room", "laundry", "storage"]),
 ]
 
 SIZE_MODIFIERS: dict[str, float] = {
-    "large": 1.4, "big": 1.4, "spacious": 1.4,
+    "large": 1.4, "big": 1.4, "spacious": 1.4, "open": 1.4,
     "small": 0.7, "compact": 0.7, "tiny": 0.7, "cosy": 0.7, "cozy": 0.7,
 }
 
 BUILDING_KEYWORDS: dict[str, list[str]] = {
     "apartment": ["apartment", "flat", "condo"],
     "house":     ["house", "home", "villa", "cottage"],
-    "office":    ["office building", "studio"],
+    "office":    ["office building", "workspace", "studio"],
 }
 
 _COUNT_ALTS = "one|two|three|four|five|six|seven|eight|nine|ten"
