@@ -47,7 +47,8 @@ BUILDING_KEYWORDS: dict[str, list[str]] = {
     "office":    ["office building", "workspace", "studio"],
 }
 
-_COUNT_ALTS = "one|two|three|four|five|six|seven|eight|nine|ten"
+_COUNT_ALTS = "|".join(WORD_TO_NUM.keys())
+_MODIFIER_LOOKBACK = 25
 
 
 @dataclass
@@ -74,7 +75,7 @@ def extract_rooms(prompt: str) -> list[RoomSpec]:
     for room_type, keywords in ROOM_PATTERNS:
         for keyword in keywords:
             pattern = re.compile(
-                r"(?:(" + _COUNT_ALTS + r"|\d+)\s+)?" + re.escape(keyword) + r"s?",
+                r"(?:(" + _COUNT_ALTS + r"|\d+)\s+)?" + re.escape(keyword) + r"s?\b",
                 re.IGNORECASE,
             )
             matches = list(pattern.finditer(text))
@@ -92,11 +93,12 @@ def extract_rooms(prompt: str) -> list[RoomSpec]:
                 else:
                     count += WORD_TO_NUM.get(raw.lower(), 1)
 
-                window = text[max(0, m.start() - 25) : m.start()]
-                for word, factor in SIZE_MODIFIERS.items():
-                    if re.search(r"\b" + re.escape(word) + r"\b", window):
-                        size_factor = factor
-                        break
+                if size_factor == 1.0:
+                    window = text[max(0, m.start() - _MODIFIER_LOOKBACK) : m.start()]
+                    for word, factor in SIZE_MODIFIERS.items():
+                        if re.search(r"\b" + re.escape(word) + r"\b", window):
+                            size_factor = factor
+                            break
 
             defaults = ROOM_DEFAULTS[room_type]
             f = sqrt(size_factor)

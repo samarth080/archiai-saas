@@ -1,5 +1,5 @@
 import pytest
-from app.services.prompt_service import RoomSpec, extract_rooms
+from app.services.prompt_service import RoomSpec, detect_building_type, extract_rooms
 
 
 def test_extracts_bedroom_count():
@@ -40,3 +40,19 @@ def test_extracts_living_room_and_kitchen():
     types = [s.room_type for s in specs]
     assert "living_room" in types
     assert "kitchen" in types
+
+
+from app.services.prompt_service import detect_building_type
+
+
+def test_detect_building_type_apartment():
+    assert detect_building_type("2 bedroom apartment") == "apartment"
+
+
+def test_detect_building_type_house():
+    assert detect_building_type("3 bedroom house with garden") == "house"
+
+
+def test_extract_rooms_returns_empty_for_unrecognised_prompt():
+    specs = extract_rooms("a place to live")
+    assert specs == []
