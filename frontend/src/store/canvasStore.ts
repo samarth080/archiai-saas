@@ -15,6 +15,7 @@ interface CanvasState {
   deselectAll: () => void
   updateRoom: (id: string, patch: Partial<Omit<Room, 'id'>>) => void
   deleteRoom: (id: string) => void
+  loadRooms: (rooms: Room[]) => void
 }
 
 export const INITIAL_ROOMS: Room[] = [
@@ -68,4 +69,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
     set((state) => ({
       rooms: state.rooms.filter((r) => r.id !== id),
     })),
+  loadRooms: (rooms) => set({ rooms, selectedId: null }),
 }))

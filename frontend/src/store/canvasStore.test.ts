@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useCanvasStore, INITIAL_ROOMS } from './canvasStore'
+import { useCanvasStore, INITIAL_ROOMS, Room } from './canvasStore'
 
 beforeEach(() => {
   useCanvasStore.setState({
@@ -65,5 +65,28 @@ describe('deleteRoom', () => {
   it('does not remove other rooms', () => {
     useCanvasStore.getState().deleteRoom('room-1')
     expect(useCanvasStore.getState().rooms).toHaveLength(4)
+  })
+})
+
+describe('loadRooms', () => {
+  it('replaces all rooms and clears selectedId', () => {
+    const store = useCanvasStore.getState()
+    store.selectRoom('room-1')
+    expect(useCanvasStore.getState().selectedId).toBe('room-1')
+
+    const newRooms: Room[] = [
+      {
+        id: 'gen-1',
+        label: 'Living Room',
+        position: { x: 2.5, y: 1.5, z: 2.5 },
+        size: { w: 5, h: 3, d: 5 },
+        color: '#818cf8',
+      },
+    ]
+    store.loadRooms(newRooms)
+
+    const state = useCanvasStore.getState()
+    expect(state.rooms).toEqual(newRooms)
+    expect(state.selectedId).toBeNull()
   })
 })
