@@ -52,3 +52,35 @@ def test_no_room_overlaps_in_xz_plane():
             assert not (x_overlap and z_overlap), (
                 f"Rooms '{a['label']}' and '{b['label']}' overlap"
             )
+
+
+def test_empty_specs_returns_empty_rooms():
+    layout = generate_layout([])
+    assert layout["rooms"] == []
+    assert layout["metadata"]["room_count"] == 0
+
+
+def test_metadata_fields_are_populated():
+    layout = generate_layout(_make_specs(), prompt="test prompt", building_type="house")
+    assert layout["version"] == "1.0"
+    assert layout["metadata"]["prompt"] == "test prompt"
+    assert layout["metadata"]["building_type"] == "house"
+    assert layout["metadata"]["room_count"] == 3
+
+
+def test_other_zone_rooms_are_placed():
+    specs = [
+        RoomSpec(label="Office", room_type="office", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Garage", room_type="garage", w=5.0, h=3.0, d=6.0),
+    ]
+    layout = generate_layout(specs)
+    assert len(layout["rooms"]) == 2
+    for room in layout["rooms"]:
+        assert "position" in room
+        assert room["position"]["y"] == pytest.approx(room["size"]["h"] / 2)
+
+
+def test_rooms_have_unique_ids():
+    layout = generate_layout(_make_specs())
+    ids = [r["id"] for r in layout["rooms"]]
+    assert len(ids) == len(set(ids))

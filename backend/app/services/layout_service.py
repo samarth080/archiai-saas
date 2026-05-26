@@ -16,8 +16,8 @@ ROOM_COLORS: dict[str, str] = {
     "utility":        "#cbd5e1",
 }
 
-_PUBLIC  = {"living_room", "kitchen", "dining_room", "hallway"}
-_PRIVATE = {"master_bedroom", "bedroom", "bathroom"}
+_PUBLIC  = frozenset({"living_room", "kitchen", "dining_room", "hallway"})
+_PRIVATE = frozenset({"master_bedroom", "bedroom", "bathroom"})
 _GAP     = 1.0   # metres between rooms in same row
 _ZONE_GAP = 2.0  # metres between zone rows
 
