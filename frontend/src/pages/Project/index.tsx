@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
+import { EditorToolbar } from '../../components/canvas/EditorToolbar'
 import { generateLayout } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
 
@@ -206,7 +207,10 @@ export default function ProjectPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Canvas + Inspector row */}
           <div className="flex-1 flex overflow-hidden">
-            <Canvas3D className="flex-1 h-full" />
+            <div className="relative flex-1 h-full">
+              <Canvas3D className="h-full" />
+              <EditorToolbar />
+            </div>
             <Inspector />
           </div>
 

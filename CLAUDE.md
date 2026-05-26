@@ -177,6 +177,24 @@ archiai-saas/
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
 ### Sprint 12 — Export, Share, and Polish ⏳ Not Started
 
+### Sprint 6 Status Update - 2026-05-27
+
+- [x] Sprint 6 started from the roadmap in this file and `docs/PROJECT_STRATEGY.md`
+- [x] Canvas state now supports object type, rotation, grid snap, save status, and edit activity entries
+- [x] Inspector now supports label editing, precise resize, precise rotation, duplicate, and delete
+- [x] Canvas now renders object labels above rooms/components
+- [x] Transform drag movement respects snap-to-grid when enabled
+- [x] Ctrl+D / Cmd+D duplicates the selected object
+- [x] Delete / Backspace removes the selected object
+- [x] Editor toolbar now supports snap toggle, add-object panel, duplicate, delete, and save status
+- [x] Add-object panel can create room, wall, door, window, stair, floor, and open space objects
+- [x] In-memory activity log records add, move, resize, rotate, rename, duplicate, and delete edits
+- [x] Debounced in-memory auto-save status shows Saving then Saved after edits
+- [x] Canvas store tests expanded to 16 passing tests
+- [x] Sprint 6 implementation note added at `docs/superpowers/plans/2026-05-27-sprint6-3d-editing-workflow.md`
+- [ ] Persistent design save/load remains deferred to Sprint 7
+- [ ] Persistent activity history/API remains deferred to Sprint 9
+
 ---
 
 ## Development Rules
