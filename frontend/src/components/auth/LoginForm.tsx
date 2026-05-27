@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
+import { getApiErrorMessage } from '../../services/apiError'
 import { LoginRequest } from '../../types/auth'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -22,8 +23,8 @@ export function LoginForm() {
     setServerError('')
     try {
       await logIn(data)
-    } catch {
-      setServerError('Invalid email or password.')
+    } catch (error) {
+      setServerError(getApiErrorMessage(error, 'Invalid email or password.'))
     } finally {
       setLoading(false)
     }

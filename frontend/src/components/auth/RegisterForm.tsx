@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { useAuth } from '../../hooks/useAuth'
+import { getApiErrorMessage } from '../../services/apiError'
 import { RegisterRequest } from '../../types/auth'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -22,8 +23,8 @@ export function RegisterForm() {
     setServerError('')
     try {
       await registerUser(data)
-    } catch {
-      setServerError('Registration failed. Please try again.')
+    } catch (error) {
+      setServerError(getApiErrorMessage(error, 'Registration failed. Please try again.'))
     } finally {
       setLoading(false)
     }

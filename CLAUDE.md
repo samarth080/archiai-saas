@@ -107,6 +107,7 @@ archiai-saas/
 - [x] Landing page
 - [x] Register page
 - [x] Login page
+- [x] Register/login forms display backend and network errors instead of generic failures
 - [x] Dashboard page (protected, stub)
 - [x] Zustand auth store
 - [x] ProtectedRoute + PublicOnlyRoute wrappers
@@ -114,7 +115,7 @@ archiai-saas/
 
 ### Sprint 2 — Backend Foundation ✅ Complete
 - [x] Global error handler returns `{ error, code, status }` for all HTTPExceptions
-- [x] RequestValidationError also returns `{ error, code, status }` shape (422)
+- [x] RequestValidationError also returns readable `{ error, code, status }` shape (422)
 - [x] All existing auth tests updated and passing with new error format
 - [x] `POST /api/projects` creates a project and logs `"project.created"` to ActivityLog
 - [x] `GET /api/projects` returns only the authenticated user's projects
@@ -127,8 +128,11 @@ archiai-saas/
 
 ### Sprint 3 — Frontend Foundation ✅ Complete
 - [x] Shared Axios instance (`src/services/api.ts`) injects Bearer token on every request
+- [x] Shared Axios instance defaults to `http://localhost:8000` when `VITE_API_URL` is not provided in local frontend env
+- [x] Auth service uses the shared Axios instance so register/login follow the same API URL and token behavior
 - [x] 401 responses log the user out and redirect to `/login`
 - [x] Dashboard rebuilt: sidebar + responsive card grid + real data from `GET /api/projects`
+- [x] Dashboard guards invalid project-list responses so API/config mistakes show an error instead of crashing React
 - [x] "+ New Project" modal — calls `POST /api/projects`, prepends project to grid on success
 - [x] ProjectCard click navigates to `/projects/:id`
 - [x] Project workspace page (`src/pages/Project/index.tsx`) — loads from `GET /api/projects/:id`
@@ -186,7 +190,9 @@ archiai-saas/
 - [x] Clicking a room/component selects only that object and shows a visible highlight
 - [x] Direct mouse drag moves the selected object on the X/Z plane while preserving floor/elevation
 - [x] Orbit controls are disabled while direct object drag is active
-- [x] Direct drag and TransformControls movement respect snap-to-grid when enabled
+- [x] Direct drag respects snap-to-grid when enabled
+- [x] Sprint 6 bug fix: removed unstable selected-object `TransformControls` wrapper so selection and pointer drag stay on the same mesh
+- [x] Sprint 6 bug fix: empty-canvas deselect no longer competes with object click/drag events
 - [x] Ctrl+D / Cmd+D duplicates the selected object
 - [x] Delete / Backspace removes the selected object
 - [x] Editor toolbar supports snap toggle, floor selector, add-object panel, duplicate, delete, and save status

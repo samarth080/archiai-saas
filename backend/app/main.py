@@ -28,6 +28,15 @@ STATUS_CODES = {
 }
 
 
+def format_validation_error(exc: RequestValidationError) -> str:
+    messages = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error.get("loc", []) if part != "body")
+        message = str(error.get("msg", "Invalid value")).removeprefix("Value error, ")
+        messages.append(f"{location}: {message}" if location else message)
+    return "; ".join(messages) or "Validation error"
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponse(
@@ -45,7 +54,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={
-            "error": "Validation error",
+            "error": format_validation_error(exc),
             "code": "UNPROCESSABLE_ENTITY",
             "status": 422,
         },

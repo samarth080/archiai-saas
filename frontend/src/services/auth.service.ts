@@ -1,10 +1,5 @@
-import axios from 'axios'
-
 import { AuthResponse, LoginRequest, RegisterRequest, UserOut } from '../types/auth'
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL as string,
-})
+import api from './api'
 
 export const authService = {
   register: (data: RegisterRequest): Promise<AuthResponse> =>
@@ -14,16 +9,10 @@ export const authService = {
     api.post<AuthResponse>('/api/auth/login', data).then((r) => r.data),
 
   logout: (): Promise<void> => {
-    const token = localStorage.getItem('token')
-    return api
-      .post('/api/auth/logout', {}, { headers: { Authorization: `Bearer ${token}` } })
-      .then(() => undefined)
+    return api.post('/api/auth/logout').then(() => undefined)
   },
 
   getMe: (): Promise<UserOut> => {
-    const token = localStorage.getItem('token')
-    return api
-      .get<UserOut>('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.data)
+    return api.get<UserOut>('/api/auth/me').then((r) => r.data)
   },
 }

@@ -19,6 +19,9 @@ export default function Dashboard() {
     projectService
       .list()
       .then((data) => {
+        if (!Array.isArray(data)) {
+          throw new Error('Invalid projects response')
+        }
         setProjects(data)
         setLoading(false)
       })

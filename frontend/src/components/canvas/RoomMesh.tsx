@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Html, TransformControls } from '@react-three/drei'
+import { Html } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
@@ -26,11 +26,6 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
 
   const isSelected = selectedId === room.id
 
-  const handleClick = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation()
-    selectRoom(room.id)
-  }
-
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
     selectRoom(room.id)
@@ -50,7 +45,9 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
     }
     dragPlaneRef.current = plane
     dragPointerIdRef.current = e.pointerId
-    const target = e.target as HTMLElement
+    const target = e.target as EventTarget & {
+      setPointerCapture?: (pointerId: number) => void
+    }
     target.setPointerCapture?.(e.pointerId)
   }
 
@@ -101,48 +98,14 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
       }
     }
 
-    const target = e.target as HTMLElement
+    const target = e.target as EventTarget & {
+      releasePointerCapture?: (pointerId: number) => void
+    }
     target.releasePointerCapture?.(e.pointerId)
     dragStartRef.current = null
     dragOffsetRef.current = null
     dragPlaneRef.current = null
     dragPointerIdRef.current = null
-  }
-
-  const handleTransformMouseDown = () => {
-    if (orbitRef.current) orbitRef.current.enabled = false
-    dragStartRef.current = { ...room.position }
-  }
-
-  const handleTransformMouseUp = () => {
-    if (orbitRef.current) orbitRef.current.enabled = true
-    if (meshRef.current && dragStartRef.current) {
-      const pos = meshRef.current.position
-      updateRoom(
-        room.id,
-        {
-          position: { x: pos.x, y: pos.y, z: pos.z },
-        },
-        {
-          action: 'object.moved',
-          previousValue: dragStartRef.current,
-        }
-      )
-      dragStartRef.current = null
-    }
-  }
-
-  const handleTransformChange = () => {
-    if (meshRef.current) {
-      const pos = meshRef.current.position
-      updateRoom(
-        room.id,
-        {
-          position: { x: pos.x, y: pos.y, z: pos.z },
-        },
-        { log: false }
-      )
-    }
   }
 
   const mesh = (
@@ -154,18 +117,26 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
         THREE.MathUtils.degToRad(room.rotation.y),
         THREE.MathUtils.degToRad(room.rotation.z),
       ]}
-      onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointerDrag}
       onPointerCancel={finishPointerDrag}
+      onPointerOut={(e) => {
+        if (dragPointerIdRef.current === e.pointerId) e.stopPropagation()
+      }}
     >
       <boxGeometry args={[room.size.w, room.size.h, room.size.d]} />
       <meshStandardMaterial
         color={room.color}
-        emissive={isSelected ? '#ffffff' : '#000000'}
-        emissiveIntensity={isSelected ? 0.15 : 0}
+        emissive={isSelected ? '#312e81' : '#000000'}
+        emissiveIntensity={isSelected ? 0.35 : 0}
       />
+      {isSelected && (
+        <lineSegments>
+          <edgesGeometry args={[new THREE.BoxGeometry(room.size.w, room.size.h, room.size.d)]} />
+          <lineBasicMaterial color="#111827" linewidth={2} />
+        </lineSegments>
+      )}
     </mesh>
   )
 
@@ -184,22 +155,6 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
       </div>
     </Html>
   )
-
-  if (isSelected) {
-    return (
-      <>
-        <TransformControls
-          mode="translate"
-          onMouseDown={handleTransformMouseDown}
-          onMouseUp={handleTransformMouseUp}
-          onChange={handleTransformChange}
-        >
-          {mesh}
-        </TransformControls>
-        {label}
-      </>
-    )
-  }
 
   return (
     <>

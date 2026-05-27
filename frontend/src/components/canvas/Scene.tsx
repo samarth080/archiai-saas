@@ -33,7 +33,10 @@ export function Scene({ orbitRef }: SceneProps) {
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.01, 0]}
-        onClick={() => deselectAll()}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          deselectAll()
+        }}
       >
         <planeGeometry args={[200, 200]} />
         <meshBasicMaterial transparent opacity={0} />
