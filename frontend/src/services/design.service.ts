@@ -37,8 +37,18 @@ export async function getLatestProjectDesign(projectId: string): Promise<Generat
 
 export async function saveDesignLayout(
   designId: string,
-  layout: CanvasLayout
+  layout: CanvasLayout,
+  options?: {
+    versionName?: string
+    changeSummary?: string
+    thumbnailUrl?: string | null
+  }
 ): Promise<GenerateResponse> {
-  const { data } = await api.put<GenerateResponse>(`/api/design/${designId}`, { layout })
+  const { data } = await api.put<GenerateResponse>(`/api/design/${designId}`, {
+    layout,
+    versionName: options?.versionName,
+    changeSummary: options?.changeSummary,
+    thumbnailUrl: options?.thumbnailUrl,
+  })
   return data
 }

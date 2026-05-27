@@ -3,12 +3,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import get_db
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
 from app.services.auth_service import get_current_user
 from app.services.project_service import (
     create_project,
     delete_project,
+    duplicate_project,
     get_project,
+    list_project_versions,
     list_projects,
     update_project,
 )
@@ -51,6 +53,24 @@ async def get_one(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_project(db, user_id, project_id)
+
+
+@router.get("/{project_id}/versions", response_model=list[ProjectVersionOut])
+async def versions(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_project_versions(db, user_id, project_id)
+
+
+@router.post("/{project_id}/duplicate", response_model=ProjectOut, status_code=201)
+async def duplicate(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await duplicate_project(db, user_id, project_id)
 
 
 @router.put("/{project_id}", response_model=ProjectOut)

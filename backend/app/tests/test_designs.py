@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from app.models.activity_log import ActivityLog
 from app.models.design import Design
 from app.models.design_version import DesignVersion
+from app.models.project import Project
 from app.tests.conftest import TestSessionLocal
 
 
@@ -124,3 +125,50 @@ async def test_save_design_updates_layout_and_creates_new_version(client: AsyncC
 
         activity_result = await session.scalars(select(ActivityLog.action))
         assert "layout.saved" in activity_result.all()
+
+
+async def test_manual_save_stores_version_metadata_and_thumbnail(client: AsyncClient):
+    token = await _register_and_token(client, "manual-version@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Manual Version", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "1 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    layout["rooms"][0]["label"] = "Named Save Room"
+
+    saved = await client.put(
+        f"/api/design/{layout['designId']}",
+        json={
+            "layout": layout,
+            "versionName": "Client review",
+            "changeSummary": "Moved the main room",
+            "thumbnailUrl": "data:image/png;base64,abc123",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert saved.status_code == 200
+
+    async with TestSessionLocal() as session:
+        latest_version = await session.scalar(
+            select(DesignVersion)
+            .where(DesignVersion.design_id == layout["designId"])
+            .order_by(DesignVersion.version_number.desc())
+        )
+        project_row = await session.get(Project, project_id)
+
+        assert latest_version is not None
+        assert latest_version.version_number == 2
+        assert latest_version.version_name == "Client review"
+        assert latest_version.version_type == "manual"
+        assert latest_version.change_summary == "Moved the main room"
+        assert latest_version.layout_json["rooms"][0]["label"] == "Named Save Room"
+        assert project_row is not None
+        assert project_row.thumbnail_url == "data:image/png;base64,abc123"

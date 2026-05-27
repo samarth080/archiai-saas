@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_HEIGHT, useCanvasStore, INITIAL_ROOMS, Room } from './canvasStore'
 
 beforeEach(() => {
@@ -24,10 +24,6 @@ beforeEach(() => {
     lastSavedAt: null,
     activityLog: [],
   })
-})
-
-afterEach(() => {
-  vi.useRealTimers()
 })
 
 describe('selectRoom', () => {
@@ -108,16 +104,12 @@ describe('updateRoom', () => {
     expect(entry.newValue).toMatchObject({ position: { x: 3, y: 1.5, z: 4 } })
   })
 
-  it('sets saving then saved after the auto-save debounce', () => {
-    vi.useFakeTimers()
+  it('marks the layout as unsaved after an edit', () => {
     useCanvasStore.getState().updateRoom('room-1', {
       position: { x: 3, y: 1.5, z: 4 },
     })
 
-    expect(useCanvasStore.getState().saveStatus).toBe('saving')
-    vi.advanceTimersByTime(800)
-    expect(useCanvasStore.getState().saveStatus).toBe('saved')
-    expect(useCanvasStore.getState().lastSavedAt).not.toBeNull()
+    expect(useCanvasStore.getState().saveStatus).toBe('unsaved')
   })
 })
 
@@ -235,6 +227,16 @@ describe('loadRooms', () => {
 })
 
 describe('loadLayout and serializeLayout', () => {
+  it('clears the layout for empty projects', () => {
+    const store = useCanvasStore.getState()
+    store.clearLayout()
+
+    const state = useCanvasStore.getState()
+    expect(state.rooms).toHaveLength(0)
+    expect(state.designId).toBeNull()
+    expect(state.saveStatus).toBe('saved')
+  })
+
   it('loads multi-floor layouts and defaults to the ground floor', () => {
     const store = useCanvasStore.getState()
     store.loadLayout({

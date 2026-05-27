@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +32,9 @@ async def save_generated_design(
         project_id=project_id,
         user_id=user_id,
         version_number=1,
+        version_name="Generated layout",
+        version_type="generated",
+        change_summary="Initial generated layout",
         layout_json=layout_json,
         prompt_used=prompt,
     )
@@ -76,6 +81,9 @@ async def update_design_layout(
     user_id: str,
     design_id: str,
     layout_json: dict,
+    version_name: str | None = None,
+    change_summary: str | None = None,
+    thumbnail_url: str | None = None,
 ) -> tuple[Design, DesignVersion]:
     result = await db.execute(select(Design).where(Design.id == design_id))
     design = result.scalar_one_or_none()
@@ -91,12 +99,23 @@ async def update_design_layout(
     )
     next_version = (max_version_result.scalar_one_or_none() or 0) + 1
     design.layout_json = layout_json
+    design.updated_at = datetime.now(timezone.utc)
+
+    project_result = await db.execute(select(Project).where(Project.id == design.project_id))
+    project = project_result.scalar_one_or_none()
+    if project is not None:
+        if thumbnail_url is not None:
+            project.thumbnail_url = thumbnail_url
+        project.updated_at = datetime.now(timezone.utc)
 
     version = DesignVersion(
         design_id=design.id,
         project_id=design.project_id,
         user_id=user_id,
         version_number=next_version,
+        version_name=version_name or f"Manual save v{next_version}",
+        version_type="manual",
+        change_summary=change_summary or "Manual layout save",
         layout_json=layout_json,
         prompt_used=layout_json.get("metadata", {}).get("prompt"),
     )

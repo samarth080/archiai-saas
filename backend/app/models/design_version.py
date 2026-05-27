@@ -22,6 +22,9 @@ class DesignVersion(Base):
         String, ForeignKey("users.id"), nullable=False, index=True
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    version_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     layout_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     prompt_used: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[object] = mapped_column(

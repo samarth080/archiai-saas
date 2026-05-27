@@ -5,8 +5,21 @@ export interface Project {
   user_id: string
   title: string
   description: string | null
+  thumbnail_url?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ProjectVersion {
+  id: string
+  design_id: string
+  project_id: string
+  version_number: number
+  version_name?: string | null
+  version_type?: string | null
+  change_summary?: string | null
+  created_by: string
+  created_at: string
 }
 
 export interface CreateProjectData {
@@ -34,6 +47,12 @@ const projectService = {
 
   delete: (id: string): Promise<void> =>
     api.delete(`/api/projects/${id}`).then(() => undefined),
+
+  duplicate: (id: string): Promise<Project> =>
+    api.post(`/api/projects/${id}/duplicate`).then((r) => r.data),
+
+  versions: (id: string): Promise<ProjectVersion[]> =>
+    api.get(`/api/projects/${id}/versions`).then((r) => r.data),
 }
 
 export default projectService

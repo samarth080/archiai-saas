@@ -52,6 +52,7 @@ export function Canvas3D({ className }: Canvas3DProps) {
     <div className={className} style={{ background: '#f1f5f9' }}>
       <Canvas
         camera={{ position: [10, 12, 10] as [number, number, number], fov: 50 }}
+        gl={{ preserveDrawingBuffer: true }}
         onPointerMissed={deselectAll}
       >
         <Scene orbitRef={orbitRef} />

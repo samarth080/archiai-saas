@@ -211,7 +211,27 @@ archiai-saas/
 - [x] Sprint 6 implementation note exists at `docs/superpowers/plans/2026-05-27-sprint6-3d-editing-workflow.md`
 - [ ] Persistent per-object ActivityLog API remains deferred to Sprint 9
 
-### Sprint 7 — Database and Project Management ⏳ Not Started
+### Sprint 7 — Database and Project Management ✅ Complete
+
+- [x] Project CRUD, rename, and delete remain project-owner scoped
+- [x] Project delete removes related Design and DesignVersion rows so persisted layouts do not block deletion
+- [x] Manual Save Layout creates a named/manual DesignVersion with incrementing version number, snapshot JSON, change summary, creator, and timestamp
+- [x] Generated layouts continue to create the first generated DesignVersion
+- [x] `GET /api/projects/{id}/versions` lists project versions newest first with useful metadata
+- [x] `POST /api/projects/{id}/duplicate` creates a separate project copy with latest design/layout snapshot
+- [x] Project duplicate creates its own initial DesignVersion and does not copy old activity logs
+- [x] Project thumbnails are captured from the canvas on Save Layout and persisted on Project
+- [x] Dashboard ProjectCard displays saved thumbnails or a clean placeholder
+- [x] Opening a project loads the latest saved design/layout when available
+- [x] Empty projects show a clear empty editor state instead of hardcoded starter rooms
+- [x] Save status distinguishes Unsaved changes, Saving, Saved with timestamp, and Error
+- [x] Alembic migration 005 adds Sprint 7 project thumbnail and version metadata fields
+- [x] Backend Sprint 7 tests cover versions, duplicate, thumbnail persistence, latest load, and delete-with-designs behavior
+- [x] Frontend canvas store tests cover empty layout clearing and unsaved state
+- [ ] Full version history panel deferred to Sprint 9
+- [ ] Restore version UI deferred to Sprint 9
+- [ ] Collaboration/version-control UI deferred to Sprint 9
+
 ### Sprint 8 — Prompt Refinement ⏳ Not Started
 ### Sprint 9 — Team Collaboration, Version Control, and Logging ⏳ Not Started
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started

@@ -13,6 +13,7 @@ const OBJECT_TYPES: { value: CanvasObjectType; label: string }[] = [
 
 function saveStatusLabel(status: SaveStatus, lastSavedAt: string | null) {
   if (status === 'saving') return 'Saving...'
+  if (status === 'unsaved') return 'Unsaved changes'
   if (status === 'error') return 'Save error'
   if (!lastSavedAt) return 'Saved'
 
@@ -39,6 +40,7 @@ export function EditorToolbar() {
   const statusClasses = {
     saved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     saving: 'bg-amber-50 text-amber-700 border-amber-200',
+    unsaved: 'bg-sky-50 text-sky-700 border-sky-200',
     error: 'bg-red-50 text-red-700 border-red-200',
   }
 

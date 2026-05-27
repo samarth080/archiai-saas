@@ -12,7 +12,7 @@ export type CanvasEditAction =
   | 'object.renamed'
   | 'object.updated'
 
-export type SaveStatus = 'saved' | 'saving' | 'error'
+export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
 
 export interface Room {
   id: string
@@ -88,6 +88,7 @@ interface CanvasState {
   addObject: (objectType: CanvasObjectType) => void
   loadRooms: (rooms: Room[]) => void
   loadLayout: (layout: CanvasLayout) => void
+  clearLayout: () => void
   serializeLayout: () => CanvasLayout
 }
 
@@ -326,7 +327,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: state.rooms.map((r) => (r.id === id ? updated : r)),
         activityLog: logEntry ? [logEntry, ...state.activityLog] : state.activityLog,
-        saveStatus: shouldLog ? 'saving' : state.saveStatus,
+        saveStatus: shouldLog ? 'unsaved' : state.saveStatus,
       }
     }),
   deleteRoom: (id) =>
@@ -337,7 +338,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: state.rooms.filter((r) => r.id !== id),
         selectedId: state.selectedId === id ? null : state.selectedId,
-        saveStatus: 'saving',
+        saveStatus: 'unsaved',
         activityLog: [
           {
             id: nextId('activity'),
@@ -370,7 +371,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: [...state.rooms, copy],
         selectedId: copy.id,
-        saveStatus: 'saving',
+        saveStatus: 'unsaved',
         activityLog: [
           {
             id: nextId('activity'),
@@ -410,7 +411,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: [...state.rooms, newObject],
         selectedId: newObject.id,
-        saveStatus: 'saving',
+        saveStatus: 'unsaved',
         activityLog: [
           {
             id: nextId('activity'),
@@ -449,6 +450,20 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activityLog: [],
     })
   },
+  clearLayout: () =>
+    set({
+      rooms: [],
+      floors: [DEFAULT_FLOOR],
+      selectedFloor: 0,
+      floorHeight: DEFAULT_FLOOR_HEIGHT,
+      designId: null,
+      designVersionId: null,
+      layoutMetadata: {},
+      selectedId: null,
+      saveStatus: 'saved',
+      lastSavedAt: null,
+      activityLog: [],
+    }),
   serializeLayout: () => {
     const state = get()
     const floors = state.floors.map((floor) => ({
@@ -473,10 +488,5 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
 function queueAutoSave() {
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    useCanvasStore.setState({
-      saveStatus: 'saved',
-      lastSavedAt: new Date().toISOString(),
-    })
-  }, 800)
+  saveTimer = null
 }

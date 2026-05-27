@@ -85,7 +85,15 @@ async def save_design(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateResponse:
-    design, version = await update_design_layout(db, user_id, design_id, request.layout)
+    design, version = await update_design_layout(
+        db,
+        user_id,
+        design_id,
+        request.layout,
+        version_name=request.version_name,
+        change_summary=request.change_summary,
+        thumbnail_url=request.thumbnail_url,
+    )
     await log_activity(db, user_id, "layout.saved")
     layout = {
         **design.layout_json,

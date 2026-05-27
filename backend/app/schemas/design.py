@@ -12,6 +12,11 @@ class GenerateRequest(BaseModel):
 
 class SaveDesignRequest(BaseModel):
     layout: dict[str, Any]
+    version_name: str | None = Field(default=None, alias="versionName")
+    change_summary: str | None = Field(default=None, alias="changeSummary")
+    thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
+
+    model_config = {"populate_by_name": True}
 
 
 class RoomPosition(BaseModel):

@@ -1,4 +1,10 @@
 from httpx import AsyncClient
+from sqlalchemy import select
+
+from app.models.design import Design
+from app.models.design_version import DesignVersion
+from app.models.project import Project
+from app.tests.conftest import TestSessionLocal
 
 
 async def _register_and_token(client: AsyncClient, email: str) -> str:
@@ -153,3 +159,150 @@ async def test_delete_project_wrong_user(client: AsyncClient):
     )
     assert response.status_code == 403
     assert response.json()["code"] == "FORBIDDEN"
+
+
+async def test_project_versions_api_returns_versions_newest_first(client: AsyncClient):
+    token = await _register_and_token(client, "versions@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Versioned Project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    layout["rooms"][0]["label"] = "Saved Label"
+    await client.put(
+        f"/api/design/{layout['designId']}",
+        json={
+            "layout": layout,
+            "versionName": "Manual checkpoint",
+            "changeSummary": "Saved edited label",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project_id}/versions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    versions = response.json()
+    assert [version["version_number"] for version in versions] == [2, 1]
+    assert versions[0]["version_name"] == "Manual checkpoint"
+    assert versions[0]["version_type"] == "manual"
+    assert versions[0]["change_summary"] == "Saved edited label"
+    assert versions[0]["created_by"]
+
+
+async def test_project_versions_wrong_user_forbidden(client: AsyncClient):
+    token_a = await _register_and_token(client, "version-owner@example.com")
+    token_b = await _register_and_token(client, "version-intruder@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Private Versions"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project.json()['id']}/versions",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_duplicate_project_copies_latest_design_layout_and_thumbnail(client: AsyncClient):
+    token = await _register_and_token(client, "duplicate@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Original Project", "description": "Source"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    layout["rooms"][0]["label"] = "Copied Room"
+    await client.put(
+        f"/api/design/{layout['designId']}",
+        json={
+            "layout": layout,
+            "versionName": "Before duplicate",
+            "thumbnailUrl": "data:image/png;base64,preview",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.post(
+        f"/api/projects/{project_id}/duplicate",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    duplicate = response.json()
+    assert duplicate["id"] != project_id
+    assert duplicate["title"] == "Copy of Original Project"
+    assert duplicate["description"] == "Source"
+    assert duplicate["thumbnail_url"] == "data:image/png;base64,preview"
+
+    latest_duplicate = await client.get(
+        f"/api/design/project/{duplicate['id']}/latest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert latest_duplicate.status_code == 200
+    assert latest_duplicate.json()["rooms"][0]["label"] == "Copied Room"
+    assert latest_duplicate.json()["designId"] != layout["designId"]
+
+    async with TestSessionLocal() as session:
+        original = await session.get(Project, project_id)
+        original_design = await session.get(Design, layout["designId"])
+        duplicate_version = await session.scalar(
+            select(DesignVersion).where(DesignVersion.project_id == duplicate["id"])
+        )
+
+        assert original is not None
+        assert original.title == "Original Project"
+        assert original_design is not None
+        assert original_design.layout_json["rooms"][0]["label"] == "Copied Room"
+        assert duplicate_version is not None
+        assert duplicate_version.version_number == 1
+        assert duplicate_version.version_type == "duplicate"
+
+
+async def test_delete_project_with_designs_succeeds(client: AsyncClient):
+    token = await _register_and_token(client, "delete-with-designs@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Delete With Designs"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.delete(
+        f"/api/projects/{project_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 204
+
+    async with TestSessionLocal() as session:
+        design = await session.scalar(select(Design).where(Design.project_id == project_id))
+        version = await session.scalar(
+            select(DesignVersion).where(DesignVersion.project_id == project_id)
+        )
+        assert design is None
+        assert version is None

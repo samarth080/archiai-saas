@@ -10,6 +10,16 @@ import { EditorToolbar } from '../../components/canvas/EditorToolbar'
 import { generateLayout, getLatestProjectDesign, saveDesignLayout } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
 
+function captureCanvasThumbnail() {
+  const canvas = document.querySelector('canvas')
+  if (!canvas) return null
+  try {
+    return canvas.toDataURL('image/png')
+  } catch {
+    return null
+  }
+}
+
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -32,8 +42,15 @@ export default function ProjectPage() {
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
   const [layoutSaveError, setLayoutSaveError] = useState<string | null>(null)
+  const [versionName, setVersionName] = useState('')
+  const [changeSummary, setChangeSummary] = useState('')
+  const [duplicating, setDuplicating] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [hasSavedLayout, setHasSavedLayout] = useState(false)
   const designId = useCanvasStore((s) => s.designId)
+  const roomCount = useCanvasStore((s) => s.rooms.length)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
+  const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
 
   const handleGenerate = async () => {
@@ -44,6 +61,7 @@ export default function ProjectPage() {
     try {
       const result = await generateLayout(prompt, id)
       loadLayout(result)
+      setHasSavedLayout(true)
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       setGenerateError(
@@ -59,9 +77,24 @@ export default function ProjectPage() {
     setLayoutSaving(true)
     setLayoutSaveError(null)
     useCanvasStore.setState({ saveStatus: 'saving' })
+    const thumbnailUrl = captureCanvasThumbnail()
     try {
-      const result = await saveDesignLayout(designId, serializeLayout())
+      const result = await saveDesignLayout(designId, serializeLayout(), {
+        versionName: versionName.trim() || undefined,
+        changeSummary: changeSummary.trim() || undefined,
+        thumbnailUrl,
+      })
       loadLayout(result)
+      setHasSavedLayout(true)
+      setVersionName('')
+      setChangeSummary('')
+      if (thumbnailUrl) {
+        setProject((current) =>
+          current
+            ? { ...current, thumbnail_url: thumbnailUrl, updated_at: new Date().toISOString() }
+            : current
+        )
+      }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       useCanvasStore.setState({ saveStatus: 'error' })
@@ -83,10 +116,18 @@ export default function ProjectPage() {
         setProject(data)
         try {
           const latestDesign = await getLatestProjectDesign(projectId)
-          if (active) loadLayout(latestDesign)
+          if (active) {
+            loadLayout(latestDesign)
+            setHasSavedLayout(true)
+          }
         } catch (designErr) {
           const apiErr = designErr as { response?: { status?: number } }
-          if (apiErr.response?.status !== 404) {
+          if (apiErr.response?.status === 404) {
+            if (active) {
+              clearLayout()
+              setHasSavedLayout(false)
+            }
+          } else {
             console.warn('Failed to load latest project design', designErr)
           }
         }
@@ -153,6 +194,20 @@ export default function ProjectPage() {
       const apiErr = err as { response?: { data?: { error?: string } } }
       setDeleteError(apiErr.response?.data?.error ?? 'Failed to delete project')
       setDeleting(false)
+    }
+  }
+
+  const handleDuplicate = async () => {
+    if (!id) return
+    setDuplicating(true)
+    setDuplicateError(null)
+    try {
+      const duplicate = await projectService.duplicate(id)
+      navigate(`/projects/${duplicate.id}`)
+    } catch (err) {
+      const apiErr = err as { response?: { data?: { error?: string } } }
+      setDuplicateError(apiErr.response?.data?.error ?? 'Failed to duplicate project')
+      setDuplicating(false)
     }
   }
 
@@ -227,6 +282,22 @@ export default function ProjectPage() {
             ) : (
               <>
                 <div className="flex flex-col items-end">
+                  <div className="mb-2 grid w-64 gap-1">
+                    <input
+                      type="text"
+                      value={versionName}
+                      onChange={(e) => setVersionName(e.target.value)}
+                      placeholder="Version name (optional)"
+                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <input
+                      type="text"
+                      value={changeSummary}
+                      onChange={(e) => setChangeSummary(e.target.value)}
+                      placeholder="Change summary (optional)"
+                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
                   <Button
                     variant="secondary"
                     onClick={handleSaveLayout}
@@ -236,6 +307,12 @@ export default function ProjectPage() {
                     Save Layout
                   </Button>
                   {layoutSaveError && <p className="text-sm text-red-600 mt-1">{layoutSaveError}</p>}
+                </div>
+                <div className="flex flex-col items-end">
+                  <Button variant="secondary" onClick={handleDuplicate} loading={duplicating} disabled={duplicating}>
+                    Duplicate
+                  </Button>
+                  {duplicateError && <p className="text-sm text-red-600 mt-1">{duplicateError}</p>}
                 </div>
                 <Button variant="secondary" onClick={enterEditMode}>
                   Edit
@@ -263,6 +340,13 @@ export default function ProjectPage() {
             <div className="relative flex-1 h-full">
               <Canvas3D className="h-full" />
               <EditorToolbar />
+              {!hasSavedLayout && roomCount === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="rounded border border-dashed border-gray-300 bg-white/90 px-4 py-3 text-sm text-gray-500 shadow-sm">
+                    No saved layout yet. Generate a layout from the prompt below.
+                  </div>
+                </div>
+              )}
             </div>
             <Inspector />
           </div>
