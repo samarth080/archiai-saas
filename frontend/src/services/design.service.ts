@@ -52,3 +52,18 @@ export async function saveDesignLayout(
   })
   return data
 }
+
+export interface RefineResponse extends GenerateResponse {
+  refinementSummary: string
+}
+
+export async function refineLayout(
+  designId: string,
+  prompt: string,
+): Promise<RefineResponse> {
+  const { data } = await api.post<RefineResponse>('/api/design/refine', {
+    designId,
+    prompt,
+  })
+  return data
+}
