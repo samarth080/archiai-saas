@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
@@ -7,7 +7,12 @@ import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
-import { generateLayout, getLatestProjectDesign, saveDesignLayout } from '../../services/design.service'
+import {
+  generateLayout,
+  getLatestProjectDesign,
+  refineLayout,
+  saveDesignLayout,
+} from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
 
 function captureCanvasThumbnail() {
@@ -47,25 +52,39 @@ export default function ProjectPage() {
   const [duplicating, setDuplicating] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [hasSavedLayout, setHasSavedLayout] = useState(false)
+  const [mode, setMode] = useState<'generate' | 'refine'>('generate')
+  const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
+  const userPickedModeRef = useRef(false)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
 
-  const handleGenerate = async () => {
+  const handleSubmit = async () => {
     if (!prompt.trim()) return
     setGenerating(true)
     setGenerateError(null)
     setLayoutSaveError(null)
     try {
-      const result = await generateLayout(prompt, id)
-      loadLayout(result)
-      setHasSavedLayout(true)
+      if (mode === 'refine' && designId) {
+        const result = await refineLayout(designId, prompt)
+        loadLayout(result)
+        setRefinementSummary(result.refinementSummary)
+        setPrompt('')
+      } else {
+        const result = await generateLayout(prompt, id)
+        loadLayout(result)
+        setHasSavedLayout(true)
+        setRefinementSummary(null)
+      }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
       setGenerateError(
-        apiErr.response?.data?.error ?? 'Generation failed. Try a more detailed description.'
+        apiErr.response?.data?.error ??
+          (mode === 'refine'
+            ? 'Refinement failed. Try a more specific change.'
+            : 'Generation failed. Try a more detailed description.'),
       )
     } finally {
       setGenerating(false)
@@ -150,6 +169,12 @@ export default function ProjectPage() {
       active = false
     }
   }, [id, navigate, loadLayout])
+
+  useEffect(() => {
+    if (designId && mode === 'generate' && !userPickedModeRef.current) {
+      setMode('refine')
+    }
+  }, [designId, mode])
 
   const enterEditMode = () => {
     if (!project) return
@@ -352,29 +377,69 @@ export default function ProjectPage() {
           </div>
 
           {/* Prompt bar */}
-          <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-1">
+          <div
+            className="border-t border-gray-200 bg-white p-3 flex flex-col gap-2"
+            data-refinement-summary={refinementSummary ?? undefined}
+          >
+            <div
+              role="tablist"
+              aria-label="Prompt mode"
+              className="inline-flex w-fit rounded border border-gray-300 text-xs overflow-hidden"
+            >
+              <button
+                role="tab"
+                aria-selected={mode === 'generate'}
+                className={`px-3 py-1 ${mode === 'generate' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'}`}
+                onClick={() => {
+                  userPickedModeRef.current = true
+                  setMode('generate')
+                }}
+              >
+                Generate
+              </button>
+              <button
+                role="tab"
+                aria-selected={mode === 'refine'}
+                disabled={!designId}
+                title={designId ? '' : 'Generate a layout first'}
+                className={`px-3 py-1 ${mode === 'refine' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                onClick={() => {
+                  userPickedModeRef.current = true
+                  setMode('refine')
+                }}
+              >
+                Refine
+              </button>
+            </div>
             <div className="flex gap-2 items-end">
               <textarea
                 aria-label="Layout prompt"
                 className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 rows={2}
-                placeholder="Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room"
+                placeholder={
+                  mode === 'refine'
+                    ? "Refine your layout… e.g. 'add a bedroom', 'remove the office', 'make the kitchen bigger'"
+                    : 'Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room'
+                }
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setPrompt(e.target.value)
+                  setRefinementSummary(null)
+                }}
                 disabled={generating}
               />
               <button
                 aria-busy={generating}
                 className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
-                onClick={handleGenerate}
+                onClick={handleSubmit}
                 disabled={generating || !prompt.trim()}
               >
-                {generating ? 'Generating…' : 'Generate'}
+                {generating
+                  ? mode === 'refine' ? 'Refining…' : 'Generating…'
+                  : mode === 'refine' ? 'Refine' : 'Generate'}
               </button>
             </div>
-            {generateError && (
-              <p className="text-xs text-red-500">{generateError}</p>
-            )}
+            {generateError && <p className="text-xs text-red-500">{generateError}</p>}
           </div>
         </div>
       </main>
