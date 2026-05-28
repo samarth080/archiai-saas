@@ -376,11 +376,26 @@ export default function ProjectPage() {
             <Inspector />
           </div>
 
+          {refinementSummary && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="border-t border-emerald-200 bg-emerald-50 px-3 py-2 flex items-start gap-2"
+            >
+              <span className="text-xs text-emerald-700 flex-1">{refinementSummary}</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                className="text-xs text-emerald-700 hover:text-emerald-900"
+                onClick={() => setRefinementSummary(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Prompt bar */}
-          <div
-            className="border-t border-gray-200 bg-white p-3 flex flex-col gap-2"
-            data-refinement-summary={refinementSummary ?? undefined}
-          >
+          <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-2">
             <div
               role="tablist"
               aria-label="Prompt mode"
