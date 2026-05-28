@@ -1,7 +1,10 @@
+import copy
 import re
 from dataclasses import dataclass
+from math import sqrt
 
-from app.services.prompt_service import ROOM_PATTERNS, WORD_TO_NUM
+from app.services.layout_service import ROOM_COLORS
+from app.services.prompt_service import ROOM_DEFAULTS, ROOM_PATTERNS, WORD_TO_NUM
 
 
 @dataclass
@@ -127,13 +130,6 @@ def parse_refinement(prompt: str) -> list[RefinementOp]:
             break
 
     return ops
-
-
-import copy
-from math import sqrt
-
-from app.services.layout_service import ROOM_COLORS
-from app.services.prompt_service import ROOM_DEFAULTS
 
 
 def _floor_elevation_for_level(layout: dict, level: int) -> float:
