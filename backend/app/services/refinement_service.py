@@ -127,3 +127,80 @@ def parse_refinement(prompt: str) -> list[RefinementOp]:
             break
 
     return ops
+
+
+import copy
+from math import sqrt
+
+from app.services.layout_service import ROOM_COLORS
+from app.services.prompt_service import ROOM_DEFAULTS
+
+
+def _floor_elevation_for_level(layout: dict, level: int) -> float:
+    for floor in layout.get("floors") or []:
+        if floor.get("level") == level:
+            return float(floor.get("elevation") or 0.0)
+    return 0.0
+
+
+def _rebuild_layout(layout: dict, rooms: list[dict]) -> dict:
+    new = copy.deepcopy(layout)
+    new["rooms"] = rooms
+    floors = new.get("floors") or []
+    for floor in floors:
+        floor["rooms"] = [r for r in rooms if r.get("floorLevel") == floor.get("level")]
+    metadata = new.setdefault("metadata", {})
+    metadata["room_count"] = len(rooms)
+    metadata["totalRooms"] = len(rooms)
+    return new
+
+
+def _label_for_summary(room_type: str) -> str:
+    return ROOM_DEFAULTS[room_type]["label"].lower()
+
+
+def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
+    rooms = [copy.deepcopy(r) for r in layout.get("rooms", [])]
+    summary_parts: list[str] = []
+
+    # Order: RESIZE -> REMOVE -> ADD
+    for op in ops:
+        if not isinstance(op, ResizeOp):
+            continue
+        matches = [r for r in rooms if r.get("roomType") == op.room_type]
+        if not matches:
+            continue
+        f = sqrt(op.factor)
+        for room in matches:
+            room["size"]["w"] = round(room["size"]["w"] * f, 1)
+            room["size"]["d"] = round(room["size"]["d"] * f, 1)
+            elevation = _floor_elevation_for_level(layout, room.get("floorLevel") or 0)
+            room["position"]["y"] = round(elevation + room["size"]["h"] / 2, 2)
+        labels = ", ".join(m["label"] for m in matches)
+        summary_parts.append(
+            f"Resized {len(matches)} {_label_for_summary(op.room_type)}"
+            + ("s" if len(matches) > 1 else "")
+            + f" ({labels})"
+        )
+
+    for op in ops:
+        if not isinstance(op, RemoveOp):
+            continue
+        matches = [r for r in rooms if r.get("roomType") == op.room_type]
+        if not matches:
+            continue
+        to_remove = matches if op.count is None else matches[: op.count]
+        remove_ids = {r["id"] for r in to_remove}
+        rooms = [r for r in rooms if r["id"] not in remove_ids]
+        label = _label_for_summary(op.room_type)
+        summary_parts.append(
+            f"Removed {len(to_remove)} {label}" + ("s" if len(to_remove) > 1 else "")
+        )
+
+    # ADD pass — implemented in Task 5 / Task 6
+
+    new_layout = _rebuild_layout(layout, rooms)
+    summary = ", ".join(summary_parts)
+    if summary:
+        summary = summary[0].upper() + summary[1:]
+    return new_layout, summary

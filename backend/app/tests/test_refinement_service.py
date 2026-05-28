@@ -48,3 +48,82 @@ def test_parse_combined_add_remove():
 
 def test_parse_returns_empty_for_unrecognised():
     assert parse_refinement("just chilling here") == []
+
+
+import copy
+from math import sqrt
+
+from app.services.refinement_service import apply_refinement
+
+SAMPLE_LAYOUT = {
+    "version": "1.0",
+    "metadata": {"prompt": "starter", "building_type": "apartment", "room_count": 3},
+    "building": {"floorHeight": 3.2},
+    "floors": [
+        {
+            "id": "floor_0",
+            "name": "Ground Floor",
+            "level": 0,
+            "elevation": 0.0,
+            "rooms": [
+                {
+                    "id": "r-1", "label": "Living Room", "roomType": "living_room",
+                    "objectType": "room", "floorId": "floor_0", "floorLevel": 0,
+                    "position": {"x": 2.5, "y": 1.5, "z": 2.5},
+                    "size": {"w": 5.0, "h": 3.0, "d": 5.0},
+                    "rotation": {"x": 0, "y": 0, "z": 0}, "color": "#818cf8",
+                },
+                {
+                    "id": "r-2", "label": "Kitchen", "roomType": "kitchen",
+                    "objectType": "room", "floorId": "floor_0", "floorLevel": 0,
+                    "position": {"x": 8.0, "y": 1.5, "z": 2.0},
+                    "size": {"w": 4.0, "h": 3.0, "d": 4.0},
+                    "rotation": {"x": 0, "y": 0, "z": 0}, "color": "#34d399",
+                },
+                {
+                    "id": "r-3", "label": "Office", "roomType": "office",
+                    "objectType": "room", "floorId": "floor_0", "floorLevel": 0,
+                    "position": {"x": 2.0, "y": 1.5, "z": 9.0},
+                    "size": {"w": 4.0, "h": 3.0, "d": 4.0},
+                    "rotation": {"x": 0, "y": 0, "z": 0}, "color": "#a78bfa",
+                },
+            ],
+        }
+    ],
+    "rooms": [],
+}
+# Mirror floor rooms into top-level for sanity
+SAMPLE_LAYOUT["rooms"] = [
+    copy.deepcopy(r) for r in SAMPLE_LAYOUT["floors"][0]["rooms"]
+]
+
+
+def test_apply_resize_scales_w_and_d_by_sqrt_factor_and_keeps_xz():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+    new_layout, summary = apply_refinement(layout, [ResizeOp(room_type="kitchen", factor=1.4)])
+
+    kitchen = next(r for r in new_layout["rooms"] if r["id"] == "r-2")
+    expected_w = round(4.0 * sqrt(1.4), 1)
+    assert kitchen["size"]["w"] == expected_w
+    assert kitchen["size"]["d"] == expected_w
+    assert kitchen["position"]["x"] == 8.0
+    assert kitchen["position"]["z"] == 2.0
+    assert kitchen["position"]["y"] == 0.0 + kitchen["size"]["h"] / 2
+    assert "Resized" in summary and "kitchen" in summary.lower()
+
+
+def test_apply_remove_existing_room_returns_summary():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+    new_layout, summary = apply_refinement(layout, [RemoveOp(room_type="office", count=1)])
+
+    assert all(r["id"] != "r-3" for r in new_layout["rooms"])
+    assert len(new_layout["rooms"]) == 2
+    assert "Removed" in summary and "office" in summary.lower()
+
+
+def test_apply_remove_missing_room_returns_empty_summary():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+    new_layout, summary = apply_refinement(layout, [RemoveOp(room_type="balcony", count=1)])
+
+    assert len(new_layout["rooms"]) == 3
+    assert summary == ""
