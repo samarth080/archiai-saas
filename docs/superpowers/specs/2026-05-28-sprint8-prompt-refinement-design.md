@@ -30,7 +30,7 @@ Files already present and extended rather than rewritten:
 - `DesignVersion(version_type='refined')` row per successful refinement
 - `ActivityLog` entry `design.refined`
 - Frontend: Generate / Refine segmented toggle on the bottom prompt bar; Refine disabled until a saved design exists
-- Frontend: dismissable summary banner above the prompt bar showing what changed (`"Added 1 bedroom, removed 1 office"`)
+- Frontend: dismissable summary banner above the prompt bar showing what changed (`"Removed 1 office, Added 1 bedroom"`)
 - Backend tests: parser, applier (including the append-only invariant), endpoint
 - Frontend tests: toggle enabled/disabled, submit dispatches correct endpoint, banner renders + dismisses
 
@@ -235,7 +235,7 @@ Examples:
 - `"Added 1 bedroom"`
 - `"Resized 1 kitchen"`
 - `"Resized 3 bedrooms (Master Bedroom, Bedroom 1, Bedroom 2)"`
-- `"Added 1 bedroom, removed 1 office"`
+- `"Removed 1 office, Added 1 bedroom"`
 - `"Added 1 study (none found)"` — never appears because ADD always succeeds; the `(none found)` suffix is only for REMOVE/RESIZE no-ops
 
 ---
@@ -477,7 +477,7 @@ Applier tests (using a fixture layout with 1 living room, 1 kitchen, 2 bedrooms,
 8. `apply_refinement(layout, [RemoveOp(office, 1)])` on a layout with no office — returns the original layout and an empty summary
 9. `apply_refinement(layout, [ResizeOp(kitchen, 1.4)])` — kitchen W and D scaled by √1.4; kitchen position X and Z unchanged; Y matches `floor_elevation + h/2`
 10. Multi-floor — `apply_refinement(multi_floor_layout, [AddOp(bedroom, 1)])` lands the new bedroom on the first upper floor (level 1)
-11. Summary text — `apply_refinement(layout, [AddOp(bedroom, 1), RemoveOp(office, 1)])` returns summary `"Added 1 bedroom, removed 1 office"`
+11. Summary text — `apply_refinement(layout, [AddOp(bedroom, 1), RemoveOp(office, 1)])` returns summary `"Removed 1 office, Added 1 bedroom"`
 
 ### `backend/app/tests/test_designs.py` (MODIFY — 3 new tests)
 
