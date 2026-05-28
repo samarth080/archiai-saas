@@ -232,7 +232,19 @@ archiai-saas/
 - [ ] Restore version UI deferred to Sprint 9
 - [ ] Collaboration/version-control UI deferred to Sprint 9
 
-### Sprint 8 — Prompt Refinement ⏳ Not Started
+### Sprint 8 — Prompt Refinement ✅ Complete
+
+- [x] `refinement_service.parse_refinement` extracts AddOp / RemoveOp / ResizeOp from natural language
+- [x] `refinement_service.apply_refinement` mutates the layout append-only (existing room positions preserved)
+- [x] RESIZE → REMOVE → ADD application order; multi-floor ADD routes by Sprint 6 zone+floor rules
+- [x] `POST /api/design/refine` returns the updated layout plus a `refinementSummary` string
+- [x] Successful refine inserts `DesignVersion(version_type='refined', change_summary=summary)` and logs `design.refined`
+- [x] 422 with help text when the prompt produces no ops; 422 with "No matching rooms" when ops are all no-ops
+- [x] Generate / Refine segmented toggle on the bottom prompt bar; Refine disabled until a saved design exists
+- [x] Summary banner above the prompt bar; auto-clears when the user types; ✕ to dismiss
+- [x] React Testing Library + happy-dom configured for frontend RTL tests
+- [x] 17 backend refinement service tests + 3 endpoint tests; 3 new frontend RTL tests
+- [x] `npx tsc --noEmit` passes with zero errors
 ### Sprint 9 — Team Collaboration, Version Control, and Logging ⏳ Not Started
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
