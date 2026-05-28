@@ -27,6 +27,8 @@ RefinementOp = AddOp | RemoveOp | ResizeOp
 _COUNT_ALTS = "|".join(WORD_TO_NUM.keys())
 _ADD_VERBS = r"add|include|insert|put in|put|another|also need"
 _REMOVE_VERBS = r"remove|delete|drop|get rid of|no more|without"
+_BIGGER_WORDS = r"bigger|larger|spacious"
+_SMALLER_WORDS = r"smaller|compact"
 
 
 def _parse_count(raw: str | None) -> int:
@@ -96,6 +98,32 @@ def parse_refinement(prompt: str) -> list[RefinementOp]:
             ))
             for m in reversed(matches):
                 text = _blank_span(text, m.start(), m.end())
+            break
+
+    # RESIZE pass
+    for room_type, keywords in ROOM_PATTERNS:
+        for keyword in keywords:
+            kw = re.escape(keyword)
+            pattern = re.compile(
+                r"\b(?:"
+                r"make\s+(?:the\s+)?" + kw + r"s?\s+(?P<grow1>" + _BIGGER_WORDS + r")\b"
+                r"|make\s+(?:the\s+)?" + kw + r"s?\s+(?P<shrink1>" + _SMALLER_WORDS + r")\b"
+                r"|(?P<grow2>expand)\s+(?:the\s+)?" + kw + r"s?\b"
+                r"|(?P<shrink2>shrink)\s+(?:the\s+)?" + kw + r"s?\b"
+                r")",
+                re.IGNORECASE,
+            )
+            matches = list(pattern.finditer(text))
+            if not matches:
+                continue
+            m = matches[0]
+            grew = bool(m.group("grow1") or m.group("grow2"))
+            ops.append(ResizeOp(
+                room_type=room_type,
+                factor=1.4 if grew else 0.7,
+            ))
+            for hit in reversed(matches):
+                text = _blank_span(text, hit.start(), hit.end())
             break
 
     return ops

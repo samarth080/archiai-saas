@@ -1,4 +1,4 @@
-from app.services.refinement_service import AddOp, RemoveOp, parse_refinement
+from app.services.refinement_service import AddOp, RemoveOp, ResizeOp, parse_refinement
 
 
 def test_parse_add_single_bedroom():
@@ -27,3 +27,24 @@ def test_parse_remove_all():
 
 def test_parse_remove_no_more():
     assert parse_refinement("no more bathrooms") == [RemoveOp(room_type="bathroom", count=None)]
+
+
+def test_parse_resize_bigger():
+    assert parse_refinement("make the kitchen bigger") == [ResizeOp(room_type="kitchen", factor=1.4)]
+
+
+def test_parse_resize_smaller():
+    assert parse_refinement("shrink the living room") == [
+        ResizeOp(room_type="living_room", factor=0.7)
+    ]
+
+
+def test_parse_combined_add_remove():
+    assert parse_refinement("add a bedroom and remove the office") == [
+        AddOp(room_type="bedroom", count=1),
+        RemoveOp(room_type="office", count=1),
+    ]
+
+
+def test_parse_returns_empty_for_unrecognised():
+    assert parse_refinement("just chilling here") == []
