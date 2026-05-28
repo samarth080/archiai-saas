@@ -172,3 +172,98 @@ async def test_manual_save_stores_version_metadata_and_thumbnail(client: AsyncCl
         assert latest_version.layout_json["rooms"][0]["label"] == "Named Save Room"
         assert project_row is not None
         assert project_row.thumbnail_url == "data:image/png;base64,abc123"
+
+
+async def test_refine_creates_new_version_and_logs_activity(client: AsyncClient):
+    token = await _register_and_token(client, "refine@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Refine Project", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    design_id = generated.json()["designId"]
+    bedrooms_before = sum(
+        1 for r in generated.json()["rooms"] if r["roomType"] == "bedroom"
+    )
+
+    response = await client.post(
+        "/api/design/refine",
+        json={"designId": design_id, "prompt": "add a bedroom"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    bedrooms_after = sum(1 for r in data["rooms"] if r["roomType"] == "bedroom")
+    assert bedrooms_after == bedrooms_before + 1
+    assert "Added 1 bedroom" in data["refinementSummary"]
+
+    async with TestSessionLocal() as session:
+        version_count = await session.scalar(
+            select(func.count()).select_from(DesignVersion).where(
+                DesignVersion.design_id == design_id
+            )
+        )
+        assert version_count == 2
+        latest = await session.scalar(
+            select(DesignVersion)
+            .where(DesignVersion.design_id == design_id)
+            .order_by(DesignVersion.version_number.desc())
+        )
+        assert latest.version_type == "refined"
+        assert "Added 1 bedroom" in (latest.change_summary or "")
+
+        activity_actions = await session.scalars(select(ActivityLog.action))
+        assert "design.refined" in activity_actions.all()
+
+
+async def test_refine_unparsable_prompt_returns_422(client: AsyncClient):
+    token = await _register_and_token(client, "refine-unparse@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Unparse", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project.json()["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.post(
+        "/api/design/refine",
+        json={"designId": generated.json()["designId"], "prompt": "hello world"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert "Couldn't understand" in response.json()["error"]
+
+
+async def test_refine_other_users_design_returns_403(client: AsyncClient):
+    token_a = await _register_and_token(client, "refine-owner@example.com")
+    token_b = await _register_and_token(client, "refine-intruder@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Owned", "description": None},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project.json()["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+
+    response = await client.post(
+        "/api/design/refine",
+        json={"designId": generated.json()["designId"], "prompt": "add a bedroom"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403

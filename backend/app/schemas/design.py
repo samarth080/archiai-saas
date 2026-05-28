@@ -19,6 +19,13 @@ class SaveDesignRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RefineRequest(BaseModel):
+    design_id: str = Field(..., alias="designId")
+    prompt: str = Field(..., min_length=3)
+
+    model_config = {"populate_by_name": True}
+
+
 class RoomPosition(BaseModel):
     x: float
     y: float
@@ -81,3 +88,7 @@ class GenerateResponse(BaseModel):
     building: BuildingResponse | None = None
     floors: list[FloorResponse] | None = None
     rooms: list[RoomResponse]
+
+
+class RefineResponse(GenerateResponse):
+    refinementSummary: str
