@@ -267,3 +267,41 @@ async def test_refine_other_users_design_returns_403(client: AsyncClient):
     )
 
     assert response.status_code == 403
+
+
+async def test_refine_after_manual_save_does_not_crash(client: AsyncClient):
+    """Regression: layout JSON persisted by PUT /api/design/{id} contains designId/designVersionId
+    keys (the frontend's serializeLayout writes them). A subsequent refine must not collide
+    when the endpoint spreads new_layout into RefineResponse."""
+    token = await _register_and_token(client, "refine-after-save@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Save Then Refine", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project.json()["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    design_id = layout["designId"]
+
+    # Simulate a manual save — frontend serializes the layout WITH designId / designVersionId
+    saved = await client.put(
+        f"/api/design/{design_id}",
+        json={"layout": layout, "versionName": "Manual"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert saved.status_code == 200
+
+    # Now refine — must not crash
+    refined = await client.post(
+        "/api/design/refine",
+        json={"designId": design_id, "prompt": "add a bedroom"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert refined.status_code == 200, refined.json()
+    assert refined.json()["designId"] == design_id
+    assert "Added 1 bedroom" in refined.json()["refinementSummary"]

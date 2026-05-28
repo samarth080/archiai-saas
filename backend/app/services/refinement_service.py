@@ -149,6 +149,9 @@ def _rebuild_layout(layout: dict, rooms: list[dict]) -> dict:
     metadata = new.setdefault("metadata", {})
     metadata["room_count"] = len(rooms)
     metadata["totalRooms"] = len(rooms)
+    # Strip runtime identifiers — the API endpoint injects fresh values
+    new.pop("designId", None)
+    new.pop("designVersionId", None)
     return new
 
 
