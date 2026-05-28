@@ -153,3 +153,64 @@ def test_apply_add_appends_room_without_moving_existing():
     assert bedroom["position"]["y"] == bedroom["size"]["h"] / 2
 
     assert "Added" in summary and "bedroom" in summary.lower()
+
+
+def _multi_floor_layout() -> dict:
+    return {
+        "version": "1.0",
+        "metadata": {"prompt": "2-floor", "building_type": "house", "room_count": 1},
+        "building": {"floorHeight": 3.2},
+        "floors": [
+            {
+                "id": "floor_0",
+                "name": "Ground Floor",
+                "level": 0,
+                "elevation": 0.0,
+                "rooms": [
+                    {
+                        "id": "kit", "label": "Kitchen", "roomType": "kitchen",
+                        "objectType": "room", "floorId": "floor_0", "floorLevel": 0,
+                        "position": {"x": 2.0, "y": 1.5, "z": 2.0},
+                        "size": {"w": 4.0, "h": 3.0, "d": 4.0},
+                        "rotation": {"x": 0, "y": 0, "z": 0}, "color": "#34d399",
+                    }
+                ],
+            },
+            {
+                "id": "floor_1",
+                "name": "First Floor",
+                "level": 1,
+                "elevation": 3.2,
+                "rooms": [],
+            },
+        ],
+        "rooms": [
+            {
+                "id": "kit", "label": "Kitchen", "roomType": "kitchen",
+                "objectType": "room", "floorId": "floor_0", "floorLevel": 0,
+                "position": {"x": 2.0, "y": 1.5, "z": 2.0},
+                "size": {"w": 4.0, "h": 3.0, "d": 4.0},
+                "rotation": {"x": 0, "y": 0, "z": 0}, "color": "#34d399",
+            }
+        ],
+    }
+
+
+def test_apply_add_multi_floor_routes_bedroom_to_upper_level():
+    layout = _multi_floor_layout()
+    new_layout, _ = apply_refinement(layout, [AddOp(room_type="bedroom", count=1)])
+
+    added = next(r for r in new_layout["rooms"] if r["roomType"] == "bedroom")
+    assert added["floorLevel"] == 1
+    assert added["floorId"] == "floor_1"
+    # On a floor at elevation 3.2, the box bottom should sit at 3.2 → y = 3.2 + 1.5 = 4.7
+    assert added["position"]["y"] == 4.7
+
+
+def test_apply_combined_ops_summary():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+    _, summary = apply_refinement(
+        layout,
+        [AddOp(room_type="bedroom", count=1), RemoveOp(room_type="office", count=1)],
+    )
+    assert summary == "Removed 1 office, Added 1 bedroom"
