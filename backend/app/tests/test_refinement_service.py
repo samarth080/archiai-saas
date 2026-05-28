@@ -127,3 +127,29 @@ def test_apply_remove_missing_room_returns_empty_summary():
 
     assert len(new_layout["rooms"]) == 3
     assert summary == ""
+
+
+def test_apply_add_appends_room_without_moving_existing():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+    before_by_id = {r["id"]: copy.deepcopy(r) for r in layout["rooms"]}
+
+    new_layout, summary = apply_refinement(layout, [AddOp(room_type="bedroom", count=1)])
+
+    # Append-only invariant: existing rooms identical
+    existing = [r for r in new_layout["rooms"] if r["id"] in before_by_id]
+    for room in existing:
+        assert room == before_by_id[room["id"]]
+
+    # New bedroom present
+    new_rooms = [r for r in new_layout["rooms"] if r["id"] not in before_by_id]
+    assert len(new_rooms) == 1
+    bedroom = new_rooms[0]
+    assert bedroom["roomType"] == "bedroom"
+    assert bedroom["objectType"] == "room"
+    assert bedroom["floorLevel"] == 0
+    assert bedroom["size"] == {"w": 4.0, "h": 3.0, "d": 4.0}
+    assert bedroom["color"] == "#f472b6"
+    # Y bottom on the floor
+    assert bedroom["position"]["y"] == bedroom["size"]["h"] / 2
+
+    assert "Added" in summary and "bedroom" in summary.lower()

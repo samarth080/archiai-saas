@@ -1,5 +1,6 @@
 import copy
 import re
+import uuid
 from dataclasses import dataclass
 from math import sqrt
 
@@ -155,6 +156,99 @@ def _label_for_summary(room_type: str) -> str:
     return ROOM_DEFAULTS[room_type]["label"].lower()
 
 
+_PUBLIC = frozenset({"living_room", "kitchen", "dining_room", "hallway"})
+_PRIVATE = frozenset({"master_bedroom", "bedroom", "bathroom"})
+_GAP = 1.0
+_ZONE_GAP = 2.0
+_FLOOR_HEIGHT = 3.2
+
+
+def _zone_for(room_type: str) -> str:
+    if room_type in _PUBLIC:
+        return "public"
+    if room_type in _PRIVATE:
+        return "private"
+    return "other"
+
+
+def _next_position_in_zone(
+    floor_rooms: list[dict],
+    zone: str,
+    new_w: float,
+    new_d: float,
+) -> tuple[float, float]:
+    same_zone = [r for r in floor_rooms if _zone_for(r.get("roomType", "")) == zone]
+    if same_zone:
+        rightmost = max(r["position"]["x"] + r["size"]["w"] / 2 for r in same_zone)
+        existing = same_zone[0]
+        new_x = round(rightmost + _GAP + new_w / 2, 2)
+        new_z = round(
+            existing["position"]["z"] + (new_d - existing["size"]["d"]) / 2, 2
+        )
+        return new_x, new_z
+
+    if not floor_rooms:
+        return round(new_w / 2, 2), round(new_d / 2, 2)
+
+    backmost = max(r["position"]["z"] + r["size"]["d"] / 2 for r in floor_rooms)
+    new_z = round(backmost + _ZONE_GAP + new_d / 2, 2)
+    return round(new_w / 2, 2), new_z
+
+
+def _choose_floor_level(layout: dict, room_type: str, existing_rooms: list[dict]) -> int:
+    floors = layout.get("floors") or []
+    if len(floors) <= 1:
+        return 0
+    if room_type in {"living_room", "kitchen", "dining_room", "hallway", "garage"}:
+        return 0
+    if room_type == "bathroom":
+        ground_has_bathroom = any(
+            r["roomType"] == "bathroom" and r.get("floorLevel") == 0
+            for r in existing_rooms
+        )
+        if not ground_has_bathroom:
+            return 0
+    # Upper floors round-robin by count of rooms on each upper floor
+    upper_levels = [f["level"] for f in floors if f["level"] > 0]
+    if not upper_levels:
+        return 0
+    counts = {
+        level: sum(1 for r in existing_rooms if r.get("floorLevel") == level)
+        for level in upper_levels
+    }
+    return min(upper_levels, key=lambda lvl: (counts[lvl], lvl))
+
+
+def _make_room(room_type: str, layout: dict, existing_rooms: list[dict]) -> dict:
+    defaults = ROOM_DEFAULTS[room_type]
+    color = ROOM_COLORS.get(room_type, "#94a3b8")
+    level = _choose_floor_level(layout, room_type, existing_rooms)
+    elevation = _floor_elevation_for_level(layout, level)
+    floor_rooms = [r for r in existing_rooms if r.get("floorLevel") == level]
+    zone = _zone_for(room_type)
+    new_x, new_z = _next_position_in_zone(floor_rooms, zone, defaults["w"], defaults["d"])
+    floor_id = next(
+        (f["id"] for f in layout.get("floors") or [] if f.get("level") == level),
+        f"floor_{level}",
+    )
+    return {
+        "id": str(uuid.uuid4()),
+        "label": defaults["label"],
+        "roomType": room_type,
+        "objectType": "room",
+        "floorId": floor_id,
+        "floorLevel": level,
+        "position": {
+            "x": new_x,
+            "y": round(elevation + 3.0 / 2, 2),
+            "z": new_z,
+        },
+        "size": {"w": defaults["w"], "h": 3.0, "d": defaults["d"]},
+        "rotation": {"x": 0, "y": 0, "z": 0},
+        "color": color,
+    }
+
+
 def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
     rooms = [copy.deepcopy(r) for r in layout.get("rooms", [])]
     summary_parts: list[str] = []
@@ -193,7 +287,19 @@ def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
             f"Removed {len(to_remove)} {label}" + ("s" if len(to_remove) > 1 else "")
         )
 
-    # ADD pass — implemented in Task 5 / Task 6
+    for op in ops:
+        if not isinstance(op, AddOp):
+            continue
+        added: list[dict] = []
+        for _ in range(op.count):
+            new_room = _make_room(op.room_type, layout, rooms)
+            rooms.append(new_room)
+            added.append(new_room)
+        if added:
+            label = _label_for_summary(op.room_type)
+            summary_parts.append(
+                f"Added {len(added)} {label}" + ("s" if len(added) > 1 else "")
+            )
 
     new_layout = _rebuild_layout(layout, rooms)
     summary = ", ".join(summary_parts)
