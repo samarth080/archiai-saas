@@ -40,6 +40,20 @@ async def test_create_project_no_token(client: AsyncClient):
     assert data["code"] == "UNAUTHORIZED"
 
 
+async def test_create_project_blank_title_returns_validation_error(client: AsyncClient):
+    token = await _register_and_token(client, "proj-blank@example.com")
+    response = await client.post(
+        "/api/projects",
+        json={"title": "   ", "description": "A test project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "UNPROCESSABLE_ENTITY"
+    assert "Title is required" in data["error"]
+
+
 async def test_list_projects_scoped_to_user(client: AsyncClient):
     token_a = await _register_and_token(client, "user_a@example.com")
     token_b = await _register_and_token(client, "user_b@example.com")

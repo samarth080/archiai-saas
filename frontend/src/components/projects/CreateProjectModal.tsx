@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import projectService, { Project, CreateProjectData } from '../../services/project.service'
+import { getApiErrorMessage } from '../../services/apiError'
 
 interface CreateProjectModalProps {
   onClose: () => void
@@ -20,11 +21,13 @@ export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalPro
   const onSubmit = async (data: CreateProjectData) => {
     setSubmitError(null)
     try {
-      const project = await projectService.create(data)
+      const project = await projectService.create({
+        title: data.title.trim(),
+        description: data.description?.trim() || undefined,
+      })
       onCreated(project)
     } catch (err) {
-      const apiErr = err as { response?: { data?: { error?: string } } }
-      setSubmitError(apiErr.response?.data?.error ?? 'Failed to create project')
+      setSubmitError(getApiErrorMessage(err, 'Failed to create project'))
     }
   }
 
