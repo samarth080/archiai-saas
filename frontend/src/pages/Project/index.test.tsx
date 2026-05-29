@@ -103,6 +103,11 @@ beforeEach(() => {
       err.response = { status: 404 }
       throw err
     }
+    if (url.includes('/draft')) {
+      const err: any = new Error('not found')
+      err.response = { status: 404 }
+      throw err
+    }
     throw new Error('unexpected GET ' + url)
   })
 })
@@ -127,6 +132,11 @@ describe('ProjectPage refine flow', () => {
     }
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/api/design/project/p1/latest') return { data: designFixture }
+      if (url === '/api/design/d1/draft') {
+        const err: any = new Error('not found')
+        err.response = { status: 404 }
+        throw err
+      }
       throw new Error('unexpected URL ' + url)
     })
     vi.mocked(api.post).mockImplementation(async (url: string) => {
@@ -173,6 +183,11 @@ describe('ProjectPage refine flow', () => {
     }
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/api/design/project/p1/latest') return { data: designFixture }
+      if (url === '/api/design/d1/draft') {
+        const err: any = new Error('not found')
+        err.response = { status: 404 }
+        throw err
+      }
       throw new Error('unexpected URL ' + url)
     })
     vi.mocked(api.post).mockResolvedValue({

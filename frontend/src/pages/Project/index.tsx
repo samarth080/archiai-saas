@@ -8,6 +8,8 @@ import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
 import {
+  DesignDraftResponse,
+  fetchDesignDraft,
   generateLayout,
   getLatestProjectDesign,
   refineLayout,
@@ -16,6 +18,7 @@ import {
 import { useCanvasStore } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
+import { useAutoSave } from '../../hooks/useAutoSave'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -25,6 +28,23 @@ function captureCanvasThumbnail() {
   } catch {
     return null
   }
+}
+
+function layoutSnapshotKey(layout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>) {
+  return JSON.stringify({
+    version: layout.version,
+    metadata: layout.metadata,
+    building: layout.building,
+    floors: layout.floors,
+    rooms: layout.rooms,
+  })
+}
+
+function hasRecoverableDraft(
+  savedLayout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>,
+  draftLayout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>,
+) {
+  return layoutSnapshotKey(savedLayout) !== layoutSnapshotKey(draftLayout)
 }
 
 export default function ProjectPage() {
@@ -56,6 +76,7 @@ export default function ProjectPage() {
   const [hasSavedLayout, setHasSavedLayout] = useState(false)
   const [mode, setMode] = useState<'generate' | 'refine'>('generate')
   const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
+  const [draftToRecover, setDraftToRecover] = useState<DesignDraftResponse | null>(null)
   const userPickedModeRef = useRef(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
@@ -64,6 +85,9 @@ export default function ProjectPage() {
   const loadLayout = useCanvasStore((s) => s.loadLayout)
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
+  const setRecoveredDraftAvailable = useCanvasStore((s) => s.setRecoveredDraftAvailable)
+
+  useAutoSave({ designId, enabled: Boolean(designId) })
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return
@@ -74,11 +98,15 @@ export default function ProjectPage() {
       if (mode === 'refine' && designId) {
         const result = await refineLayout(designId, prompt)
         loadLayout(result)
+        setDraftToRecover(null)
+        setRecoveredDraftAvailable(false)
         setRefinementSummary(result.refinementSummary)
         setPrompt('')
       } else {
         const result = await generateLayout(prompt, id)
         loadLayout(result)
+        setDraftToRecover(null)
+        setRecoveredDraftAvailable(false)
         setHasSavedLayout(true)
         setRefinementSummary(null)
       }
@@ -108,6 +136,8 @@ export default function ProjectPage() {
         thumbnailUrl,
       })
       loadLayout(result)
+      setDraftToRecover(null)
+      setRecoveredDraftAvailable(false)
       setHasSavedLayout(true)
       setVersionName('')
       setChangeSummary('')
@@ -141,7 +171,20 @@ export default function ProjectPage() {
           const latestDesign = await getLatestProjectDesign(projectId)
           if (active) {
             loadLayout(latestDesign)
+            setDraftToRecover(null)
+            setRecoveredDraftAvailable(false)
             setHasSavedLayout(true)
+          }
+          if (latestDesign.designId) {
+            try {
+              const draft = await fetchDesignDraft(latestDesign.designId)
+              if (active && draft && hasRecoverableDraft(latestDesign, draft)) {
+                setDraftToRecover(draft)
+                setRecoveredDraftAvailable(true)
+              }
+            } catch (draftErr) {
+              console.warn('Failed to load auto-save draft', draftErr)
+            }
           }
         } catch (designErr) {
           const apiErr = designErr as { response?: { status?: number } }
@@ -238,6 +281,24 @@ export default function ProjectPage() {
       setDuplicateError(apiErr.response?.data?.error ?? 'Failed to duplicate project')
       setDuplicating(false)
     }
+  }
+
+  const handleRecoverDraft = () => {
+    if (!draftToRecover) return
+    loadLayout(draftToRecover)
+    useCanvasStore.getState().markDirty()
+    useCanvasStore.setState({
+      lastDraftSavedAt: draftToRecover.updatedAt ?? draftToRecover.createdAt,
+      latestDraftVersionId: draftToRecover.id,
+      recoveredDraftAvailable: false,
+    })
+    setDraftToRecover(null)
+    setLayoutSaveError(null)
+  }
+
+  const handleDismissDraft = () => {
+    setDraftToRecover(null)
+    setRecoveredDraftAvailable(false)
   }
 
   if (loading) {
@@ -370,6 +431,33 @@ export default function ProjectPage() {
 
         {/* Canvas + Inspector + Prompt bar */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          {draftToRecover && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="border-b border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3"
+            >
+              <p className="text-sm text-amber-800">
+                Unsaved draft found. You can recover your last auto-saved changes.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRecoverDraft}
+                  className="rounded border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                >
+                  Recover draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissDraft}
+                  className="px-2 py-1.5 text-xs font-medium text-amber-700 hover:text-amber-900"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {/* Canvas + Inspector row */}
           <div className="flex-1 flex overflow-hidden">
             <div className="relative flex-1 h-full">
