@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from copy import deepcopy
 
 from fastapi import HTTPException
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity_log import ActivityLog
@@ -82,6 +82,12 @@ async def list_project_versions(
     result = await db.execute(
         select(DesignVersion)
         .where(DesignVersion.project_id == project_id)
+        .where(
+            or_(
+                DesignVersion.version_type.is_(None),
+                DesignVersion.version_type != "auto_draft",
+            )
+        )
         .order_by(desc(DesignVersion.created_at), desc(DesignVersion.version_number))
     )
     versions = result.scalars().all()

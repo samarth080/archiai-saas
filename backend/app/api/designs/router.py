@@ -9,6 +9,8 @@ from app.database.connection import get_db
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.schemas.design import (
+    DesignDraftResponse,
+    DesignDraftSaveRequest,
     GenerateRequest,
     GenerateResponse,
     RefineRequest,
@@ -17,8 +19,10 @@ from app.schemas.design import (
 )
 from app.services.auth_service import get_current_user
 from app.services.design_service import (
+    get_design_draft,
     get_latest_project_design,
     save_generated_design,
+    save_design_draft,
     update_design_layout,
 )
 from app.services.layout_service import generate_layout
@@ -115,6 +119,47 @@ async def save_design(
         "designVersionId": version.id,
     }
     return GenerateResponse(**layout)
+
+
+def _draft_response(design: Design, version: DesignVersion) -> DesignDraftResponse:
+    layout = {
+        key: value
+        for key, value in version.layout_json.items()
+        if key not in ("designId", "designVersionId")
+    }
+    return DesignDraftResponse(
+        **layout,
+        id=version.id,
+        designId=design.id,
+        designVersionId=version.id,
+        projectId=design.project_id,
+        versionNumber=version.version_number,
+        versionType=version.version_type or "auto_draft",
+        changeSummary=version.change_summary,
+        createdAt=version.created_at,
+    )
+
+
+@router.put("/{design_id}/draft", response_model=DesignDraftResponse)
+async def save_draft(
+    design_id: str,
+    request: DesignDraftSaveRequest,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> DesignDraftResponse:
+    design, draft = await save_design_draft(db, user_id, design_id, request.layout)
+    await log_activity(db, user_id, "design.draft_saved", project_id=design.project_id)
+    return _draft_response(design, draft)
+
+
+@router.get("/{design_id}/draft", response_model=DesignDraftResponse)
+async def fetch_draft(
+    design_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> DesignDraftResponse:
+    design, draft = await get_design_draft(db, user_id, design_id)
+    return _draft_response(design, draft)
 
 
 @router.post("/refine", response_model=RefineResponse)

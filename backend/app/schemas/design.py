@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -17,6 +18,10 @@ class SaveDesignRequest(BaseModel):
     thumbnail_url: str | None = Field(default=None, alias="thumbnailUrl")
 
     model_config = {"populate_by_name": True}
+
+
+class DesignDraftSaveRequest(BaseModel):
+    layout: dict[str, Any]
 
 
 class RefineRequest(BaseModel):
@@ -92,3 +97,13 @@ class GenerateResponse(BaseModel):
 
 class RefineResponse(GenerateResponse):
     refinementSummary: str
+
+
+class DesignDraftResponse(GenerateResponse):
+    id: str
+    projectId: str
+    versionNumber: int
+    versionType: str
+    changeSummary: str | None = None
+    createdAt: datetime
+    metadata: dict[str, Any]

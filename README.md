@@ -33,6 +33,52 @@ docker-compose up
 
 ---
 
+## Turn On The Backend
+
+### Option 1: Docker Compose
+
+From the repo root:
+
+```bash
+cp .env.example .env
+docker-compose up backend
+```
+
+The backend runs at `http://localhost:8000`.
+
+### Option 2: Run Backend Locally
+
+Start PostgreSQL first, then run the API from the `backend` folder.
+
+PowerShell:
+
+```powershell
+cd backend
+copy ..\.env.example .env
+..\.venv311\Scripts\python.exe -m pip install -r requirements.txt
+..\.venv311\Scripts\python.exe -m alembic upgrade head
+..\.venv311\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+If you do not already have `.venv311`, create it from the repo root:
+
+```powershell
+py -3.11 -m venv .venv311
+.\.venv311\Scripts\python.exe -m pip install --upgrade pip
+```
+
+Check that it is running:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+API docs are available at `http://localhost:8000/docs`.
+
+> Note: when running the backend locally, `backend/.env` is used. If `DATABASE_URL` contains `@db:5432`, the app will fall back to `@localhost:5432` for local development when `db` is not resolvable.
+
+---
+
 ## API Overview
 
 ### Auth
