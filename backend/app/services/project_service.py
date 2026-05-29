@@ -29,7 +29,7 @@ async def create_project(
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.created")
+    await log_activity(db, user_id, "project.created", project_id=project.id)
     return ProjectOut.model_validate(project)
 
 
@@ -59,7 +59,7 @@ async def update_project(
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.updated")
+    await log_activity(db, user_id, "project.updated", project_id=project_id)
     return ProjectOut.model_validate(project)
 
 
@@ -71,7 +71,7 @@ async def delete_project(
     await db.execute(delete(Design).where(Design.project_id == project_id))
     await db.delete(project)
     await db.commit()
-    await log_activity(db, user_id, "project.deleted")
+    await log_activity(db, user_id, "project.deleted", project_id=project_id)
 
 
 async def list_project_versions(
@@ -144,5 +144,5 @@ async def duplicate_project(
     duplicate.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(duplicate)
-    await log_activity(db, user_id, "project.duplicated")
+    await log_activity(db, user_id, "project.duplicated", project_id=duplicate.id)
     return ProjectOut.model_validate(duplicate)
