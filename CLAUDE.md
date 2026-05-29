@@ -279,7 +279,20 @@ archiai-saas/
 - [x] 1 new Project page test (Activity button opens the drawer)
 - [x] `npx tsc --noEmit` clean
 
-### Sprint 9C — Auto-save with Drafts ⏳ Not Started
+### Sprint 9C — Auto-save with Drafts ⏳ In Progress
+
+- [x] Task 1: Backend draft endpoint tests added for save/fetch draft behaviour
+  - Tests cover authenticated draft save, draft fetch, no-draft response, wrong-user access, layout JSON persistence, and named-version safety
+- [ ] Task 2: Add backend draft service functions
+- [ ] Task 3: Add backend draft schemas and endpoints; update existing responses
+- [ ] Task 4: Run backend tests and commit
+- [ ] Task 5: Update canvas store with draft state
+- [ ] Task 6: Add frontend draft service functions
+- [ ] Task 7: Create useAutoSave hook and its test
+- [ ] Task 8: Draft recovery in ProjectPage and recovery banner
+- [ ] Task 9: Update EditorToolbar with draft indicator
+- [ ] Task 10: Add RTL tests for the recovery banner
+- [ ] Task 11: Final checks and commit
 
 ### Sprint 9D — Team Collaboration (Workspaces) ⏳ Not Started
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
