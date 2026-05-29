@@ -245,9 +245,31 @@ archiai-saas/
 - [x] React Testing Library + happy-dom configured for frontend RTL tests
 - [x] 17 backend refinement service tests + 3 endpoint tests; 3 new frontend RTL tests
 - [x] `npx tsc --noEmit` passes with zero errors
-### Sprint 9 — Team Collaboration, Version Control, and Logging ⏳ Not Started
+
+### Sprint 9A — Version History & Restore ✅ Complete
+
+- [x] `GET /api/design/version/{version_id}` — fetches a single DesignVersion; 401 / 403 / 404 guarded
+- [x] `designId` / `designVersionId` keys stripped from `layout_json` before spread to avoid kwarg collision
+- [x] 3 new backend tests (correct layout returned, 403 wrong user, 404 missing)
+- [x] `fetchVersion(versionId)` exported from `design.service.ts`
+- [x] `VersionHistoryDrawer` component — overlay drawer with version list, type badges, relative timestamps, per-row Restore
+- [x] Restore loads the historical layout into the canvas as unsaved changes (user must Save to persist)
+- [x] Per-row loading state — only the clicked Restore button shows "Restoring…"
+- [x] `isMounted` ref guards setState calls against unmount in handleRestore
+- [x] 2 RTL tests for VersionHistoryDrawer (renders rows, Restore calls API + closes drawer)
+- [x] 2 Project page tests (History button opens drawer, close button closes it)
+- [x] "History" button in project top bar opens the drawer
+- [x] `npx tsc --noEmit` passes with zero errors
+
+### Sprint 9B — Activity Log Panel ⏳ Not Started
+
+### Sprint 9C — Auto-save with Drafts ⏳ Not Started
+
+### Sprint 9D — Team Collaboration (Workspaces) ⏳ Not Started
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
+
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
+
 ### Sprint 12 — Export, Share, and Polish ⏳ Not Started
 
 ---
