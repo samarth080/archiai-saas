@@ -67,3 +67,8 @@ export async function refineLayout(
   })
   return data
 }
+
+export async function fetchVersion(versionId: string): Promise<GenerateResponse> {
+  const { data } = await api.get<GenerateResponse>(`/api/design/version/${versionId}`)
+  return data
+}

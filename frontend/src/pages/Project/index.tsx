@@ -14,6 +14,7 @@ import {
   saveDesignLayout,
 } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
+import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -55,6 +56,7 @@ export default function ProjectPage() {
   const [mode, setMode] = useState<'generate' | 'refine'>('generate')
   const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
   const userPickedModeRef = useRef(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
@@ -306,6 +308,9 @@ export default function ProjectPage() {
               </>
             ) : (
               <>
+                <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
+                  History
+                </Button>
                 <div className="flex flex-col items-end">
                   <div className="mb-2 grid w-64 gap-1">
                     <input
@@ -458,6 +463,12 @@ export default function ProjectPage() {
           </div>
         </div>
       </main>
+
+      <VersionHistoryDrawer
+        projectId={id!}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
     </div>
   )
 }

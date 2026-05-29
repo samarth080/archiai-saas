@@ -7,10 +7,6 @@ import ProjectPage from './index'
 import api from '../../services/api'
 import { useCanvasStore, INITIAL_ROOMS, DEFAULT_FLOOR, DEFAULT_FLOOR_HEIGHT } from '../../store/canvasStore'
 
-vi.mock('../../components/canvas/Canvas3D', () => ({ Canvas3D: () => null }))
-vi.mock('../../components/canvas/Inspector', () => ({ Inspector: () => null }))
-vi.mock('../../components/canvas/EditorToolbar', () => ({ EditorToolbar: () => null }))
-
 vi.mock('../../services/api', () => ({
   default: {
     get: vi.fn(),
@@ -27,6 +23,34 @@ vi.mock('../../hooks/useAuth', () => ({
   }),
 }))
 
+vi.mock('../../components/canvas/Canvas3D', () => ({ Canvas3D: () => null }))
+vi.mock('../../components/canvas/Inspector', () => ({ Inspector: () => null }))
+vi.mock('../../components/canvas/EditorToolbar', () => ({ EditorToolbar: () => null }))
+
+vi.mock('../../services/project.service', () => ({
+  default: {
+    get: vi.fn(),
+    list: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    duplicate: vi.fn(),
+    versions: vi.fn().mockResolvedValue([]),
+  },
+}))
+
+import projectService from '../../services/project.service'
+
+const PROJECT_FIXTURE = {
+  id: 'p1',
+  user_id: 'u1',
+  title: 'Test Project',
+  description: null,
+  thumbnail_url: null,
+  created_at: '2026-05-28T00:00:00Z',
+  updated_at: '2026-05-28T00:00:00Z',
+}
+
 function renderProjectPage() {
   return render(
     <MemoryRouter initialEntries={['/projects/p1']}>
@@ -37,19 +61,11 @@ function renderProjectPage() {
   )
 }
 
-const PROJECT_FIXTURE = {
-  id: 'p1',
-  user_id: 'u1',
-  title: 'Test',
-  description: null,
-  thumbnail_url: null,
-  created_at: '2026-05-28T00:00:00Z',
-  updated_at: '2026-05-28T00:00:00Z',
-}
-
 beforeEach(() => {
   vi.mocked(api.get).mockReset()
   vi.mocked(api.post).mockReset()
+  vi.mocked(projectService.get).mockReset()
+  vi.mocked(projectService.versions).mockResolvedValue([])
   useCanvasStore.setState({
     rooms: INITIAL_ROOMS.map((r) => ({
       ...r,
@@ -72,21 +88,19 @@ beforeEach(() => {
     lastSavedAt: null,
     activityLog: [],
   })
+  vi.mocked(projectService.get).mockResolvedValue(PROJECT_FIXTURE)
+  vi.mocked(api.get).mockImplementation(async (url: string) => {
+    if (url === '/api/design/project/p1/latest') {
+      const err: any = new Error('not found')
+      err.response = { status: 404 }
+      throw err
+    }
+    throw new Error('unexpected GET ' + url)
+  })
 })
-
 
 describe('ProjectPage refine flow', () => {
   it('disables the Refine toggle until a design exists', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/api/projects/p1') return { data: PROJECT_FIXTURE }
-      if (url === '/api/design/project/p1/latest') {
-        const err: any = new Error('not found')
-        err.response = { status: 404 }
-        throw err
-      }
-      throw new Error('unexpected URL ' + url)
-    })
-
     renderProjectPage()
 
     const refineButton = await screen.findByRole('tab', { name: 'Refine' })
@@ -104,7 +118,6 @@ describe('ProjectPage refine flow', () => {
       rooms: [],
     }
     vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/api/projects/p1') return { data: PROJECT_FIXTURE }
       if (url === '/api/design/project/p1/latest') return { data: designFixture }
       throw new Error('unexpected URL ' + url)
     })
@@ -151,7 +164,6 @@ describe('ProjectPage refine flow', () => {
       rooms: [],
     }
     vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/api/projects/p1') return { data: PROJECT_FIXTURE }
       if (url === '/api/design/project/p1/latest') return { data: designFixture }
       throw new Error('unexpected URL ' + url)
     })
@@ -176,5 +188,30 @@ describe('ProjectPage refine flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('ProjectPage history drawer', () => {
+  it('opens the version history drawer when the History button is clicked', async () => {
+    renderProjectPage()
+
+    const historyButton = await screen.findByRole('button', { name: 'History' })
+    await userEvent.click(historyButton)
+
+    expect(screen.getByRole('dialog', { name: 'Version history' })).toBeInTheDocument()
+  })
+
+  it('closes the version history drawer when the close button is clicked', async () => {
+    renderProjectPage()
+
+    const historyButton = await screen.findByRole('button', { name: 'History' })
+    await userEvent.click(historyButton)
+
+    const closeButton = screen.getByRole('button', { name: 'Close history' })
+    await userEvent.click(closeButton)
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Version history' })).not.toBeInTheDocument()
+    )
   })
 })

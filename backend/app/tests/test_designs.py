@@ -287,7 +287,6 @@ async def test_refine_after_manual_save_does_not_crash(client: AsyncClient):
     layout = generated.json()
     design_id = layout["designId"]
 
-    # Simulate a manual save — frontend serializes the layout WITH designId / designVersionId
     saved = await client.put(
         f"/api/design/{design_id}",
         json={"layout": layout, "versionName": "Manual"},
@@ -295,7 +294,6 @@ async def test_refine_after_manual_save_does_not_crash(client: AsyncClient):
     )
     assert saved.status_code == 200
 
-    # Now refine — must not crash
     refined = await client.post(
         "/api/design/refine",
         json={"designId": design_id, "prompt": "add a bedroom"},
@@ -305,3 +303,68 @@ async def test_refine_after_manual_save_does_not_crash(client: AsyncClient):
     assert refined.status_code == 200, refined.json()
     assert refined.json()["designId"] == design_id
     assert "Added 1 bedroom" in refined.json()["refinementSummary"]
+
+
+async def test_fetch_version_returns_correct_layout(client: AsyncClient):
+    token = await _register_and_token(client, "fetch-version@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Version Fetch Project", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    design_id = generated.json()["designId"]
+    version_id = generated.json()["designVersionId"]
+
+    response = await client.get(
+        f"/api/design/version/{version_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["designId"] == design_id
+    assert data["designVersionId"] == version_id
+    assert isinstance(data["rooms"], list)
+    assert len(data["rooms"]) > 0
+
+
+async def test_fetch_version_wrong_user_returns_403(client: AsyncClient):
+    token_a = await _register_and_token(client, "version-owner@example.com")
+    token_b = await _register_and_token(client, "version-intruder@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Protected Version Project", "description": None},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project.json()["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    version_id = generated.json()["designVersionId"]
+
+    response = await client.get(
+        f"/api/design/version/{version_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
+
+
+async def test_fetch_version_not_found_returns_404(client: AsyncClient):
+    token = await _register_and_token(client, "version-404@example.com")
+
+    response = await client.get(
+        "/api/design/version/nonexistent-version-id",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "NOT_FOUND"
