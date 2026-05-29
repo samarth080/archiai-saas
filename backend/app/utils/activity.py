@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,10 @@ async def log_activity(
 ) -> None:
     try:
         entry = ActivityLog(
-            user_id=user_id, action=action, project_id=project_id
+            user_id=user_id,
+            action=action,
+            project_id=project_id,
+            timestamp=datetime.now(timezone.utc),
         )
         db.add(entry)
         await db.commit()

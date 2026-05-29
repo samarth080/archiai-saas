@@ -3,13 +3,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import get_db
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
+from app.schemas.project import ActivityLogOut, ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
 from app.services.auth_service import get_current_user
 from app.services.project_service import (
     create_project,
     delete_project,
     duplicate_project,
     get_project,
+    list_project_activity,
     list_project_versions,
     list_projects,
     update_project,
@@ -90,3 +91,12 @@ async def delete(
     db: AsyncSession = Depends(get_db),
 ):
     await delete_project(db, user_id, project_id)
+
+
+@router.get("/{project_id}/activity", response_model=list[ActivityLogOut])
+async def activity(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_project_activity(db, user_id, project_id)
