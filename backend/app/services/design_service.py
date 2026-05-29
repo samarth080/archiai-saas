@@ -1,12 +1,28 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.models.project import Project
+
+AUTO_DRAFT_VERSION_TYPE = "auto_draft"
+
+
+async def get_owned_design(
+    db: AsyncSession,
+    user_id: str,
+    design_id: str,
+) -> Design:
+    result = await db.execute(select(Design).where(Design.id == design_id))
+    design = result.scalar_one_or_none()
+    if design is None:
+        raise HTTPException(status_code=404, detail="Design not found")
+    if design.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access forbidden")
+    return design
 
 
 async def save_generated_design(
@@ -85,16 +101,16 @@ async def update_design_layout(
     change_summary: str | None = None,
     thumbnail_url: str | None = None,
 ) -> tuple[Design, DesignVersion]:
-    result = await db.execute(select(Design).where(Design.id == design_id))
-    design = result.scalar_one_or_none()
-    if design is None:
-        raise HTTPException(status_code=404, detail="Design not found")
-    if design.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
+    design = await get_owned_design(db, user_id, design_id)
 
     max_version_result = await db.execute(
-        select(func.max(DesignVersion.version_number)).where(
-            DesignVersion.design_id == design.id
+        select(func.max(DesignVersion.version_number))
+        .where(DesignVersion.design_id == design.id)
+        .where(
+            or_(
+                DesignVersion.version_type.is_(None),
+                DesignVersion.version_type != AUTO_DRAFT_VERSION_TYPE,
+            )
         )
     )
     next_version = (max_version_result.scalar_one_or_none() or 0) + 1
@@ -124,3 +140,81 @@ async def update_design_layout(
     await db.refresh(design)
     await db.refresh(version)
     return design, version
+
+
+async def save_design_draft(
+    db: AsyncSession,
+    user_id: str,
+    design_id: str,
+    layout_json: dict,
+) -> tuple[Design, DesignVersion]:
+    design = await get_owned_design(db, user_id, design_id)
+
+    draft_result = await db.execute(
+        select(DesignVersion)
+        .where(
+            DesignVersion.design_id == design.id,
+            DesignVersion.project_id == design.project_id,
+            DesignVersion.version_type == AUTO_DRAFT_VERSION_TYPE,
+        )
+        .order_by(desc(DesignVersion.created_at), desc(DesignVersion.version_number))
+        .limit(1)
+    )
+    draft = draft_result.scalar_one_or_none()
+
+    if draft is None:
+        max_named_version = await db.scalar(
+            select(func.max(DesignVersion.version_number))
+            .where(DesignVersion.design_id == design.id)
+            .where(
+                or_(
+                    DesignVersion.version_type.is_(None),
+                    DesignVersion.version_type != AUTO_DRAFT_VERSION_TYPE,
+                )
+            )
+        )
+        draft = DesignVersion(
+            design_id=design.id,
+            project_id=design.project_id,
+            user_id=user_id,
+            version_number=max_named_version or 1,
+            version_name="Auto-saved draft",
+            version_type=AUTO_DRAFT_VERSION_TYPE,
+            change_summary="Auto-saved draft",
+            layout_json=layout_json,
+            prompt_used=None,
+        )
+        db.add(draft)
+    else:
+        draft.user_id = user_id
+        draft.layout_json = layout_json
+        draft.version_name = "Auto-saved draft"
+        draft.change_summary = "Auto-saved draft"
+        draft.prompt_used = None
+        draft.created_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(draft)
+    return design, draft
+
+
+async def get_design_draft(
+    db: AsyncSession,
+    user_id: str,
+    design_id: str,
+) -> tuple[Design, DesignVersion]:
+    design = await get_owned_design(db, user_id, design_id)
+    draft_result = await db.execute(
+        select(DesignVersion)
+        .where(
+            DesignVersion.design_id == design.id,
+            DesignVersion.project_id == design.project_id,
+            DesignVersion.version_type == AUTO_DRAFT_VERSION_TYPE,
+        )
+        .order_by(desc(DesignVersion.created_at), desc(DesignVersion.version_number))
+        .limit(1)
+    )
+    draft = draft_result.scalar_one_or_none()
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return design, draft

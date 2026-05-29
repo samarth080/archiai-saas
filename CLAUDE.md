@@ -283,7 +283,7 @@ archiai-saas/
 
 - [x] Task 1: Backend draft endpoint tests added for save/fetch draft behaviour
   - Tests cover authenticated draft save, draft fetch, no-draft response, wrong-user access, layout JSON persistence, and named-version safety
-- [ ] Task 2: Add backend draft service functions
+- [x] Task 2: Add backend draft service functions
 - [ ] Task 3: Add backend draft schemas and endpoints; update existing responses
 - [ ] Task 4: Run backend tests and commit
 - [ ] Task 5: Update canvas store with draft state
