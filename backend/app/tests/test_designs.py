@@ -174,6 +174,33 @@ async def test_manual_save_stores_version_metadata_and_thumbnail(client: AsyncCl
         assert project_row.thumbnail_url == "data:image/png;base64,abc123"
 
 
+async def test_save_design_accepts_legacy_layout_metadata(client: AsyncClient):
+    token = await _register_and_token(client, "legacy-save@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Legacy Save", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    layout["metadata"] = {"totalFloors": 1, "totalRooms": len(layout["rooms"])}
+
+    saved = await client.put(
+        f"/api/design/{layout['designId']}",
+        json={"layout": layout, "versionName": "Legacy metadata save"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["metadata"]["totalFloors"] == 1
+    assert saved.json()["metadata"]["prompt"] is None
+
+
 async def test_refine_creates_new_version_and_logs_activity(client: AsyncClient):
     token = await _register_and_token(client, "refine@example.com")
     project = await client.post(

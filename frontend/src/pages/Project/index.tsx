@@ -19,6 +19,7 @@ import { useCanvasStore } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import { getApiErrorMessage } from '../../services/apiError'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -124,7 +125,11 @@ export default function ProjectPage() {
   }
 
   const handleSaveLayout = async () => {
-    if (!designId) return
+    if (!designId) {
+      setLayoutSaveError('Generate or load a design before saving layout.')
+      useCanvasStore.setState({ saveStatus: 'error' })
+      return
+    }
     setLayoutSaving(true)
     setLayoutSaveError(null)
     useCanvasStore.setState({ saveStatus: 'saving' })
@@ -149,9 +154,8 @@ export default function ProjectPage() {
         )
       }
     } catch (err) {
-      const apiErr = err as { response?: { data?: { error?: string } } }
       useCanvasStore.setState({ saveStatus: 'error' })
-      setLayoutSaveError(apiErr.response?.data?.error ?? 'Failed to save layout')
+      setLayoutSaveError(getApiErrorMessage(err, 'Failed to save layout'))
     } finally {
       setLayoutSaving(false)
     }

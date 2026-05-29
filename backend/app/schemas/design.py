@@ -63,11 +63,11 @@ class RoomResponse(BaseModel):
 
 
 class GenerateMetadata(BaseModel):
-    prompt: str
-    building_type: str
+    prompt: str | None = None
+    building_type: str | None = None
     buildingType: str | None = None
     style: str | None = None
-    room_count: int
+    room_count: int | None = None
     totalFloors: int | None = None
     totalRooms: int | None = None
     totalAreaSqm: float | None = None
