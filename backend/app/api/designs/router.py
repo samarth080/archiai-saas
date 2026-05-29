@@ -71,7 +71,9 @@ async def generate(
         layout["designId"] = design.id
         layout["designVersionId"] = version.id
 
-    await log_activity(db, user_id, "design.generated")
+    await log_activity(
+        db, user_id, "design.generated", project_id=request.project_id
+    )
     return GenerateResponse(**layout)
 
 
@@ -106,7 +108,7 @@ async def save_design(
         change_summary=request.change_summary,
         thumbnail_url=request.thumbnail_url,
     )
-    await log_activity(db, user_id, "layout.saved")
+    await log_activity(db, user_id, "layout.saved", project_id=design.project_id)
     layout = {
         **design.layout_json,
         "designId": design.id,
@@ -169,7 +171,7 @@ async def refine(
     await db.refresh(design)
     await db.refresh(version)
 
-    await log_activity(db, user_id, "design.refined")
+    await log_activity(db, user_id, "design.refined", project_id=design.project_id)
 
     return RefineResponse(
         **new_layout,
