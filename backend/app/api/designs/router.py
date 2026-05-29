@@ -177,3 +177,29 @@ async def refine(
         designVersionId=version.id,
         refinementSummary=summary,
     )
+
+
+@router.get("/version/{version_id}", response_model=GenerateResponse)
+async def fetch_version(
+    version_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> GenerateResponse:
+    version = await db.get(DesignVersion, version_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    design = await db.get(Design, version.design_id)
+    if design is None or design.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
+    layout = {
+        k: v
+        for k, v in version.layout_json.items()
+        if k not in ("designId", "designVersionId")
+    }
+    return GenerateResponse(
+        **layout,
+        designId=design.id,
+        designVersionId=version.id,
+    )
