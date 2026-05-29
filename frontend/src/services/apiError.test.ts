@@ -38,6 +38,8 @@ describe('getApiErrorMessage', () => {
   it('returns a clear server unavailable message for network errors', () => {
     const message = getApiErrorMessage({ request: {} }, 'Fallback error')
 
-    expect(message).toBe('Server unavailable. Check that the backend is running on http://localhost:8000.')
+    expect(message).toBe(
+      'Server unavailable or request blocked. Check that the backend is running on http://localhost:8000 and that the frontend is opened from http://localhost:5173 or http://127.0.0.1:5173.',
+    )
   })
 })

@@ -22,4 +22,5 @@ async def log_activity(
         db.add(entry)
         await db.commit()
     except Exception as exc:
+        await db.rollback()
         print(f"[activity log error] {exc}", file=sys.stderr)

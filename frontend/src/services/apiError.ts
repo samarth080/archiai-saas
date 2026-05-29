@@ -51,7 +51,7 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
   }
 
   if (apiError.request && !apiError.response) {
-    return 'Server unavailable. Check that the backend is running on http://localhost:8000.'
+    return 'Server unavailable or request blocked. Check that the backend is running on http://localhost:8000 and that the frontend is opened from http://localhost:5173 or http://127.0.0.1:5173.'
   }
 
   return fallback
