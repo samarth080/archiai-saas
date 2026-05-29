@@ -88,6 +88,12 @@ beforeEach(() => {
     gridSize: 1,
     saveStatus: 'saved',
     lastSavedAt: null,
+    hasUnsavedChanges: false,
+    lastDraftSavedAt: null,
+    draftStatus: 'idle',
+    draftError: null,
+    recoveredDraftAvailable: false,
+    latestDraftVersionId: null,
     activityLog: [],
   })
   vi.mocked(projectService.get).mockResolvedValue(PROJECT_FIXTURE)

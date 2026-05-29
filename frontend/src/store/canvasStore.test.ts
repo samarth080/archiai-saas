@@ -22,7 +22,72 @@ beforeEach(() => {
     gridSize: 1,
     saveStatus: 'saved',
     lastSavedAt: null,
+    hasUnsavedChanges: false,
+    lastDraftSavedAt: null,
+    draftStatus: 'idle',
+    draftError: null,
+    recoveredDraftAvailable: false,
+    latestDraftVersionId: null,
     activityLog: [],
+  })
+})
+
+describe('draft state', () => {
+  it('starts with a clean idle draft state', () => {
+    const state = useCanvasStore.getState()
+
+    expect(state.hasUnsavedChanges).toBe(false)
+    expect(state.draftStatus).toBe('idle')
+    expect(state.lastDraftSavedAt).toBeNull()
+    expect(state.draftError).toBeNull()
+    expect(state.latestDraftVersionId).toBeNull()
+    expect(state.recoveredDraftAvailable).toBe(false)
+  })
+
+  it('marks draft state dirty without backend calls', () => {
+    useCanvasStore.getState().markDirty()
+
+    const state = useCanvasStore.getState()
+    expect(state.hasUnsavedChanges).toBe(true)
+    expect(state.draftStatus).toBe('dirty')
+    expect(state.saveStatus).toBe('unsaved')
+    expect(state.draftError).toBeNull()
+  })
+
+  it('tracks draft saving state', () => {
+    useCanvasStore.getState().markDraftSaving()
+
+    expect(useCanvasStore.getState().draftStatus).toBe('saving')
+    expect(useCanvasStore.getState().draftError).toBeNull()
+  })
+
+  it('marks draft saved with timestamp and version id', () => {
+    const timestamp = '2026-05-30T10:00:00.000Z'
+
+    useCanvasStore.getState().markDirty()
+    useCanvasStore.getState().markDraftSaved(timestamp, 'draft-version-1')
+
+    const state = useCanvasStore.getState()
+    expect(state.hasUnsavedChanges).toBe(false)
+    expect(state.draftStatus).toBe('saved')
+    expect(state.lastDraftSavedAt).toBe(timestamp)
+    expect(state.latestDraftVersionId).toBe('draft-version-1')
+    expect(state.draftError).toBeNull()
+  })
+
+  it('stores draft errors and keeps unsaved changes', () => {
+    useCanvasStore.getState().markDraftError('Network unavailable')
+
+    const state = useCanvasStore.getState()
+    expect(state.hasUnsavedChanges).toBe(true)
+    expect(state.draftStatus).toBe('error')
+    expect(state.draftError).toBe('Network unavailable')
+  })
+
+  it('tracks recovered draft availability separately', () => {
+    useCanvasStore.getState().setRecoveredDraftAvailable(true)
+
+    expect(useCanvasStore.getState().recoveredDraftAvailable).toBe(true)
   })
 })
 
@@ -110,6 +175,8 @@ describe('updateRoom', () => {
     })
 
     expect(useCanvasStore.getState().saveStatus).toBe('unsaved')
+    expect(useCanvasStore.getState().hasUnsavedChanges).toBe(true)
+    expect(useCanvasStore.getState().draftStatus).toBe('dirty')
   })
 })
 
@@ -229,16 +296,20 @@ describe('loadRooms', () => {
 describe('loadLayout and serializeLayout', () => {
   it('clears the layout for empty projects', () => {
     const store = useCanvasStore.getState()
+    store.markDirty()
     store.clearLayout()
 
     const state = useCanvasStore.getState()
     expect(state.rooms).toHaveLength(0)
     expect(state.designId).toBeNull()
     expect(state.saveStatus).toBe('saved')
+    expect(state.hasUnsavedChanges).toBe(false)
+    expect(state.draftStatus).toBe('idle')
   })
 
   it('loads multi-floor layouts and defaults to the ground floor', () => {
     const store = useCanvasStore.getState()
+    store.markDraftError('Previous draft failed')
     store.loadLayout({
       version: '1.0',
       designId: 'design-1',
@@ -290,6 +361,9 @@ describe('loadLayout and serializeLayout', () => {
     expect(state.rooms).toHaveLength(2)
     expect(state.selectedFloor).toBe(0)
     expect(state.rooms.find((room) => room.id === 'upper-room')?.floorLevel).toBe(1)
+    expect(state.hasUnsavedChanges).toBe(false)
+    expect(state.draftStatus).toBe('idle')
+    expect(state.draftError).toBeNull()
   })
 
   it('serializes rooms back into floor buckets', () => {

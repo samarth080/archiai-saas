@@ -13,6 +13,7 @@ export type CanvasEditAction =
   | 'object.updated'
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
+export type DraftStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
 export interface Room {
   id: string
@@ -76,11 +77,24 @@ interface CanvasState {
   gridSize: number
   saveStatus: SaveStatus
   lastSavedAt: string | null
+  hasUnsavedChanges: boolean
+  lastDraftSavedAt: string | null
+  draftStatus: DraftStatus
+  draftError: string | null
+  recoveredDraftAvailable: boolean
+  latestDraftVersionId: string | null
   activityLog: CanvasActivityLogEntry[]
   selectRoom: (id: string) => void
   deselectAll: () => void
   setSelectedFloor: (floor: number | 'all') => void
   setSnapToGrid: (enabled: boolean) => void
+  markDirty: () => void
+  markDraftSaving: () => void
+  markDraftSaved: (timestamp?: string, versionId?: string | null) => void
+  markDraftError: (message: string) => void
+  clearDraftState: () => void
+  setLastSavedAt: (timestamp: string | null) => void
+  setRecoveredDraftAvailable: (available: boolean) => void
   updateRoom: (id: string, patch: Partial<Omit<Room, 'id'>>, options?: UpdateOptions) => void
   deleteRoom: (id: string) => void
   duplicateRoom: (id: string) => void
@@ -159,6 +173,21 @@ export const DEFAULT_FLOOR: CanvasFloor = {
   name: 'Ground Floor',
   level: 0,
   elevation: 0,
+}
+
+const CLEAN_DRAFT_STATE = {
+  hasUnsavedChanges: false,
+  lastDraftSavedAt: null,
+  draftStatus: 'idle' as DraftStatus,
+  draftError: null,
+  recoveredDraftAvailable: false,
+  latestDraftVersionId: null,
+}
+
+const DIRTY_DRAFT_STATE = {
+  hasUnsavedChanges: true,
+  draftStatus: 'dirty' as DraftStatus,
+  draftError: null,
 }
 
 function nextId(prefix: string) {
@@ -269,6 +298,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   gridSize: 1,
   saveStatus: 'saved',
   lastSavedAt: null,
+  ...CLEAN_DRAFT_STATE,
   activityLog: [],
   selectRoom: (id) => set({ selectedId: id }),
   deselectAll: () => set({ selectedId: null }),
@@ -282,6 +312,35 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : null,
     })),
   setSnapToGrid: (enabled) => set({ snapToGrid: enabled }),
+  markDirty: () =>
+    set({
+      ...DIRTY_DRAFT_STATE,
+      saveStatus: 'unsaved',
+    }),
+  markDraftSaving: () =>
+    set({
+      draftStatus: 'saving',
+      draftError: null,
+    }),
+  markDraftSaved: (timestamp = new Date().toISOString(), versionId) =>
+    set((state) => ({
+      hasUnsavedChanges: false,
+      draftStatus: 'saved',
+      lastDraftSavedAt: timestamp,
+      draftError: null,
+      latestDraftVersionId:
+        versionId === undefined ? state.latestDraftVersionId : versionId,
+    })),
+  markDraftError: (message) =>
+    set({
+      hasUnsavedChanges: true,
+      draftStatus: 'error',
+      draftError: message,
+    }),
+  clearDraftState: () => set(CLEAN_DRAFT_STATE),
+  setLastSavedAt: (timestamp) => set({ lastSavedAt: timestamp }),
+  setRecoveredDraftAvailable: (available) =>
+    set({ recoveredDraftAvailable: available }),
   updateRoom: (id, patch, options) =>
     set((state) => {
       const room = state.rooms.find((r) => r.id === id)
@@ -328,6 +387,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         rooms: state.rooms.map((r) => (r.id === id ? updated : r)),
         activityLog: logEntry ? [logEntry, ...state.activityLog] : state.activityLog,
         saveStatus: shouldLog ? 'unsaved' : state.saveStatus,
+        ...(shouldLog ? DIRTY_DRAFT_STATE : {}),
       }
     }),
   deleteRoom: (id) =>
@@ -339,6 +399,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         rooms: state.rooms.filter((r) => r.id !== id),
         selectedId: state.selectedId === id ? null : state.selectedId,
         saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
         activityLog: [
           {
             id: nextId('activity'),
@@ -372,6 +433,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         rooms: [...state.rooms, copy],
         selectedId: copy.id,
         saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
         activityLog: [
           {
             id: nextId('activity'),
@@ -412,6 +474,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         rooms: [...state.rooms, newObject],
         selectedId: newObject.id,
         saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
         activityLog: [
           {
             id: nextId('activity'),
@@ -447,6 +510,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       selectedId: null,
       saveStatus: 'saved',
       lastSavedAt: new Date().toISOString(),
+      ...CLEAN_DRAFT_STATE,
       activityLog: [],
     })
   },
@@ -462,6 +526,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       selectedId: null,
       saveStatus: 'saved',
       lastSavedAt: null,
+      ...CLEAN_DRAFT_STATE,
       activityLog: [],
     }),
   serializeLayout: () => {

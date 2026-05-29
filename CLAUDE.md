@@ -286,7 +286,7 @@ archiai-saas/
 - [x] Task 2: Add backend draft service functions
 - [x] Task 3: Add backend draft schemas and endpoints; update existing responses
 - [x] Task 4: Run backend tests and commit
-- [ ] Task 5: Update canvas store with draft state
+- [x] Task 5: Update canvas store with draft state
 - [ ] Task 6: Add frontend draft service functions
 - [ ] Task 7: Create useAutoSave hook and its test
 - [ ] Task 8: Draft recovery in ProjectPage and recovery banner
