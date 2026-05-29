@@ -22,6 +22,12 @@ export interface ProjectVersion {
   created_at: string
 }
 
+export interface ActivityEntry {
+  id: string
+  action: string
+  timestamp: string
+}
+
 export interface CreateProjectData {
   title: string
   description?: string
@@ -53,6 +59,9 @@ const projectService = {
 
   versions: (id: string): Promise<ProjectVersion[]> =>
     api.get(`/api/projects/${id}/versions`).then((r) => r.data),
+
+  activity: (id: string): Promise<ActivityEntry[]> =>
+    api.get(`/api/projects/${id}/activity`).then((r) => r.data),
 }
 
 export default projectService

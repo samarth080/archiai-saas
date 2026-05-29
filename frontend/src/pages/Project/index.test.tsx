@@ -36,6 +36,7 @@ vi.mock('../../services/project.service', () => ({
     delete: vi.fn(),
     duplicate: vi.fn(),
     versions: vi.fn().mockResolvedValue([]),
+    activity: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -66,6 +67,7 @@ beforeEach(() => {
   vi.mocked(api.post).mockReset()
   vi.mocked(projectService.get).mockReset()
   vi.mocked(projectService.versions).mockResolvedValue([])
+  vi.mocked(projectService.activity).mockResolvedValue([])
   useCanvasStore.setState({
     rooms: INITIAL_ROOMS.map((r) => ({
       ...r,
@@ -213,5 +215,14 @@ describe('ProjectPage history drawer', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Version history' })).not.toBeInTheDocument()
     )
+  })
+
+  it('opens the activity drawer when the Activity button is clicked', async () => {
+    renderProjectPage()
+
+    const activityButton = await screen.findByRole('button', { name: 'Activity' })
+    await userEvent.click(activityButton)
+
+    expect(screen.getByRole('dialog', { name: 'Project activity' })).toBeInTheDocument()
   })
 })

@@ -5,10 +5,11 @@ from fastapi import HTTPException
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.activity_log import ActivityLog
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.models.project import Project
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
+from app.schemas.project import ActivityLogOut, ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
 from app.utils.activity import log_activity
 
 
@@ -29,7 +30,7 @@ async def create_project(
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.created")
+    await log_activity(db, user_id, "project.created", project_id=project.id)
     return ProjectOut.model_validate(project)
 
 
@@ -59,7 +60,7 @@ async def update_project(
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.updated")
+    await log_activity(db, user_id, "project.updated", project_id=project_id)
     return ProjectOut.model_validate(project)
 
 
@@ -71,7 +72,7 @@ async def delete_project(
     await db.execute(delete(Design).where(Design.project_id == project_id))
     await db.delete(project)
     await db.commit()
-    await log_activity(db, user_id, "project.deleted")
+    await log_activity(db, user_id, "project.deleted", project_id=project_id)
 
 
 async def list_project_versions(
@@ -144,5 +145,19 @@ async def duplicate_project(
     duplicate.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(duplicate)
-    await log_activity(db, user_id, "project.duplicated")
+    await log_activity(db, user_id, "project.duplicated", project_id=duplicate.id)
     return ProjectOut.model_validate(duplicate)
+
+
+async def list_project_activity(
+    db: AsyncSession, user_id: str, project_id: str
+) -> list[ActivityLogOut]:
+    await _get_owned_project(db, user_id, project_id)
+    result = await db.execute(
+        select(ActivityLog)
+        .where(ActivityLog.project_id == project_id)
+        .order_by(desc(ActivityLog.timestamp))
+        .limit(50)
+    )
+    entries = result.scalars().all()
+    return [ActivityLogOut.model_validate(e) for e in entries]

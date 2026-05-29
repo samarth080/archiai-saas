@@ -306,3 +306,87 @@ async def test_delete_project_with_designs_succeeds(client: AsyncClient):
         )
         assert design is None
         assert version is None
+
+
+async def test_project_activity_returns_scoped_entries_newest_first(client: AsyncClient):
+    token = await _register_and_token(client, "activity@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Activity Project", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    design = generated.json()
+    await client.put(
+        f"/api/design/{design['designId']}",
+        json={"layout": design, "versionName": "v"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project_id}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    entries = response.json()
+    actions = [e["action"] for e in entries]
+    assert actions == ["layout.saved", "design.generated", "project.created"]
+
+
+async def test_project_activity_wrong_user_returns_403(client: AsyncClient):
+    token_a = await _register_and_token(client, "activity-owner@example.com")
+    token_b = await _register_and_token(client, "activity-intruder@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Owned", "description": None},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project.json()['id']}/activity",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_project_activity_isolates_between_projects(client: AsyncClient):
+    token = await _register_and_token(client, "activity-iso@example.com")
+
+    project_a = await client.post(
+        "/api/projects",
+        json={"title": "A", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_b = await client.post(
+        "/api/projects",
+        json={"title": "B", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    await client.post(
+        "/api/design/generate",
+        json={"projectId": project_a.json()["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    activity_a = await client.get(
+        f"/api/projects/{project_a.json()['id']}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    activity_b = await client.get(
+        f"/api/projects/{project_b.json()['id']}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    actions_a = sorted(e["action"] for e in activity_a.json())
+    actions_b = sorted(e["action"] for e in activity_b.json())
+
+    assert actions_a == ["design.generated", "project.created"]
+    assert actions_b == ["project.created"]

@@ -261,7 +261,23 @@ archiai-saas/
 - [x] "History" button in project top bar opens the drawer
 - [x] `npx tsc --noEmit` passes with zero errors
 
-### Sprint 9B — Activity Log Panel ⏳ Not Started
+### Sprint 9B — Activity Log Panel ✅ Complete
+
+- [x] Alembic `006` adds nullable, indexed `project_id` to `activity_logs` (no FK — append-only audit)
+- [x] `ActivityLog.project_id` declared on the model
+- [x] `log_activity(db, user_id, action, project_id=None)` — all 7 existing call sites pass `project_id`
+- [x] `log_activity` sets `timestamp=datetime.now(timezone.utc)` explicitly so SQLite tests can order entries within the same second
+- [x] `GET /api/projects/{project_id}/activity` returns 50 newest entries, scoped to the project, newest-first
+- [x] 401 / 403 / 404 guarded; cross-project isolation verified by test
+- [x] `ActivityLogOut` schema added
+- [x] 3 new backend tests (scoped + ordered, 403 wrong user, isolation between projects)
+- [x] `formatRelative` extracted to `frontend/src/utils/time.ts`; both drawers import from there
+- [x] `projectService.activity()` + `ActivityEntry` type
+- [x] `ActivityDrawer` component (mirrors VersionHistoryDrawer structure, action label map, `isMounted` ref)
+- [x] 2 RTL tests for `ActivityDrawer` (rows with labels, empty state)
+- [x] "Activity" button next to "History" in project top bar
+- [x] 1 new Project page test (Activity button opens the drawer)
+- [x] `npx tsc --noEmit` clean
 
 ### Sprint 9C — Auto-save with Drafts ⏳ Not Started
 

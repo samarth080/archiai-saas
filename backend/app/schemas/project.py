@@ -37,3 +37,11 @@ class ProjectVersionOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ActivityLogOut(BaseModel):
+    id: str
+    action: str
+    timestamp: datetime
+
+    model_config = {"from_attributes": True}
