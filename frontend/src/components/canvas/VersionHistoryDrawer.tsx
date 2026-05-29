@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import projectService, { ProjectVersion } from '../../services/project.service'
 import { fetchVersion } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
@@ -40,6 +40,14 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
+  const isMounted = useRef(true)
+
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -56,12 +64,18 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
     setRestoringId(versionId)
     try {
       const result = await fetchVersion(versionId)
-      loadLayout(result)
-      onClose()
+      if (isMounted.current) {
+        loadLayout(result)
+        onClose()
+      }
     } catch {
-      setError('Failed to restore version.')
+      if (isMounted.current) {
+        setError('Failed to restore version.')
+      }
     } finally {
-      setRestoringId(null)
+      if (isMounted.current) {
+        setRestoringId(null)
+      }
     }
   }
 
