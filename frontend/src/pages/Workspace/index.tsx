@@ -5,10 +5,16 @@ import { Sidebar } from '../../components/layout/Sidebar'
 import { CreateProjectModal } from '../../components/projects/CreateProjectModal'
 import { ProjectCard } from '../../components/projects/ProjectCard'
 import { Button } from '../../components/ui/Button'
+import { AddMemberForm } from '../../components/workspaces/AddMemberForm'
+import { MemberList } from '../../components/workspaces/MemberList'
 import { useAuth } from '../../hooks/useAuth'
 import { getApiErrorMessage } from '../../services/apiError'
 import projectService, { Project } from '../../services/project.service'
-import workspaceService, { Workspace } from '../../services/workspace.service'
+import workspaceService, {
+  AssignableWorkspaceRole,
+  TeamMember,
+  Workspace,
+} from '../../services/workspace.service'
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
@@ -16,9 +22,11 @@ export default function WorkspacePage() {
   const { logOut, user } = useAuth()
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
+  const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showProjectModal, setShowProjectModal] = useState(false)
+  const [memberError, setMemberError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) {
@@ -26,10 +34,11 @@ export default function WorkspacePage() {
       setLoading(false)
       return
     }
-    Promise.all([workspaceService.get(id), projectService.list()])
-      .then(([workspaceData, projectData]) => {
+    Promise.all([workspaceService.get(id), projectService.list(), workspaceService.members(id)])
+      .then(([workspaceData, projectData, memberData]) => {
         setWorkspace(workspaceData)
         setProjects(projectData.filter((project) => project.workspace_id === id))
+        setMembers(memberData)
       })
       .catch((err) => setError(getApiErrorMessage(err, 'Failed to load workspace')))
       .finally(() => setLoading(false))
@@ -39,6 +48,30 @@ export default function WorkspacePage() {
     workspace?.current_user_role === 'owner' ||
     workspace?.current_user_role === 'admin' ||
     workspace?.current_user_role === 'editor'
+  const canManageMembers =
+    workspace?.current_user_role === 'owner' || workspace?.current_user_role === 'admin'
+
+  const updateMemberRole = async (member: TeamMember, role: AssignableWorkspaceRole) => {
+    if (!id) return
+    setMemberError(null)
+    try {
+      const updated = await workspaceService.updateMemberRole(id, member.id, role)
+      setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+    } catch (err) {
+      setMemberError(getApiErrorMessage(err, 'Failed to update member role'))
+    }
+  }
+
+  const removeMember = async (member: TeamMember) => {
+    if (!id) return
+    setMemberError(null)
+    try {
+      await workspaceService.removeMember(id, member.id)
+      setMembers((current) => current.filter((item) => item.id !== member.id))
+    } catch (err) {
+      setMemberError(getApiErrorMessage(err, 'Failed to remove member'))
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -86,6 +119,25 @@ export default function WorkspacePage() {
                   ))}
                 </div>
               )}
+            </section>
+
+            <section className="mt-8">
+              <h2 className="mb-3 text-lg font-semibold text-gray-900">Members</h2>
+              {canManageMembers && id && (
+                <div className="mb-4">
+                  <AddMemberForm
+                    workspaceId={id}
+                    onAdded={(member) => setMembers((current) => [...current, member])}
+                  />
+                </div>
+              )}
+              {memberError && <p className="mb-3 text-sm text-red-600">{memberError}</p>}
+              <MemberList
+                members={members}
+                canManage={canManageMembers}
+                onRoleChange={updateMemberRole}
+                onRemove={removeMember}
+              />
             </section>
           </>
         )}
