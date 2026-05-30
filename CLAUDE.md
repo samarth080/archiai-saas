@@ -304,7 +304,7 @@ archiai-saas/
 - [x] Task 2: Backend workspace/team tests
 - [x] Task 3: Workspace and TeamMember models/migration
 - [x] Task 4: Backend workspace services
-- [ ] Task 5: Workspace API endpoints
+- [x] Task 5: Workspace API endpoints
 - [ ] Task 6: Project-workspace association and access checks
 - [ ] Task 7: Frontend workspace service functions
 - [ ] Task 8: Basic workspace dashboard UI
