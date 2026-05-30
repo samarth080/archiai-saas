@@ -302,7 +302,7 @@ archiai-saas/
 
 - [x] Task 1: Sprint 9D workspace collaboration plan
 - [x] Task 2: Backend workspace/team tests
-- [ ] Task 3: Workspace and TeamMember models/migration
+- [x] Task 3: Workspace and TeamMember models/migration
 - [ ] Task 4: Backend workspace services
 - [ ] Task 5: Workspace API endpoints
 - [ ] Task 6: Project-workspace association and access checks

@@ -18,6 +18,9 @@ class ActivityLog(Base):
     project_id: Mapped[str | None] = mapped_column(
         String, nullable=True, index=True
     )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     timestamp: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
