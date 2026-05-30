@@ -301,7 +301,7 @@ archiai-saas/
 ### Sprint 9D — Team Collaboration (Workspaces) ⏳ In Progress
 
 - [x] Task 1: Sprint 9D workspace collaboration plan
-- [ ] Task 2: Backend workspace/team tests
+- [x] Task 2: Backend workspace/team tests
 - [ ] Task 3: Workspace and TeamMember models/migration
 - [ ] Task 4: Backend workspace services
 - [ ] Task 5: Workspace API endpoints
