@@ -309,7 +309,7 @@ archiai-saas/
 - [x] Task 7: Frontend workspace service functions
 - [x] Task 8: Basic workspace dashboard UI
 - [x] Task 9: Member management UI
-- [ ] Task 10: Permissions and activity log polish
+- [x] Task 10: Permissions and activity log polish
 - [ ] Task 11: Final checks and Sprint 9D completion update
 
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started

@@ -218,3 +218,74 @@ async def test_workspace_viewer_cannot_generate_or_save_design(client: AsyncClie
 
     assert forbidden_generate.status_code == 403
     assert forbidden_save.status_code == 403
+
+
+async def test_workspace_design_drafts_and_refinements_follow_member_roles(client: AsyncClient):
+    owner_token = await _register_and_token(client, "shared-draft-owner@example.com")
+    editor_token = await _register_and_token(client, "shared-draft-editor@example.com")
+    viewer_token = await _register_and_token(client, "shared-draft-viewer@example.com")
+    workspace = await _create_workspace(client, owner_token)
+    await _add_member(client, owner_token, workspace["id"], "shared-draft-editor@example.com", "editor")
+    await _add_member(client, owner_token, workspace["id"], "shared-draft-viewer@example.com", "viewer")
+    project = await _create_workspace_project(client, owner_token, workspace["id"])
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    design_id = generated.json()["designId"]
+
+    draft_saved = await client.put(
+        f"/api/design/{design_id}/draft",
+        json={"layout": generated.json()},
+        headers={"Authorization": f"Bearer {editor_token}"},
+    )
+    draft_loaded = await client.get(
+        f"/api/design/{design_id}/draft",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    refined = await client.post(
+        "/api/design/refine",
+        json={"designId": design_id, "prompt": "add a bathroom"},
+        headers={"Authorization": f"Bearer {editor_token}"},
+    )
+    forbidden_refine = await client.post(
+        "/api/design/refine",
+        json={"designId": design_id, "prompt": "add a bathroom"},
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert draft_saved.status_code == 200
+    assert draft_loaded.status_code == 200
+    assert refined.status_code == 200
+    assert forbidden_refine.status_code == 403
+
+
+async def test_workspace_activity_includes_shared_project_design_actions(client: AsyncClient):
+    owner_token = await _register_and_token(client, "shared-log-owner@example.com")
+    workspace = await _create_workspace(client, owner_token)
+    project = await _create_workspace_project(client, owner_token, workspace["id"])
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project["id"], "prompt": "2 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    await client.put(
+        f"/api/design/{generated.json()['designId']}/draft",
+        json={"layout": generated.json()},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    response = await client.get(
+        f"/api/workspaces/{workspace['id']}/activity",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert response.status_code == 200
+    actions = [entry["action"] for entry in response.json()]
+    assert actions[:4] == [
+        "design.draft_saved",
+        "design.generated",
+        "project.created",
+        "workspace.created",
+    ]

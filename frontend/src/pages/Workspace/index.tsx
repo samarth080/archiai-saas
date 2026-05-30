@@ -9,7 +9,7 @@ import { AddMemberForm } from '../../components/workspaces/AddMemberForm'
 import { MemberList } from '../../components/workspaces/MemberList'
 import { useAuth } from '../../hooks/useAuth'
 import { getApiErrorMessage } from '../../services/apiError'
-import projectService, { Project } from '../../services/project.service'
+import projectService, { ActivityEntry, Project } from '../../services/project.service'
 import workspaceService, {
   AssignableWorkspaceRole,
   TeamMember,
@@ -23,6 +23,7 @@ export default function WorkspacePage() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [members, setMembers] = useState<TeamMember[]>([])
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showProjectModal, setShowProjectModal] = useState(false)
@@ -34,11 +35,17 @@ export default function WorkspacePage() {
       setLoading(false)
       return
     }
-    Promise.all([workspaceService.get(id), projectService.list(), workspaceService.members(id)])
-      .then(([workspaceData, projectData, memberData]) => {
+    Promise.all([
+      workspaceService.get(id),
+      projectService.list(),
+      workspaceService.members(id),
+      workspaceService.activity(id),
+    ])
+      .then(([workspaceData, projectData, memberData, activityData]) => {
         setWorkspace(workspaceData)
         setProjects(projectData.filter((project) => project.workspace_id === id))
         setMembers(memberData)
+        setActivity(activityData)
       })
       .catch((err) => setError(getApiErrorMessage(err, 'Failed to load workspace')))
       .finally(() => setLoading(false))
@@ -50,6 +57,10 @@ export default function WorkspacePage() {
     workspace?.current_user_role === 'editor'
   const canManageMembers =
     workspace?.current_user_role === 'owner' || workspace?.current_user_role === 'admin'
+  const refreshActivity = () => {
+    if (!id) return
+    workspaceService.activity(id).then(setActivity).catch(() => undefined)
+  }
 
   const updateMemberRole = async (member: TeamMember, role: AssignableWorkspaceRole) => {
     if (!id) return
@@ -57,6 +68,7 @@ export default function WorkspacePage() {
     try {
       const updated = await workspaceService.updateMemberRole(id, member.id, role)
       setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      refreshActivity()
     } catch (err) {
       setMemberError(getApiErrorMessage(err, 'Failed to update member role'))
     }
@@ -68,6 +80,7 @@ export default function WorkspacePage() {
     try {
       await workspaceService.removeMember(id, member.id)
       setMembers((current) => current.filter((item) => item.id !== member.id))
+      refreshActivity()
     } catch (err) {
       setMemberError(getApiErrorMessage(err, 'Failed to remove member'))
     }
@@ -127,7 +140,10 @@ export default function WorkspacePage() {
                 <div className="mb-4">
                   <AddMemberForm
                     workspaceId={id}
-                    onAdded={(member) => setMembers((current) => [...current, member])}
+                    onAdded={(member) => {
+                      setMembers((current) => [...current, member])
+                      refreshActivity()
+                    }}
                   />
                 </div>
               )}
@@ -138,6 +154,24 @@ export default function WorkspacePage() {
                 onRoleChange={updateMemberRole}
                 onRemove={removeMember}
               />
+            </section>
+
+            <section className="mt-8">
+              <h2 className="mb-3 text-lg font-semibold text-gray-900">Recent activity</h2>
+              {activity.length === 0 ? (
+                <p className="text-sm text-gray-400">No workspace activity yet.</p>
+              ) : (
+                <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+                  {activity.map((entry) => (
+                    <div key={entry.id} className="flex justify-between gap-4 px-4 py-3 text-sm">
+                      <span className="text-gray-700">{entry.action}</span>
+                      <time className="whitespace-nowrap text-xs text-gray-400">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </time>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </>
         )}
