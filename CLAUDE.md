@@ -298,7 +298,7 @@ archiai-saas/
 - [x] EditorToolbar shows draft dirty, saving, saved, and error states
 - [x] Backend and frontend checks pass
 
-### Sprint 9D — Team Collaboration (Workspaces) ⏳ In Progress
+### Sprint 9D — Team Collaboration (Workspaces) ✅ Complete
 
 - [x] Task 1: Sprint 9D workspace collaboration plan
 - [x] Task 2: Backend workspace/team tests
@@ -310,7 +310,12 @@ archiai-saas/
 - [x] Task 8: Basic workspace dashboard UI
 - [x] Task 9: Member management UI
 - [x] Task 10: Permissions and activity log polish
-- [ ] Task 11: Final checks and Sprint 9D completion update
+- [x] Task 11: Final checks and Sprint 9D completion update
+- [x] Workspaces support owner, admin, editor, and viewer roles with backend-enforced permissions
+- [x] Existing users can be added by email and shared workspace projects remain compatible with personal projects
+- [x] Workspace activity history includes team actions and shared project/design changes
+- [x] Backend tests, frontend tests, typecheck, production build, migration, and live PostgreSQL API smoke flow pass
+- [ ] Deferred: real-time collaboration, invitations, comments, notifications, and workspace billing
 
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
 
