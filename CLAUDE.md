@@ -279,20 +279,24 @@ archiai-saas/
 - [x] 1 new Project page test (Activity button opens the drawer)
 - [x] `npx tsc --noEmit` clean
 
-### Sprint 9C — Auto-save with Drafts ⏳ In Progress
+### Sprint 9C — Auto-save with Drafts ✅ Complete
 
-- [x] Task 1: Backend draft endpoint tests added for save/fetch draft behaviour
+- [x] Task 1: Backend draft endpoint tests
   - Tests cover authenticated draft save, draft fetch, no-draft response, wrong-user access, layout JSON persistence, and named-version safety
-- [x] Task 2: Add backend draft service functions
-- [x] Task 3: Add backend draft schemas and endpoints; update existing responses
-- [x] Task 4: Run backend tests and commit
-- [x] Task 5: Update canvas store with draft state
-- [x] Task 6: Add frontend draft service functions
-- [x] Task 7: Create useAutoSave hook and its test
+- [x] Task 2: Backend draft service functions
+- [x] Task 3: Backend draft schemas and endpoints
+- [x] Task 4: Backend tests and backend draft verification
+- [x] Task 5: Canvas store draft state
+- [x] Task 6: Frontend draft service functions
+- [x] Task 7: `useAutoSave` hook and tests
 - [x] Task 8: Draft recovery in ProjectPage and recovery banner
-- [x] Task 9: Update EditorToolbar with draft indicator
-- [ ] Task 10: Add RTL tests for the recovery banner
-- [ ] Task 11: Final checks and commit
+- [x] Task 9: EditorToolbar draft indicator
+- [x] Task 10: RTL tests for recovery banner
+- [x] Task 11: Final checks and commit
+- [x] Auto-save writes separate `auto_draft` versions without overwriting named/manual version history
+- [x] Draft recovery banner lets users restore unsaved draft work into the editor before manually saving
+- [x] EditorToolbar shows draft dirty, saving, saved, and error states
+- [x] Backend and frontend checks pass
 
 ### Sprint 9D — Team Collaboration (Workspaces) ⏳ Not Started
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
