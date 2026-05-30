@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CanvasObjectType, SaveStatus, useCanvasStore } from '../../store/canvasStore'
+import { CanvasObjectType, DraftStatus, SaveStatus, useCanvasStore } from '../../store/canvasStore'
 
 const OBJECT_TYPES: { value: CanvasObjectType; label: string }[] = [
   { value: 'room', label: 'Room' },
@@ -23,6 +23,18 @@ function saveStatusLabel(status: SaveStatus, lastSavedAt: string | null) {
   })}`
 }
 
+function draftStatusLabel(status: DraftStatus, lastDraftSavedAt: string | null) {
+  if (status === 'dirty') return 'Draft: Unsaved changes'
+  if (status === 'saving') return 'Draft: Auto-saving...'
+  if (status === 'error') return 'Draft: Save failed'
+  if (!lastDraftSavedAt) return 'Draft saved'
+
+  return `Draft saved ${new Date(lastDraftSavedAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+}
+
 export function EditorToolbar() {
   const [objectType, setObjectType] = useState<CanvasObjectType>('room')
   const selectedId = useCanvasStore((s) => s.selectedId)
@@ -31,6 +43,9 @@ export function EditorToolbar() {
   const snapToGrid = useCanvasStore((s) => s.snapToGrid)
   const saveStatus = useCanvasStore((s) => s.saveStatus)
   const lastSavedAt = useCanvasStore((s) => s.lastSavedAt)
+  const draftStatus = useCanvasStore((s) => s.draftStatus)
+  const lastDraftSavedAt = useCanvasStore((s) => s.lastDraftSavedAt)
+  const draftError = useCanvasStore((s) => s.draftError)
   const setSelectedFloor = useCanvasStore((s) => s.setSelectedFloor)
   const setSnapToGrid = useCanvasStore((s) => s.setSnapToGrid)
   const addObject = useCanvasStore((s) => s.addObject)
@@ -43,6 +58,12 @@ export function EditorToolbar() {
     unsaved: 'bg-sky-50 text-sky-700 border-sky-200',
     error: 'bg-red-50 text-red-700 border-red-200',
   }
+  const draftStatusClasses = {
+    dirty: 'bg-sky-50 text-sky-700 border-sky-200',
+    saving: 'bg-amber-50 text-amber-700 border-amber-200',
+    saved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    error: 'bg-red-50 text-red-700 border-red-200',
+  }
 
   return (
     <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2 rounded border border-gray-200 bg-white/95 p-2 shadow-sm">
@@ -52,6 +73,16 @@ export function EditorToolbar() {
       >
         {saveStatusLabel(saveStatus, lastSavedAt)}
       </span>
+
+      {draftStatus !== 'idle' && (
+        <span
+          aria-live="polite"
+          className={`rounded border px-2 py-1 text-xs font-medium ${draftStatusClasses[draftStatus]}`}
+          title={draftStatus === 'error' ? draftError ?? undefined : undefined}
+        >
+          {draftStatusLabel(draftStatus, lastDraftSavedAt)}
+        </span>
+      )}
 
       <label className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700">
         <input

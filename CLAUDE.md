@@ -290,7 +290,7 @@ archiai-saas/
 - [x] Task 6: Add frontend draft service functions
 - [x] Task 7: Create useAutoSave hook and its test
 - [x] Task 8: Draft recovery in ProjectPage and recovery banner
-- [ ] Task 9: Update EditorToolbar with draft indicator
+- [x] Task 9: Update EditorToolbar with draft indicator
 - [ ] Task 10: Add RTL tests for the recovery banner
 - [ ] Task 11: Final checks and commit
 
