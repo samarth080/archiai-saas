@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.models.project import Project
+from app.services.workspace_service import require_project_edit_access, require_project_read_access
 
 AUTO_DRAFT_VERSION_TYPE = "auto_draft"
 
@@ -20,8 +21,7 @@ async def get_owned_design(
     design = result.scalar_one_or_none()
     if design is None:
         raise HTTPException(status_code=404, detail="Design not found")
-    if design.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
+    await require_project_edit_access(db, design.project_id, user_id)
     return design
 
 
@@ -32,12 +32,7 @@ async def save_generated_design(
     layout_json: dict,
     prompt: str,
 ) -> tuple[Design, DesignVersion]:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
+    await require_project_edit_access(db, project_id, user_id)
 
     design = Design(project_id=project_id, user_id=user_id, layout_json=layout_json)
     db.add(design)
@@ -66,16 +61,11 @@ async def get_latest_project_design(
     user_id: str,
     project_id: str,
 ) -> tuple[Design, DesignVersion | None]:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
+    await require_project_read_access(db, project_id, user_id)
 
     design_result = await db.execute(
         select(Design)
-        .where(Design.project_id == project_id, Design.user_id == user_id)
+        .where(Design.project_id == project_id)
         .order_by(desc(Design.updated_at))
         .limit(1)
     )
@@ -203,7 +193,11 @@ async def get_design_draft(
     user_id: str,
     design_id: str,
 ) -> tuple[Design, DesignVersion]:
-    design = await get_owned_design(db, user_id, design_id)
+    result = await db.execute(select(Design).where(Design.id == design_id))
+    design = result.scalar_one_or_none()
+    if design is None:
+        raise HTTPException(status_code=404, detail="Design not found")
+    await require_project_read_access(db, design.project_id, user_id)
     draft_result = await db.execute(
         select(DesignVersion)
         .where(

@@ -13,6 +13,8 @@ from app.utils.activity import log_activity
 
 WORKSPACE_ROLES = {"owner", "admin", "editor", "viewer"}
 WORKSPACE_ADMIN_ROLES = {"owner", "admin"}
+WORKSPACE_EDIT_ROLES = {"owner", "admin", "editor"}
+WORKSPACE_READ_ROLES = {"owner", "admin", "editor", "viewer"}
 
 
 async def get_workspace(db: AsyncSession, workspace_id: str) -> Workspace:
@@ -50,6 +52,47 @@ async def require_workspace_role(
     if member.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Access forbidden")
     return member
+
+
+async def require_project_access(
+    db: AsyncSession,
+    project_id: str,
+    user_id: str,
+    workspace_roles: set[str],
+) -> Project:
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.workspace_id is None:
+        if project.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access forbidden")
+        return project
+    await require_workspace_role(db, project.workspace_id, user_id, workspace_roles)
+    return project
+
+
+async def require_project_read_access(
+    db: AsyncSession,
+    project_id: str,
+    user_id: str,
+) -> Project:
+    return await require_project_access(db, project_id, user_id, WORKSPACE_READ_ROLES)
+
+
+async def require_project_edit_access(
+    db: AsyncSession,
+    project_id: str,
+    user_id: str,
+) -> Project:
+    return await require_project_access(db, project_id, user_id, WORKSPACE_EDIT_ROLES)
+
+
+async def require_project_admin_access(
+    db: AsyncSession,
+    project_id: str,
+    user_id: str,
+) -> Project:
+    return await require_project_access(db, project_id, user_id, WORKSPACE_ADMIN_ROLES)
 
 
 async def create_workspace(

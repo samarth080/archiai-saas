@@ -1,42 +1,62 @@
 from datetime import datetime, timezone
 from copy import deepcopy
 
-from fastapi import HTTPException
-from sqlalchemy import delete, desc, or_, select
+from sqlalchemy import and_, delete, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.activity_log import ActivityLog
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.models.project import Project
+from app.models.team_member import TeamMember
 from app.schemas.project import ActivityLogOut, ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
+from app.services.workspace_service import (
+    WORKSPACE_ADMIN_ROLES,
+    WORKSPACE_EDIT_ROLES,
+    require_project_admin_access,
+    require_project_edit_access,
+    require_project_read_access,
+    require_workspace_role,
+)
 from app.utils.activity import log_activity
-
-
-async def _get_owned_project(db: AsyncSession, user_id: str, project_id: str) -> Project:
-    result = await db.execute(select(Project).where(Project.id == project_id))
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if project.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
-    return project
 
 
 async def create_project(
     db: AsyncSession, user_id: str, data: ProjectCreate
 ) -> ProjectOut:
-    project = Project(user_id=user_id, title=data.title, description=data.description)
+    if data.workspace_id is not None:
+        await require_workspace_role(db, data.workspace_id, user_id, WORKSPACE_EDIT_ROLES)
+    project = Project(
+        user_id=user_id,
+        workspace_id=data.workspace_id,
+        title=data.title,
+        description=data.description,
+    )
     db.add(project)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.created", project_id=project.id)
+    await log_activity(
+        db,
+        user_id,
+        "project.created",
+        project_id=project.id,
+        workspace_id=project.workspace_id,
+    )
     return ProjectOut.model_validate(project)
 
 
 async def list_projects(db: AsyncSession, user_id: str) -> list[ProjectOut]:
     result = await db.execute(
-        select(Project).where(Project.user_id == user_id).order_by(desc(Project.updated_at))
+        select(Project)
+        .where(
+            or_(
+                and_(Project.workspace_id.is_(None), Project.user_id == user_id),
+                Project.workspace_id.in_(
+                    select(TeamMember.workspace_id).where(TeamMember.user_id == user_id)
+                ),
+            )
+        )
+        .order_by(desc(Project.updated_at))
     )
     projects = result.scalars().all()
     return [ProjectOut.model_validate(p) for p in projects]
@@ -45,14 +65,20 @@ async def list_projects(db: AsyncSession, user_id: str) -> list[ProjectOut]:
 async def get_project(
     db: AsyncSession, user_id: str, project_id: str
 ) -> ProjectOut:
-    project = await _get_owned_project(db, user_id, project_id)
+    project = await require_project_read_access(db, project_id, user_id)
     return ProjectOut.model_validate(project)
 
 
 async def update_project(
     db: AsyncSession, user_id: str, project_id: str, data: ProjectUpdate
 ) -> ProjectOut:
-    project = await _get_owned_project(db, user_id, project_id)
+    project = await require_project_edit_access(db, project_id, user_id)
+    if "workspace_id" in data.model_fields_set and data.workspace_id != project.workspace_id:
+        if project.workspace_id is not None:
+            await require_workspace_role(db, project.workspace_id, user_id, WORKSPACE_ADMIN_ROLES)
+        if data.workspace_id is not None:
+            await require_workspace_role(db, data.workspace_id, user_id, WORKSPACE_ADMIN_ROLES)
+        project.workspace_id = data.workspace_id
     if data.title is not None:
         project.title = data.title
     if data.description is not None:
@@ -60,25 +86,37 @@ async def update_project(
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
-    await log_activity(db, user_id, "project.updated", project_id=project_id)
+    await log_activity(
+        db,
+        user_id,
+        "project.updated",
+        project_id=project_id,
+        workspace_id=project.workspace_id,
+    )
     return ProjectOut.model_validate(project)
 
 
 async def delete_project(
     db: AsyncSession, user_id: str, project_id: str
 ) -> None:
-    project = await _get_owned_project(db, user_id, project_id)
+    project = await require_project_admin_access(db, project_id, user_id)
     await db.execute(delete(DesignVersion).where(DesignVersion.project_id == project_id))
     await db.execute(delete(Design).where(Design.project_id == project_id))
     await db.delete(project)
     await db.commit()
-    await log_activity(db, user_id, "project.deleted", project_id=project_id)
+    await log_activity(
+        db,
+        user_id,
+        "project.deleted",
+        project_id=project_id,
+        workspace_id=project.workspace_id,
+    )
 
 
 async def list_project_versions(
     db: AsyncSession, user_id: str, project_id: str
 ) -> list[ProjectVersionOut]:
-    await _get_owned_project(db, user_id, project_id)
+    await require_project_read_access(db, project_id, user_id)
     result = await db.execute(
         select(DesignVersion)
         .where(DesignVersion.project_id == project_id)
@@ -110,7 +148,7 @@ async def list_project_versions(
 async def duplicate_project(
     db: AsyncSession, user_id: str, project_id: str
 ) -> ProjectOut:
-    source = await _get_owned_project(db, user_id, project_id)
+    source = await require_project_read_access(db, project_id, user_id)
     duplicate = Project(
         user_id=user_id,
         title=f"Copy of {source.title}",
@@ -122,7 +160,7 @@ async def duplicate_project(
 
     design_result = await db.execute(
         select(Design)
-        .where(Design.project_id == source.id, Design.user_id == user_id)
+        .where(Design.project_id == source.id)
         .order_by(desc(Design.updated_at))
         .limit(1)
     )
@@ -158,7 +196,7 @@ async def duplicate_project(
 async def list_project_activity(
     db: AsyncSession, user_id: str, project_id: str
 ) -> list[ActivityLogOut]:
-    await _get_owned_project(db, user_id, project_id)
+    await require_project_read_access(db, project_id, user_id)
     result = await db.execute(
         select(ActivityLog)
         .where(ActivityLog.project_id == project_id)

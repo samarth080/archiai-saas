@@ -20,6 +20,7 @@ from app.schemas.design import (
 from app.services.auth_service import get_current_user
 from app.services.design_service import (
     get_design_draft,
+    get_owned_design,
     get_latest_project_design,
     save_generated_design,
     save_design_draft,
@@ -28,6 +29,7 @@ from app.services.design_service import (
 from app.services.layout_service import generate_layout
 from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_floors
 from app.services.refinement_service import apply_refinement, parse_refinement
+from app.services.workspace_service import require_project_read_access
 from app.utils.activity import log_activity
 
 router = APIRouter(prefix="/api/design", tags=["design"])
@@ -168,11 +170,7 @@ async def refine(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> RefineResponse:
-    design = await db.get(Design, request.design_id)
-    if design is None:
-        raise HTTPException(status_code=404, detail="Design not found")
-    if design.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access forbidden")
+    design = await get_owned_design(db, user_id, request.design_id)
 
     ops = parse_refinement(request.prompt)
     if not ops:
@@ -237,8 +235,9 @@ async def fetch_version(
         raise HTTPException(status_code=404, detail="Version not found")
 
     design = await db.get(Design, version.design_id)
-    if design is None or design.user_id != user_id:
+    if design is None:
         raise HTTPException(status_code=403, detail="Access forbidden")
+    await require_project_read_access(db, design.project_id, user_id)
 
     layout = {
         k: v
