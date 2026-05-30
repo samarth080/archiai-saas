@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class ProjectCreate(BaseModel):
     title: str = Field(..., min_length=1)
     description: str | None = None
+    workspace_id: str | None = None
 
     @field_validator("title")
     @classmethod
@@ -27,6 +28,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
+    workspace_id: str | None = None
 
     @field_validator("title")
     @classmethod
@@ -50,6 +52,7 @@ class ProjectUpdate(BaseModel):
 class ProjectOut(BaseModel):
     id: str
     user_id: str
+    workspace_id: str | None = None
     title: str
     description: str | None
     thumbnail_url: str | None = None

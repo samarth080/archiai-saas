@@ -8,9 +8,10 @@ import { getApiErrorMessage } from '../../services/apiError'
 interface CreateProjectModalProps {
   onClose: () => void
   onCreated: (project: Project) => void
+  workspaceId?: string
 }
 
-export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalProps) {
+export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreateProjectModalProps) {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const {
     register,
@@ -24,6 +25,7 @@ export function CreateProjectModal({ onClose, onCreated }: CreateProjectModalPro
       const project = await projectService.create({
         title: data.title.trim(),
         description: data.description?.trim() || undefined,
+        ...(workspaceId ? { workspace_id: workspaceId } : {}),
       })
       onCreated(project)
     } catch (err) {

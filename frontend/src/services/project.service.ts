@@ -3,6 +3,7 @@ import api from './api'
 export interface Project {
   id: string
   user_id: string
+  workspace_id?: string | null
   title: string
   description: string | null
   thumbnail_url?: string | null
@@ -31,11 +32,13 @@ export interface ActivityEntry {
 export interface CreateProjectData {
   title: string
   description?: string
+  workspace_id?: string | null
 }
 
 export interface UpdateProjectData {
   title?: string
   description?: string
+  workspace_id?: string | null
 }
 
 const projectService = {

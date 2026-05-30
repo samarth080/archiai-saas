@@ -11,12 +11,14 @@ async def log_activity(
     user_id: str,
     action: str,
     project_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> None:
     try:
         entry = ActivityLog(
             user_id=user_id,
             action=action,
             project_id=project_id,
+            workspace_id=workspace_id,
             timestamp=datetime.now(timezone.utc),
         )
         db.add(entry)
