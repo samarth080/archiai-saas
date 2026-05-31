@@ -315,7 +315,13 @@ archiai-saas/
 - [x] Existing users can be added by email and shared workspace projects remain compatible with personal projects
 - [x] Workspace activity history includes team actions and shared project/design changes
 - [x] Backend tests, frontend tests, typecheck, production build, migration, and live PostgreSQL API smoke flow pass
-- [ ] Deferred: real-time collaboration, invitations, comments, notifications, and workspace billing
+
+Deferred beyond Sprint 9D:
+- Real-time collaboration
+- Pending email invitations / actual email sending
+- Comments
+- Notifications
+- Workspace billing
 
 ### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
 
