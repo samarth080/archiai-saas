@@ -362,7 +362,7 @@ Intentionally excluded:
 - [x] Task 7: Prompt requirement extraction improvements
 - [x] Task 8: Layout-quality scoring
 - [x] Task 9: Minimal generation-insight UI
-- [ ] Task 10: Future-AI placeholder documentation
+- [x] Task 10: Future-AI placeholder documentation
 - [ ] Task 11: Final checks and Sprint 11 completion update
 
 ### Sprint 12 — Export, Share, and Polish ⏳ Not Started

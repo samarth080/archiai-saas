@@ -199,6 +199,8 @@ Future AI work may optionally add:
 
 Sprint 11 does not implement any provider calls, keys, dependencies, or runtime integration.
 
+See [`docs/FUTURE_AI_INTEGRATION.md`](../../FUTURE_AI_INTEGRATION.md) for the disabled-by-default integration boundary and required controls for any later AI work.
+
 ## 14. Test Plan
 
 Backend:
