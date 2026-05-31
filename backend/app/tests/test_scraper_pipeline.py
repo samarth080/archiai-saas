@@ -198,6 +198,7 @@ async def test_run_source_scraper_stores_raw_record_provenance(monkeypatch):
     scraper_service = import_module("app.services.scraper_service")
     scraper_models = import_module("app.models.scraper_source")
     record_models = import_module("app.models.scraped_record")
+    pattern_models = import_module("app.models.layout_pattern")
     user_models = import_module("app.models.user")
 
     async def scrape_text(_url: str):
@@ -229,12 +230,19 @@ async def test_run_source_scraper_stores_raw_record_provenance(monkeypatch):
         record = await session.scalar(
             select(record_models.ScrapedRecord).where(record_models.ScrapedRecord.run_id == run.id)
         )
+        pattern = await session.scalar(
+            select(pattern_models.LayoutPattern).where(pattern_models.LayoutPattern.source_id == source.id)
+        )
 
         assert run.status == "completed"
         assert run.records_collected == 1
         assert record.source_id == source.id
         assert record.source_url == source.base_url
         assert record.accessed_at is not None
+        assert pattern.room_type == "bedroom"
+        assert pattern.typical_area_sqm_min == 10
+        assert pattern.source_url == source.base_url
+        assert pattern.accessed_at is not None
 
 
 def test_raw_scraped_record_normalisation():

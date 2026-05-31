@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.layout_pattern import LayoutPattern
 from app.models.scraped_record import ScrapedRecord
 from app.models.scraper_run import ScraperRun
 from app.models.scraper_source import ScraperSource
@@ -12,6 +13,7 @@ from app.services.robots_txt_checker import (
     RobotsTxtChecker,
     default_robots_checker,
 )
+from app.services.scraper_cleaning_service import extract_layout_metadata
 
 
 class ScraperBlockedError(ValueError):
@@ -104,6 +106,12 @@ async def run_source_scraper(
             raw_metadata_json={"data_type": source.data_type},
         )
         db.add(record)
+        patterns = extract_layout_metadata(
+            raw_text,
+            source_url=source.base_url,
+            accessed_at=checked_at,
+        )
+        db.add_all(LayoutPattern(source_id=source.id, **pattern) for pattern in patterns)
         run.status = "completed"
         run.records_collected = 1
         run.completed_at = checked_at
