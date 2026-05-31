@@ -134,6 +134,19 @@ async def test_robots_txt_checker_blocks_invalid_url():
     assert "invalid" in result.reason.lower()
 
 
+async def test_robots_txt_checker_blocks_network_error():
+    robots_module = import_module("app.services.robots_txt_checker")
+
+    async def fetch_text(_url: str):
+        raise OSError("network unavailable")
+
+    checker = robots_module.RobotsTxtChecker(fetch_text=fetch_text)
+    result = await checker.check_url("https://example.com/public/layout-guide")
+
+    assert result.allowed is False
+    assert "failed" in result.reason.lower()
+
+
 async def test_scraper_runner_refuses_disallowed_source(monkeypatch):
     scraper_service = import_module("app.services.scraper_service")
     robots_module = import_module("app.services.robots_txt_checker")
