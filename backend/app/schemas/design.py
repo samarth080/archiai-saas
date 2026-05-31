@@ -91,6 +91,13 @@ class FloorResponse(BaseModel):
     rooms: list[RoomResponse]
 
 
+class GenerationInsights(BaseModel):
+    score: int
+    reasons: list[str]
+    warnings: list[str]
+    appliedRules: list[str]
+
+
 class GenerateResponse(BaseModel):
     version: str
     designId: str | None = None
@@ -99,6 +106,7 @@ class GenerateResponse(BaseModel):
     building: BuildingResponse | None = None
     floors: list[FloorResponse] | None = None
     rooms: list[RoomResponse]
+    insights: GenerationInsights | None = None
 
 
 class RefineResponse(GenerateResponse):

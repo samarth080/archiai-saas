@@ -3,6 +3,7 @@ from math import sqrt
 
 from app.services.building_template_service import apply_template_defaults, get_building_template
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
+from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
 
 ROOM_COLORS: dict[str, str] = {
@@ -293,7 +294,7 @@ def generate_layout(
         floors.append(floor)
         flat_rooms.extend(rooms)
 
-    return {
+    layout = {
         "version": "1.0",
         "metadata": {
             "prompt":        prompt,
@@ -316,3 +317,9 @@ def generate_layout(
         "floors": floors,
         "rooms": flat_rooms,
     }
+    layout["insights"] = score_layout_quality(
+        layout,
+        required_room_types={room.room_type for room in room_specs},
+        pattern_rules=pattern_rules,
+    ).to_dict()
+    return layout
