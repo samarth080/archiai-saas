@@ -72,6 +72,7 @@ class GenerateMetadata(BaseModel):
     totalFloors: int | None = None
     totalRooms: int | None = None
     totalAreaSqm: float | None = None
+    requestedAreaSqm: float | None = None
     patternDataUsed: bool | None = None
     zonesDetected: list[str] | None = None
     template: str | None = None

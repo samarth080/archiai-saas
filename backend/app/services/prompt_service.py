@@ -7,6 +7,8 @@ WORD_TO_NUM = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
 }
 
+SQFT_TO_SQM = 0.092903
+
 ORDINAL_TO_NUM = {
     "first": 1, "second": 2, "third": 3,
 }
@@ -19,6 +21,17 @@ ROOM_DEFAULTS: dict[str, dict] = {
     "bathroom":       {"label": "Bathroom",       "w": 3.0, "d": 3.0},
     "dining_room":    {"label": "Dining Room",    "w": 4.0, "d": 4.0},
     "office":         {"label": "Office",         "w": 4.0, "d": 4.0},
+    "study":          {"label": "Home Office",    "w": 3.0, "d": 3.0},
+    "workspace":      {"label": "Open Workspace", "w": 6.0, "d": 5.0},
+    "meeting_room":   {"label": "Meeting Room",   "w": 4.0, "d": 3.0},
+    "reception":      {"label": "Reception",      "w": 3.5, "d": 3.5},
+    "waiting_room":   {"label": "Waiting Room",   "w": 4.0, "d": 4.0},
+    "consultation_room": {"label": "Consultation Room", "w": 3.5, "d": 3.5},
+    "classroom":      {"label": "Classroom",      "w": 7.0, "d": 6.0},
+    "retail_display": {"label": "Display Area",   "w": 7.0, "d": 6.0},
+    "checkout":       {"label": "Checkout",       "w": 3.0, "d": 2.0},
+    "storage":        {"label": "Storage",        "w": 3.0, "d": 3.0},
+    "entry":          {"label": "Entry",          "w": 2.5, "d": 2.5},
     "hallway":        {"label": "Hallway",        "w": 3.0, "d": 2.0},
     "balcony":        {"label": "Balcony",        "w": 4.0, "d": 2.0},
     "garage":         {"label": "Garage",         "w": 5.0, "d": 6.0},
@@ -27,17 +40,28 @@ ROOM_DEFAULTS: dict[str, dict] = {
 
 # Longer/more specific phrases first to avoid partial matches
 ROOM_PATTERNS: list[tuple[str, list[str]]] = [
+    ("consultation_room", ["consultation room", "consult room", "exam room"]),
+    ("meeting_room",   ["meeting room", "conference room"]),
+    ("waiting_room",   ["waiting room", "waiting area"]),
+    ("retail_display", ["display area", "retail display", "sales floor"]),
     ("master_bedroom", ["master bedroom", "master bed", "primary bedroom"]),
     ("living_room",    ["living room", "lounge", "sitting room", "family room"]),
     ("dining_room",    ["dining room", "dining area", "dining"]),
+    ("reception",      ["reception", "front desk"]),
+    ("checkout",       ["checkout", "cash register", "till"]),
+    ("workspace",      ["open workspace", "workspace", "work area"]),
+    ("study",          ["home office", "study"]),
     ("bathroom",       ["bathroom", "bath room", "en suite", "ensuite", "toilet", "washroom", "wc"]),
     ("kitchen",        ["kitchen", "kitchenette"]),
+    ("classroom",      ["classroom"]),
     ("bedroom",        ["bedroom", "bed room", "guest bedroom", "guest room", "kids room"]),
-    ("office",         ["office", "study", "home office", "workspace"]),
-    ("hallway",        ["hallway", "hall", "corridor", "foyer", "entrance"]),
+    ("office",         ["office"]),
+    ("hallway",        ["hallway", "hall", "corridor", "foyer"]),
+    ("entry",          ["entry", "entrance"]),
     ("balcony",        ["balcony", "terrace", "porch"]),
     ("garage",         ["garage", "car park", "parking"]),
-    ("utility",        ["utility room", "laundry", "storage"]),
+    ("storage",        ["storage", "store room", "stock room"]),
+    ("utility",        ["utility room", "laundry"]),
 ]
 
 SIZE_MODIFIERS: dict[str, float] = {
@@ -46,9 +70,13 @@ SIZE_MODIFIERS: dict[str, float] = {
 }
 
 BUILDING_KEYWORDS: dict[str, list[str]] = {
+    "studio":    ["studio apartment", "studio flat", "studio"],
+    "clinic":    ["clinic", "medical practice"],
+    "classroom": ["classroom", "school room", "teaching room"],
+    "retail":    ["retail", "shop", "store"],
     "apartment": ["apartment", "flat", "condo"],
     "house":     ["house", "home", "villa", "cottage"],
-    "office":    ["office building", "workspace", "studio"],
+    "office":    ["office building", "office", "workspace"],
 }
 
 _COUNT_ALTS = "|".join(WORD_TO_NUM.keys())
@@ -109,8 +137,24 @@ def extract_total_floors(prompt: str) -> int:
     return 1
 
 
+def extract_total_area_sqm(prompt: str) -> float | None:
+    match = re.search(
+        r"\b(\d+(?:\.\d+)?)\s*(sqm|sq\.?\s*m|m2|square metres?|square meters?|sqft|sq\.?\s*ft|ft2|square feet)\b",
+        prompt,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    area = float(match.group(1))
+    unit = match.group(2).lower().replace(".", "").replace(" ", "")
+    if unit in {"sqft", "ft2", "squarefeet"}:
+        area *= SQFT_TO_SQM
+    return round(area, 2)
+
+
 def extract_rooms(prompt: str) -> list[RoomSpec]:
     text = prompt.lower()
+    text = re.sub(r"\bopen[\s-]+plan\s+kitchen\s+living\b", "open plan kitchen and living room", text)
     specs: list[RoomSpec] = []
 
     for room_type, keywords in ROOM_PATTERNS:

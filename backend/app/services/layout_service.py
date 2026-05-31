@@ -13,6 +13,17 @@ ROOM_COLORS: dict[str, str] = {
     "bathroom":       "#60a5fa",
     "dining_room":    "#facc15",
     "office":         "#a78bfa",
+    "study":          "#c084fc",
+    "workspace":      "#8b5cf6",
+    "meeting_room":   "#7c3aed",
+    "reception":      "#14b8a6",
+    "waiting_room":   "#2dd4bf",
+    "consultation_room": "#38bdf8",
+    "classroom":      "#f59e0b",
+    "retail_display": "#22c55e",
+    "checkout":       "#eab308",
+    "storage":        "#a8a29e",
+    "entry":          "#64748b",
     "hallway":        "#94a3b8",
     "balcony":        "#4ade80",
     "garage":         "#78716c",
@@ -46,7 +57,7 @@ def _size_room_specs(
     rules: LayoutPatternRules,
     total_area_sqm: float | None = None,
 ) -> list[RoomSpec]:
-    sized: list[RoomSpec] = []
+    targets: list[tuple[RoomSpec, float]] = []
     for room in specs:
         rule = rules.rule_for(room.room_type)
         current_area = room.w * room.d
@@ -62,6 +73,29 @@ def _size_room_specs(
                 rule.typical_area_sqm_max,
             )
 
+        targets.append((room, target_area))
+
+    has_ratio_guidance = any(
+        rules.rule_for(room.room_type).room_to_total_area_ratio_min is not None
+        and rules.rule_for(room.room_type).room_to_total_area_ratio_max is not None
+        for room, _ in targets
+    )
+    if total_area_sqm is not None and targets and not has_ratio_guidance:
+        allocated_area = sum(target for _, target in targets)
+        scale = total_area_sqm / allocated_area if allocated_area else 1.0
+        targets = [
+            (
+                room,
+                min(
+                    max(target * scale, rules.rule_for(room.room_type).typical_area_sqm_min),
+                    rules.rule_for(room.room_type).typical_area_sqm_max,
+                ),
+            )
+            for room, target in targets
+        ]
+
+    sized: list[RoomSpec] = []
+    for room, target_area in targets:
         aspect_ratio = room.w / room.d if room.d else 1.0
         sized.append(
             RoomSpec(
@@ -270,6 +304,7 @@ def generate_layout(
             "totalFloors":   total_floors,
             "totalRooms":    len(room_specs),
             "totalAreaSqm":  _room_area(room_specs),
+            "requestedAreaSqm": total_area_sqm,
             "patternDataUsed": pattern_rules.pattern_data_used,
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
             "template": template.name,

@@ -3,6 +3,7 @@ from app.services.prompt_service import (
     RoomSpec,
     detect_building_type,
     extract_rooms,
+    extract_total_area_sqm,
     extract_total_floors,
 )
 
@@ -106,3 +107,46 @@ def test_floor_count_does_not_break_room_extraction():
     assert "kitchen" in types
     assert "living_room" in types
     assert "bathroom" in types
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected_types"),
+    [
+        ("open plan kitchen living", {"kitchen", "living_room"}),
+        ("ensuite master bedroom", {"bathroom", "master_bedroom"}),
+        ("home office", {"study"}),
+        ("small clinic with waiting and consultation rooms", {"consultation_room"}),
+        ("office with reception, meeting room and open workspace", {"reception", "meeting_room", "workspace"}),
+        ("studio apartment with balcony", {"balcony"}),
+        ("retail shop with storage and checkout", {"storage", "checkout"}),
+    ],
+)
+def test_extract_rooms_handles_sprint11_phrases(prompt: str, expected_types: set[str]):
+    types = {room.room_type for room in extract_rooms(prompt)}
+    assert expected_types.issubset(types)
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("apartment around 120 sqm", 120.0),
+        ("house with 120 square meters", 120.0),
+        ("shop with 1000 sq ft", 92.9),
+    ],
+)
+def test_extract_total_area_sqm(prompt: str, expected: float):
+    assert extract_total_area_sqm(prompt) == expected
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("studio apartment", "studio"),
+        ("small clinic", "clinic"),
+        ("classroom layout", "classroom"),
+        ("retail shop", "retail"),
+        ("small office", "office"),
+    ],
+)
+def test_detect_building_type_for_sprint11_templates(prompt: str, expected: str):
+    assert detect_building_type(prompt) == expected
