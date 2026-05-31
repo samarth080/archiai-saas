@@ -71,6 +71,7 @@ class GenerateMetadata(BaseModel):
     totalFloors: int | None = None
     totalRooms: int | None = None
     totalAreaSqm: float | None = None
+    patternDataUsed: bool | None = None
 
 
 class BuildingResponse(BaseModel):

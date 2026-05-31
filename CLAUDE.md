@@ -356,7 +356,7 @@ Intentionally excluded:
 - [x] Task 1: Sprint 11 layout-improvement plan/spec
 - [x] Task 2: Benchmark prompt and quality tests
 - [x] Task 3: Layout-pattern access service with fallbacks
-- [ ] Task 4: Room-sizing rule improvements
+- [x] Task 4: Room-sizing rule improvements
 - [ ] Task 5: Zoning and adjacency improvements
 - [ ] Task 6: Building-type layout templates
 - [ ] Task 7: Prompt requirement extraction improvements

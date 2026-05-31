@@ -1,5 +1,7 @@
 import uuid
+from math import sqrt
 
+from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 from app.services.prompt_service import RoomSpec
 
 ROOM_COLORS: dict[str, str] = {
@@ -38,6 +40,40 @@ def _floor_name(level: int) -> str:
 
 def _room_area(specs: list[RoomSpec]) -> float:
     return round(sum(room.w * room.d for room in specs), 2)
+
+
+def _size_room_specs(
+    specs: list[RoomSpec],
+    rules: LayoutPatternRules,
+    total_area_sqm: float | None = None,
+) -> list[RoomSpec]:
+    sized: list[RoomSpec] = []
+    for room in specs:
+        rule = rules.rule_for(room.room_type)
+        current_area = room.w * room.d
+        target_area = min(max(current_area, rule.typical_area_sqm_min), rule.typical_area_sqm_max)
+        if (
+            total_area_sqm is not None
+            and rule.room_to_total_area_ratio_min is not None
+            and rule.room_to_total_area_ratio_max is not None
+        ):
+            ratio = (rule.room_to_total_area_ratio_min + rule.room_to_total_area_ratio_max) / 2
+            target_area = min(
+                max(total_area_sqm * ratio, rule.typical_area_sqm_min),
+                rule.typical_area_sqm_max,
+            )
+
+        aspect_ratio = room.w / room.d if room.d else 1.0
+        sized.append(
+            RoomSpec(
+                label=room.label,
+                room_type=room.room_type,
+                w=round(sqrt(target_area * aspect_ratio), 2),
+                h=room.h,
+                d=round(sqrt(target_area / aspect_ratio), 2),
+            )
+        )
+    return sized
 
 
 def _place_rooms(
@@ -157,8 +193,15 @@ def generate_layout(
     prompt: str = "",
     building_type: str = "apartment",
     total_floors: int = 1,
+    pattern_rules: LayoutPatternRules | None = None,
+    total_area_sqm: float | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
+    pattern_rules = pattern_rules or fallback_layout_rules(
+        building_type,
+        {room.room_type for room in room_specs},
+    )
+    room_specs = _size_room_specs(room_specs, pattern_rules, total_area_sqm)
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
     floors: list[dict] = []
     flat_rooms: list[dict] = []
@@ -197,6 +240,7 @@ def generate_layout(
             "totalFloors":   total_floors,
             "totalRooms":    len(room_specs),
             "totalAreaSqm":  _room_area(room_specs),
+            "patternDataUsed": pattern_rules.pattern_data_used,
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,

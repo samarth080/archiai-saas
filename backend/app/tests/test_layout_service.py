@@ -1,6 +1,7 @@
 import pytest
 from app.services.prompt_service import RoomSpec
 from app.services.layout_service import generate_layout
+from app.services.layout_pattern_service import LayoutPatternRules, RoomPatternRule
 
 
 def _make_specs() -> list[RoomSpec]:
@@ -139,3 +140,58 @@ def test_multi_floor_split_places_public_rooms_on_ground_and_bedrooms_upstairs()
 
     assert {"Living Room", "Kitchen", "Bathroom", "Stairs"}.issubset(ground_labels)
     assert {"Master Bedroom", "Bedroom 2", "Bedroom 3", "Stairs"}.issubset(first_labels)
+
+
+def test_pattern_room_size_range_clamps_generated_dimensions():
+    specs = [RoomSpec(label="Bedroom", room_type="bedroom", w=6.0, h=3.0, d=6.0)]
+    rules = LayoutPatternRules(
+        building_type="apartment",
+        room_rules={
+            "bedroom": RoomPatternRule(
+                room_type="bedroom",
+                typical_area_sqm_min=11.0,
+                typical_area_sqm_max=15.0,
+                zone="private",
+                pattern_data_used=True,
+            )
+        },
+        layout_patterns=("public_private_split",),
+        pattern_data_used=True,
+    )
+
+    layout = generate_layout(specs, pattern_rules=rules)
+    bedroom = layout["rooms"][0]
+
+    assert bedroom["size"]["w"] * bedroom["size"]["d"] == pytest.approx(15.0, abs=0.1)
+    assert layout["metadata"]["patternDataUsed"] is True
+
+
+def test_total_area_ratio_guides_room_dimensions_when_pattern_provides_ratio():
+    specs = [RoomSpec(label="Bedroom", room_type="bedroom", w=4.0, h=3.0, d=4.0)]
+    rules = LayoutPatternRules(
+        building_type="apartment",
+        room_rules={
+            "bedroom": RoomPatternRule(
+                room_type="bedroom",
+                typical_area_sqm_min=10.0,
+                typical_area_sqm_max=20.0,
+                zone="private",
+                room_to_total_area_ratio_min=0.12,
+                room_to_total_area_ratio_max=0.16,
+                pattern_data_used=True,
+            )
+        },
+        layout_patterns=("public_private_split",),
+        pattern_data_used=True,
+    )
+
+    layout = generate_layout(specs, pattern_rules=rules, total_area_sqm=100.0)
+    bedroom = layout["rooms"][0]
+
+    assert bedroom["size"]["w"] * bedroom["size"]["d"] == pytest.approx(14.0, abs=0.1)
+
+
+def test_fallback_sizing_metadata_does_not_claim_pattern_data():
+    layout = generate_layout(_make_specs())
+
+    assert layout["metadata"]["patternDataUsed"] is False
