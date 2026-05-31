@@ -323,7 +323,18 @@ Deferred beyond Sprint 9D:
 - Notifications
 - Workspace billing
 
-### Sprint 10 — Web Scraper and Data Pipeline ⏳ Not Started
+### Sprint 10 — Web Scraper and Data Pipeline ⏳ In Progress
+
+- [x] Task 1: Sprint 10 scraper/data-pipeline plan
+- [ ] Task 2: Backend scraper pipeline tests
+- [ ] Task 3: ScraperSource and ScraperRun models/migration
+- [ ] Task 4: RobotsTxtChecker utility
+- [ ] Task 5: Basic safe-source scraper runner
+- [ ] Task 6: Data cleaning and deterministic metadata extraction
+- [ ] Task 7: Structured LayoutPattern model/migration
+- [ ] Task 8: Scraper management API endpoints
+- [ ] Task 9: Scraper monitoring UI
+- [ ] Task 10: Final checks and Sprint 10 completion update
 
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
 
