@@ -19,8 +19,6 @@ ROOM_COLORS: dict[str, str] = {
     "stairs":         "#9ca3af",
 }
 
-_PUBLIC  = frozenset({"living_room", "kitchen", "dining_room", "hallway"})
-_PRIVATE = frozenset({"master_bedroom", "bedroom", "bathroom"})
 _GAP     = 1.0   # metres between rooms in same row
 _ZONE_GAP = 2.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
@@ -78,24 +76,50 @@ def _size_room_specs(
 
 def _place_rooms(
     specs: list[RoomSpec],
+    rules: LayoutPatternRules,
     floor_id: str = "floor_0",
     floor_level: int = 0,
     elevation: float = 0.0,
     x_offset: float = 0.0,
 ) -> list[dict]:
-    public  = [r for r in specs if r.room_type in _PUBLIC]
-    private = [r for r in specs if r.room_type in _PRIVATE]
-    other   = [r for r in specs if r.room_type not in _PUBLIC and r.room_type not in _PRIVATE]
+    public_cluster = {"entry", "living_room", "kitchen", "dining_room"}
+    placement_priority = {
+        "entry": 0,
+        "living_room": 1,
+        "kitchen": 2,
+        "dining_room": 3,
+        "hallway": 4,
+    }
+
+    def placement_group(room: RoomSpec) -> str:
+        zone = rules.zone_for(room.room_type)
+        if room.room_type in public_cluster:
+            return "public_cluster"
+        return zone
+
+    groups: dict[str, list[RoomSpec]] = {
+        "public_cluster": [],
+        "circulation": [],
+        "private": [],
+        "service": [],
+        "public": [],
+        "other": [],
+    }
+    for room in specs:
+        groups.get(placement_group(room), groups["other"]).append(room)
+
+    for rooms in groups.values():
+        rooms.sort(key=lambda room: (placement_priority.get(room.room_type, 50), room.label))
 
     result: list[dict] = []
     current_z = 0.0
 
-    for zone in (public, private, other):
-        if not zone:
+    for zone_rooms in groups.values():
+        if not zone_rooms:
             continue
         current_x = x_offset
         zone_max_d = 0.0
-        for room in zone:
+        for room in zone_rooms:
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)
             pos_z = round(current_z + room.d / 2, 2)
@@ -106,6 +130,7 @@ def _place_rooms(
                 "objectType": "room",
                 "floorId": floor_id,
                 "floorLevel": floor_level,
+                "zone": rules.zone_for(room.room_type),
                 "position": {"x": pos_x, "y": pos_y, "z": pos_z},
                 "size":     {"w": room.w, "h": room.h, "d": room.d},
                 "color":    ROOM_COLORS.get(room.room_type, "#94a3b8"),
@@ -125,6 +150,7 @@ def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
         "objectType": "stair",
         "floorId": floor_id,
         "floorLevel": floor_level,
+        "zone": "circulation",
         "position": {
             "x": _STAIRS_POSITION["x"],
             "y": round(elevation + _STAIRS_SIZE["h"] / 2, 2),
@@ -211,6 +237,7 @@ def generate_layout(
         elevation = round(level * _FLOOR_HEIGHT, 2)
         rooms = _place_rooms(
             specs,
+            pattern_rules,
             floor_id=floor_id,
             floor_level=level,
             elevation=elevation,
@@ -241,6 +268,7 @@ def generate_layout(
             "totalRooms":    len(room_specs),
             "totalAreaSqm":  _room_area(room_specs),
             "patternDataUsed": pattern_rules.pattern_data_used,
+            "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,

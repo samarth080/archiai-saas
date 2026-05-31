@@ -56,6 +56,7 @@ class RoomResponse(BaseModel):
     objectType: str | None = None
     floorId: str | None = None
     floorLevel: int | None = None
+    zone: str | None = None
     position: RoomPosition
     size: RoomSize
     rotation: RoomRotation | None = None
@@ -72,6 +73,7 @@ class GenerateMetadata(BaseModel):
     totalRooms: int | None = None
     totalAreaSqm: float | None = None
     patternDataUsed: bool | None = None
+    zonesDetected: list[str] | None = None
 
 
 class BuildingResponse(BaseModel):

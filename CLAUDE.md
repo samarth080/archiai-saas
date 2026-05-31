@@ -357,7 +357,7 @@ Intentionally excluded:
 - [x] Task 2: Benchmark prompt and quality tests
 - [x] Task 3: Layout-pattern access service with fallbacks
 - [x] Task 4: Room-sizing rule improvements
-- [ ] Task 5: Zoning and adjacency improvements
+- [x] Task 5: Zoning and adjacency improvements
 - [ ] Task 6: Building-type layout templates
 - [ ] Task 7: Prompt requirement extraction improvements
 - [ ] Task 8: Layout-quality scoring
