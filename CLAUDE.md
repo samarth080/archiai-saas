@@ -354,7 +354,7 @@ Intentionally excluded:
 ### Sprint 11 — Layout Improvement Using Pattern Data ⏳ In Progress
 
 - [x] Task 1: Sprint 11 layout-improvement plan/spec
-- [ ] Task 2: Benchmark prompt and quality tests
+- [x] Task 2: Benchmark prompt and quality tests
 - [ ] Task 3: Layout-pattern access service with fallbacks
 - [ ] Task 4: Room-sizing rule improvements
 - [ ] Task 5: Zoning and adjacency improvements
