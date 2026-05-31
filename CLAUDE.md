@@ -327,7 +327,7 @@ Deferred beyond Sprint 9D:
 
 - [x] Task 1: Sprint 10 scraper/data-pipeline plan
 - [x] Task 2: Backend scraper pipeline tests
-- [ ] Task 3: ScraperSource and ScraperRun models/migration
+- [x] Task 3: ScraperSource and ScraperRun models/migration
 - [ ] Task 4: RobotsTxtChecker utility
 - [ ] Task 5: Basic safe-source scraper runner
 - [ ] Task 6: Data cleaning and deterministic metadata extraction
