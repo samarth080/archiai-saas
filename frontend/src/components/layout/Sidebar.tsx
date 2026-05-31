@@ -26,6 +26,9 @@ export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
         <NavLink to="/workspaces" className={navClassName}>
           Workspaces
         </NavLink>
+        <NavLink to="/scraper" className={navClassName}>
+          Data Pipeline
+        </NavLink>
       </nav>
       <div className="border-t border-slate-700 p-4">
         <p className="mb-2 truncate text-sm text-slate-300">
