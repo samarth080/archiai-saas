@@ -119,7 +119,7 @@ SECRET_KEY=test DATABASE_URL=sqlite+aiosqlite:///:memory: pytest app/tests/ -v
 
 ## License
 
-Copyright (c) 2026 Samarth Chatli. All rights reserved.
+Copyright (c) 2026 Udai Batta & Samarth Chatli. All rights reserved.
 
 This project is proprietary software. See [LICENSE](LICENSE) for full terms.
 Unauthorized use, copying, or distribution is strictly prohibited and will have legal consequences.
