@@ -279,6 +279,20 @@ def test_metadata_extraction_captures_opening_and_circulation_notes():
     assert "windows" in bedroom["door_window_notes"].lower()
 
 
+def test_metadata_extraction_converts_square_feet_to_square_metres():
+    cleaning_service = import_module("app.services.scraper_cleaning_service")
+
+    metadata = cleaning_service.extract_layout_metadata(
+        "House bedroom reference: bedrooms are typically 100-150 sqft.",
+        source_url="https://example.com/public-layout-guide",
+        accessed_at=datetime(2026, 5, 31, tzinfo=timezone.utc),
+    )
+
+    bedroom = next(record for record in metadata if record["room_type"] == "bedroom")
+    assert bedroom["typical_area_sqm_min"] == 9.29
+    assert bedroom["typical_area_sqm_max"] == 13.94
+
+
 async def test_processed_layout_pattern_persists_source_and_access_timestamp(client: AsyncClient, monkeypatch):
     token = await _register_and_token(client, "scraper-pattern@example.com")
     source = await client.post(
