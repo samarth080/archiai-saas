@@ -361,7 +361,7 @@ Intentionally excluded:
 - [x] Task 6: Building-type layout templates
 - [x] Task 7: Prompt requirement extraction improvements
 - [x] Task 8: Layout-quality scoring
-- [ ] Task 9: Minimal generation-insight UI
+- [x] Task 9: Minimal generation-insight UI
 - [ ] Task 10: Future-AI placeholder documentation
 - [ ] Task 11: Final checks and Sprint 11 completion update
 

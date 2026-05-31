@@ -20,6 +20,7 @@ import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDraw
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
+import { GenerationInsights } from '../../components/canvas/GenerationInsights'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -477,6 +478,8 @@ export default function ProjectPage() {
             </div>
             <Inspector />
           </div>
+
+          <GenerationInsights />
 
           {refinementSummary && (
             <div

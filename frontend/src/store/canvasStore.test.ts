@@ -17,6 +17,7 @@ beforeEach(() => {
     designId: null,
     designVersionId: null,
     layoutMetadata: {},
+    generationInsights: null,
     selectedId: null,
     snapToGrid: false,
     gridSize: 1,
@@ -385,5 +386,24 @@ describe('loadLayout and serializeLayout', () => {
     expect(layout.floors).toHaveLength(2)
     expect(layout.floors?.[1].rooms).toHaveLength(1)
     expect(layout.metadata?.totalFloors).toBe(2)
+  })
+
+  it('preserves generation insights when loading and serializing a layout', () => {
+    const insights = {
+      score: 92,
+      reasons: ['Public rooms form a useful cluster'],
+      warnings: [],
+      appliedRules: ['apartment template', 'pattern sizing'],
+    }
+
+    useCanvasStore.getState().loadLayout({
+      version: '1.0',
+      metadata: { buildingType: 'apartment' },
+      rooms: [],
+      insights,
+    })
+
+    expect(useCanvasStore.getState().generationInsights).toEqual(insights)
+    expect(useCanvasStore.getState().serializeLayout().insights).toEqual(insights)
   })
 })

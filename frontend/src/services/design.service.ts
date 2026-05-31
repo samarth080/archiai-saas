@@ -1,5 +1,5 @@
 import api from './api'
-import type { CanvasFloor, CanvasLayout, Room } from '../store/canvasStore'
+import type { CanvasFloor, CanvasLayout, GenerationInsights, Room } from '../store/canvasStore'
 
 export interface GenerateMetadata {
   [key: string]: unknown
@@ -23,6 +23,7 @@ export interface GenerateResponse {
   }
   floors?: CanvasFloor[]
   rooms: Room[]
+  insights?: GenerationInsights
 }
 
 export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> {
