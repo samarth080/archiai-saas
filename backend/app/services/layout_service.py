@@ -1,6 +1,7 @@
 import uuid
 from math import sqrt
 
+from app.services.building_template_service import apply_template_defaults, get_building_template
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 from app.services.prompt_service import RoomSpec
 
@@ -223,6 +224,8 @@ def generate_layout(
     total_area_sqm: float | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
+    template = get_building_template(building_type)
+    room_specs = apply_template_defaults(room_specs, building_type)
     pattern_rules = pattern_rules or fallback_layout_rules(
         building_type,
         {room.room_type for room in room_specs},
@@ -269,6 +272,8 @@ def generate_layout(
             "totalAreaSqm":  _room_area(room_specs),
             "patternDataUsed": pattern_rules.pattern_data_used,
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
+            "template": template.name,
+            "templateStrategy": template.layout_pattern_strategy,
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,

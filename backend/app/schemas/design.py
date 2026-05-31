@@ -74,6 +74,8 @@ class GenerateMetadata(BaseModel):
     totalAreaSqm: float | None = None
     patternDataUsed: bool | None = None
     zonesDetected: list[str] | None = None
+    template: str | None = None
+    templateStrategy: str | None = None
 
 
 class BuildingResponse(BaseModel):
