@@ -332,7 +332,7 @@ Deferred beyond Sprint 9D:
 - [x] Task 5: Basic safe-source scraper runner
 - [x] Task 6: Data cleaning and deterministic metadata extraction
 - [x] Task 7: Structured LayoutPattern model/migration
-- [ ] Task 8: Scraper management API endpoints
+- [x] Task 8: Scraper management API endpoints
 - [ ] Task 9: Scraper monitoring UI
 - [ ] Task 10: Final checks and Sprint 10 completion update
 

@@ -56,6 +56,31 @@ async def test_authenticated_user_can_create_and_list_scraper_sources(client: As
     assert [source["id"] for source in listed.json()] == [created.json()["id"]]
 
 
+async def test_authenticated_user_can_get_update_and_delete_unused_scraper_source(client: AsyncClient):
+    token = await _register_and_token(client, "scraper-source-crud@example.com")
+    created = await client.post(
+        "/api/scraper/sources",
+        json=SOURCE_PAYLOAD,
+        headers=_headers(token),
+    )
+    source_id = created.json()["id"]
+
+    detail = await client.get(f"/api/scraper/sources/{source_id}", headers=_headers(token))
+    updated = await client.put(
+        f"/api/scraper/sources/{source_id}",
+        json={"name": "Updated public guidance"},
+        headers=_headers(token),
+    )
+    deleted = await client.delete(f"/api/scraper/sources/{source_id}", headers=_headers(token))
+    listed = await client.get("/api/scraper/sources", headers=_headers(token))
+
+    assert detail.status_code == 200
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Updated public guidance"
+    assert deleted.status_code == 204
+    assert listed.json() == []
+
+
 async def test_scraper_run_returns_status_and_updates_record_count(client: AsyncClient, monkeypatch):
     token = await _register_and_token(client, "scraper-run@example.com")
     source = await client.post(
@@ -86,6 +111,74 @@ async def test_scraper_run_returns_status_and_updates_record_count(client: Async
     assert response.status_code == 200
     assert response.json()["status"] == "completed"
     assert response.json()["records_collected"] == 1
+
+
+async def test_scraper_run_history_and_detail_are_available(client: AsyncClient, monkeypatch):
+    token = await _register_and_token(client, "scraper-history@example.com")
+    source = await client.post(
+        "/api/scraper/sources",
+        json=SOURCE_PAYLOAD,
+        headers=_headers(token),
+    )
+    scraper_service = import_module("app.services.scraper_service")
+    robots_module = import_module("app.services.robots_txt_checker")
+
+    async def allowed(_url: str):
+        return robots_module.RobotsCheckResult(allowed=True, reason="Allowed by robots.txt")
+
+    async def fetch_page(_url: str):
+        return "<html><body><p>Bedroom is typically 10-16 sqm.</p></body></html>"
+
+    monkeypatch.setattr(scraper_service.default_robots_checker, "check_url", allowed)
+    monkeypatch.setattr(scraper_service, "fetch_public_page", fetch_page)
+    completed = await client.post(
+        "/api/scraper/run",
+        json={"source_id": source.json()["id"]},
+        headers=_headers(token),
+    )
+
+    runs = await client.get("/api/scraper/runs", headers=_headers(token))
+    detail = await client.get(f"/api/scraper/runs/{completed.json()['id']}", headers=_headers(token))
+
+    assert runs.status_code == 200
+    assert [run["id"] for run in runs.json()] == [completed.json()["id"]]
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "completed"
+
+
+async def test_scraper_api_records_failed_run_without_fetching_disallowed_source(client: AsyncClient, monkeypatch):
+    token = await _register_and_token(client, "scraper-blocked-api@example.com")
+    source = await client.post(
+        "/api/scraper/sources",
+        json=SOURCE_PAYLOAD,
+        headers=_headers(token),
+    )
+    scraper_service = import_module("app.services.scraper_service")
+    robots_module = import_module("app.services.robots_txt_checker")
+
+    async def blocked(_url: str):
+        return robots_module.RobotsCheckResult(allowed=False, reason="Disallowed by robots.txt")
+
+    async def unexpected_fetch(_url: str):
+        raise AssertionError("Blocked source must not be fetched")
+
+    monkeypatch.setattr(scraper_service.default_robots_checker, "check_url", blocked)
+    monkeypatch.setattr(scraper_service, "fetch_public_page", unexpected_fetch)
+
+    run = await client.post(
+        "/api/scraper/run",
+        json={"source_id": source.json()["id"]},
+        headers=_headers(token),
+    )
+    updated_source = await client.get(
+        f"/api/scraper/sources/{source.json()['id']}",
+        headers=_headers(token),
+    )
+
+    assert run.status_code == 200
+    assert run.json()["status"] == "failed"
+    assert "disallowed" in run.json()["error_message"].lower()
+    assert updated_source.json()["is_permitted"] is False
 
 
 async def test_robots_txt_checker_allows_public_path():
