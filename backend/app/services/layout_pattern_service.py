@@ -61,6 +61,7 @@ class LayoutPatternRules:
     room_rules: dict[str, RoomPatternRule]
     layout_patterns: tuple[str, ...]
     pattern_data_used: bool = False
+    pattern_data_source: str = "fallback-defaults"
 
     def room_size_range(self, room_type: str) -> tuple[float, float]:
         rule = self.rule_for(room_type)
@@ -99,6 +100,7 @@ def fallback_layout_rules(
         building_type=building_type,
         room_rules={room_type: _fallback_room_rule(room_type) for room_type in room_types},
         layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(building_type, (building_type,)),
+        pattern_data_source="fallback-defaults",
     )
 
 
@@ -126,10 +128,10 @@ async def get_layout_pattern_rules(
         select(LayoutPattern)
         .where(LayoutPattern.room_type.in_(room_types))
         .where(or_(LayoutPattern.building_type == building_type, LayoutPattern.building_type.is_(None)))
-        .where(LayoutPattern.confidence.in_(("high", "medium")))
+        .where(LayoutPattern.confidence.in_(("high", "medium", "seed")))
     )
     patterns = result.scalars().all()
-    confidence_order = {"high": 2, "medium": 1}
+    confidence_order = {"high": 3, "medium": 2, "seed": 1}
     patterns.sort(
         key=lambda pattern: (
             pattern.building_type == building_type,
@@ -141,11 +143,13 @@ async def get_layout_pattern_rules(
 
     room_rules = dict(rules.room_rules)
     used_rooms: set[str] = set()
+    used_confidences: set[str] = set()
     layout_patterns = list(rules.layout_patterns)
     for pattern in patterns:
         if pattern.room_type not in used_rooms:
             room_rules[pattern.room_type] = _merge_pattern(rules.rule_for(pattern.room_type), pattern)
             used_rooms.add(pattern.room_type)
+            used_confidences.add(pattern.confidence)
         if pattern.layout_pattern and pattern.layout_pattern not in layout_patterns:
             layout_patterns.append(pattern.layout_pattern)
 
@@ -154,4 +158,11 @@ async def get_layout_pattern_rules(
         room_rules=room_rules,
         layout_patterns=tuple(layout_patterns),
         pattern_data_used=bool(used_rooms),
+        pattern_data_source=(
+            "source-derived"
+            if used_confidences & {"high", "medium"}
+            else "seed"
+            if used_confidences
+            else "fallback-defaults"
+        ),
     )

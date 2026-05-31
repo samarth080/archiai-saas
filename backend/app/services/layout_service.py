@@ -307,6 +307,7 @@ def generate_layout(
             "totalAreaSqm":  _room_area(room_specs),
             "requestedAreaSqm": total_area_sqm,
             "patternDataUsed": pattern_rules.pattern_data_used,
+            "patternDataSource": pattern_rules.pattern_data_source,
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,

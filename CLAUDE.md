@@ -368,6 +368,8 @@ Intentionally excluded:
 - [x] Room sizing, zones, adjacency ordering, prompt extraction, building templates, multi-floor compatibility, and quality scoring improve concept layouts without external model calls
 - [x] Editor layout insights show detected building type, applied template, zones, quality score, and compact diagnostics
 - [x] Backend tests, frontend tests, typecheck, production build, and migration-head checks pass
+- [x] Sprint 10 to Sprint 11 pattern-data workflow is documented; generation remains safe with fallback defaults when the pattern table is empty
+- [x] Local MVP seed command creates clearly labeled `seed:mvp-patterns` records for repeatable data-informed generation testing
 
 Deferred beyond Sprint 11:
 - Paid AI API integration

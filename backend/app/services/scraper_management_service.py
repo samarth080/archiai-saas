@@ -52,10 +52,15 @@ async def delete_scraper_source(db: AsyncSession, source_id: str) -> None:
         .select_from(ScraperRun)
         .where(ScraperRun.source_id == source_id)
     )
-    if reference_count:
+    pattern_count = await db.scalar(
+        select(func.count())
+        .select_from(LayoutPattern)
+        .where(LayoutPattern.source_id == source_id)
+    )
+    if reference_count or pattern_count:
         raise HTTPException(
             status_code=409,
-            detail="Scraper source with recorded runs cannot be deleted",
+            detail="Scraper source with recorded runs or patterns cannot be deleted",
         )
     await db.delete(source)
     await db.commit()
