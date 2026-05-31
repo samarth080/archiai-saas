@@ -329,7 +329,7 @@ Deferred beyond Sprint 9D:
 - [x] Task 2: Backend scraper pipeline tests
 - [x] Task 3: ScraperSource and ScraperRun models/migration
 - [x] Task 4: RobotsTxtChecker utility
-- [ ] Task 5: Basic safe-source scraper runner
+- [x] Task 5: Basic safe-source scraper runner
 - [ ] Task 6: Data cleaning and deterministic metadata extraction
 - [ ] Task 7: Structured LayoutPattern model/migration
 - [ ] Task 8: Scraper management API endpoints

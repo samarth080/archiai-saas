@@ -3,6 +3,9 @@ from importlib import import_module
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+
+from app.tests.conftest import TestSessionLocal
 
 
 SOURCE_PAYLOAD = {
@@ -162,6 +165,76 @@ async def test_scraper_runner_refuses_disallowed_source(monkeypatch):
 
     with pytest.raises(scraper_service.ScraperBlockedError, match="Disallowed"):
         await scraper_service.scrape_public_text("https://example.com/private/layout-guide")
+
+
+async def test_scraper_runner_extracts_visible_text_without_images(monkeypatch):
+    scraper_service = import_module("app.services.scraper_service")
+    robots_module = import_module("app.services.robots_txt_checker")
+
+    async def allowed(_url: str):
+        return robots_module.RobotsCheckResult(allowed=True, reason="Allowed by robots.txt")
+
+    async def fetch_page(_url: str):
+        return """
+        <html><body>
+          <h1>Apartment guidance</h1>
+          <img src="copyrighted-plan.png" alt="Do not collect this drawing">
+          <script>private_tracking_data()</script>
+          <p>Bedroom is typically 10-16 sqm.</p>
+        </body></html>
+        """
+
+    monkeypatch.setattr(scraper_service.default_robots_checker, "check_url", allowed)
+    monkeypatch.setattr(scraper_service, "fetch_public_page", fetch_page)
+
+    text = await scraper_service.scrape_public_text("https://example.com/public-layout-guide")
+
+    assert text == "Apartment guidance Bedroom is typically 10-16 sqm."
+    assert "copyrighted-plan" not in text
+    assert "private_tracking_data" not in text
+
+
+async def test_run_source_scraper_stores_raw_record_provenance(monkeypatch):
+    scraper_service = import_module("app.services.scraper_service")
+    scraper_models = import_module("app.models.scraper_source")
+    record_models = import_module("app.models.scraped_record")
+    user_models = import_module("app.models.user")
+
+    async def scrape_text(_url: str):
+        return "Bedroom is typically 10-16 sqm."
+
+    monkeypatch.setattr(scraper_service, "scrape_public_text", scrape_text)
+
+    async with TestSessionLocal() as session:
+        user = user_models.User(
+            name="Pipeline User",
+            email="direct-runner@example.com",
+            hashed_password="not-used-in-service-test",
+        )
+        session.add(user)
+        await session.flush()
+        source = scraper_models.ScraperSource(
+            name="Public guide",
+            base_url="https://example.com/public-layout-guide",
+            robots_txt_url="https://example.com/robots.txt",
+            data_type="text/html",
+            source_category="room_size_reference",
+            created_by=user.id,
+        )
+        session.add(source)
+        await session.commit()
+        await session.refresh(source)
+
+        run = await scraper_service.run_source_scraper(session, source)
+        record = await session.scalar(
+            select(record_models.ScrapedRecord).where(record_models.ScrapedRecord.run_id == run.id)
+        )
+
+        assert run.status == "completed"
+        assert run.records_collected == 1
+        assert record.source_id == source.id
+        assert record.source_url == source.base_url
+        assert record.accessed_at is not None
 
 
 def test_raw_scraped_record_normalisation():
