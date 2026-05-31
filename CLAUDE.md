@@ -351,7 +351,19 @@ Intentionally excluded:
 - Scraping or storing copyrighted floor-plan images
 - Personal-data collection
 
-### Sprint 11 — AI / Layout Improvement ⏳ Not Started
+### Sprint 11 — Layout Improvement Using Pattern Data ⏳ In Progress
+
+- [x] Task 1: Sprint 11 layout-improvement plan/spec
+- [ ] Task 2: Benchmark prompt and quality tests
+- [ ] Task 3: Layout-pattern access service with fallbacks
+- [ ] Task 4: Room-sizing rule improvements
+- [ ] Task 5: Zoning and adjacency improvements
+- [ ] Task 6: Building-type layout templates
+- [ ] Task 7: Prompt requirement extraction improvements
+- [ ] Task 8: Layout-quality scoring
+- [ ] Task 9: Minimal generation-insight UI
+- [ ] Task 10: Future-AI placeholder documentation
+- [ ] Task 11: Final checks and Sprint 11 completion update
 
 ### Sprint 12 — Export, Share, and Polish ⏳ Not Started
 
