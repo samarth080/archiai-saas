@@ -351,7 +351,7 @@ Intentionally excluded:
 - Scraping or storing copyrighted floor-plan images
 - Personal-data collection
 
-### Sprint 11 — Layout Improvement Using Pattern Data ⏳ In Progress
+### Sprint 11 — Layout Improvement Using Pattern Data ✅ Complete
 
 - [x] Task 1: Sprint 11 layout-improvement plan/spec
 - [x] Task 2: Benchmark prompt and quality tests
@@ -363,7 +363,22 @@ Intentionally excluded:
 - [x] Task 8: Layout-quality scoring
 - [x] Task 9: Minimal generation-insight UI
 - [x] Task 10: Future-AI placeholder documentation
-- [ ] Task 11: Final checks and Sprint 11 completion update
+- [x] Task 11: Final checks and Sprint 11 completion update
+- [x] Deterministic generation uses structured pattern data when available and realistic fallback rules when the database has no matching patterns
+- [x] Room sizing, zones, adjacency ordering, prompt extraction, building templates, multi-floor compatibility, and quality scoring improve concept layouts without external model calls
+- [x] Editor layout insights show detected building type, applied template, zones, quality score, and compact diagnostics
+- [x] Backend tests, frontend tests, typecheck, production build, and migration-head checks pass
+
+Deferred beyond Sprint 11:
+- Paid AI API integration
+- OpenAI, Claude, or Gemini provider integration
+- Local model integration
+- Full AI model training or fine-tuning
+- LLM-based layout generation
+- Advanced architectural validation
+- Automatic self-learning from user edits
+- Complex spatial optimization algorithms
+- CAD/BIM reasoning
 
 ### Sprint 12 — Export, Share, and Polish ⏳ Not Started
 
