@@ -36,11 +36,19 @@ export interface CanvasFloor {
   rooms?: Room[]
 }
 
+export interface GenerationInsights {
+  score: number
+  reasons: string[]
+  warnings: string[]
+  appliedRules: string[]
+}
+
 export interface CanvasLayout {
   version: string
   designId?: string
   designVersionId?: string
   metadata?: Record<string, unknown>
+  insights?: GenerationInsights
   building?: {
     floorHeight?: number
   }
@@ -72,6 +80,7 @@ interface CanvasState {
   designId: string | null
   designVersionId: string | null
   layoutMetadata: Record<string, unknown>
+  generationInsights: GenerationInsights | null
   selectedId: string | null
   snapToGrid: boolean
   gridSize: number
@@ -293,6 +302,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   designId: null,
   designVersionId: null,
   layoutMetadata: {},
+  generationInsights: null,
   selectedId: null,
   snapToGrid: false,
   gridSize: 1,
@@ -507,6 +517,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       designId: layout.designId ?? null,
       designVersionId: layout.designVersionId ?? null,
       layoutMetadata: layout.metadata ?? {},
+      generationInsights: layout.insights ?? null,
       selectedId: null,
       saveStatus: 'saved',
       lastSavedAt: new Date().toISOString(),
@@ -523,6 +534,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       designId: null,
       designVersionId: null,
       layoutMetadata: {},
+      generationInsights: null,
       selectedId: null,
       saveStatus: 'saved',
       lastSavedAt: null,
@@ -544,6 +556,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         totalFloors: state.floors.length,
         totalRooms: state.rooms.length,
       },
+      ...(state.generationInsights ? { insights: state.generationInsights } : {}),
       building: { floorHeight: state.floorHeight },
       floors,
       rooms: state.rooms,

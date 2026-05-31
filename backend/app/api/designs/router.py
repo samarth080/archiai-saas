@@ -28,7 +28,8 @@ from app.services.design_service import (
     update_design_layout,
 )
 from app.services.layout_service import generate_layout
-from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_floors
+from app.services.layout_pattern_service import get_layout_pattern_rules
+from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_area_sqm, extract_total_floors
 from app.services.refinement_service import apply_refinement, parse_refinement
 from app.services.workspace_service import require_project_read_access
 from app.utils.activity import log_activity
@@ -68,11 +69,19 @@ async def generate(
         )
     building_type = detect_building_type(request.prompt)
     total_floors = extract_total_floors(request.prompt)
+    total_area_sqm = extract_total_area_sqm(request.prompt)
+    pattern_rules = await get_layout_pattern_rules(
+        db,
+        building_type,
+        {room.room_type for room in room_specs},
+    )
     layout = generate_layout(
         room_specs,
         prompt=request.prompt,
         building_type=building_type,
         total_floors=total_floors,
+        pattern_rules=pattern_rules,
+        total_area_sqm=total_area_sqm,
     )
     if request.project_id:
         design, version = await save_generated_design(

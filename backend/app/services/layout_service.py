@@ -1,5 +1,9 @@
 import uuid
+from math import sqrt
 
+from app.services.building_template_service import apply_template_defaults, get_building_template
+from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
+from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
 
 ROOM_COLORS: dict[str, str] = {
@@ -10,6 +14,17 @@ ROOM_COLORS: dict[str, str] = {
     "bathroom":       "#60a5fa",
     "dining_room":    "#facc15",
     "office":         "#a78bfa",
+    "study":          "#c084fc",
+    "workspace":      "#8b5cf6",
+    "meeting_room":   "#7c3aed",
+    "reception":      "#14b8a6",
+    "waiting_room":   "#2dd4bf",
+    "consultation_room": "#38bdf8",
+    "classroom":      "#f59e0b",
+    "retail_display": "#22c55e",
+    "checkout":       "#eab308",
+    "storage":        "#a8a29e",
+    "entry":          "#64748b",
     "hallway":        "#94a3b8",
     "balcony":        "#4ade80",
     "garage":         "#78716c",
@@ -17,8 +32,6 @@ ROOM_COLORS: dict[str, str] = {
     "stairs":         "#9ca3af",
 }
 
-_PUBLIC  = frozenset({"living_room", "kitchen", "dining_room", "hallway"})
-_PRIVATE = frozenset({"master_bedroom", "bedroom", "bathroom"})
 _GAP     = 1.0   # metres between rooms in same row
 _ZONE_GAP = 2.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
@@ -40,26 +53,109 @@ def _room_area(specs: list[RoomSpec]) -> float:
     return round(sum(room.w * room.d for room in specs), 2)
 
 
+def _size_room_specs(
+    specs: list[RoomSpec],
+    rules: LayoutPatternRules,
+    total_area_sqm: float | None = None,
+) -> list[RoomSpec]:
+    targets: list[tuple[RoomSpec, float]] = []
+    for room in specs:
+        rule = rules.rule_for(room.room_type)
+        current_area = room.w * room.d
+        target_area = min(max(current_area, rule.typical_area_sqm_min), rule.typical_area_sqm_max)
+        if (
+            total_area_sqm is not None
+            and rule.room_to_total_area_ratio_min is not None
+            and rule.room_to_total_area_ratio_max is not None
+        ):
+            ratio = (rule.room_to_total_area_ratio_min + rule.room_to_total_area_ratio_max) / 2
+            target_area = min(
+                max(total_area_sqm * ratio, rule.typical_area_sqm_min),
+                rule.typical_area_sqm_max,
+            )
+
+        targets.append((room, target_area))
+
+    has_ratio_guidance = any(
+        rules.rule_for(room.room_type).room_to_total_area_ratio_min is not None
+        and rules.rule_for(room.room_type).room_to_total_area_ratio_max is not None
+        for room, _ in targets
+    )
+    if total_area_sqm is not None and targets and not has_ratio_guidance:
+        allocated_area = sum(target for _, target in targets)
+        scale = total_area_sqm / allocated_area if allocated_area else 1.0
+        targets = [
+            (
+                room,
+                min(
+                    max(target * scale, rules.rule_for(room.room_type).typical_area_sqm_min),
+                    rules.rule_for(room.room_type).typical_area_sqm_max,
+                ),
+            )
+            for room, target in targets
+        ]
+
+    sized: list[RoomSpec] = []
+    for room, target_area in targets:
+        aspect_ratio = room.w / room.d if room.d else 1.0
+        sized.append(
+            RoomSpec(
+                label=room.label,
+                room_type=room.room_type,
+                w=round(sqrt(target_area * aspect_ratio), 2),
+                h=room.h,
+                d=round(sqrt(target_area / aspect_ratio), 2),
+            )
+        )
+    return sized
+
+
 def _place_rooms(
     specs: list[RoomSpec],
+    rules: LayoutPatternRules,
     floor_id: str = "floor_0",
     floor_level: int = 0,
     elevation: float = 0.0,
     x_offset: float = 0.0,
 ) -> list[dict]:
-    public  = [r for r in specs if r.room_type in _PUBLIC]
-    private = [r for r in specs if r.room_type in _PRIVATE]
-    other   = [r for r in specs if r.room_type not in _PUBLIC and r.room_type not in _PRIVATE]
+    public_cluster = {"entry", "living_room", "kitchen", "dining_room"}
+    placement_priority = {
+        "entry": 0,
+        "living_room": 1,
+        "kitchen": 2,
+        "dining_room": 3,
+        "hallway": 4,
+    }
+
+    def placement_group(room: RoomSpec) -> str:
+        zone = rules.zone_for(room.room_type)
+        if room.room_type in public_cluster:
+            return "public_cluster"
+        return zone
+
+    groups: dict[str, list[RoomSpec]] = {
+        "public_cluster": [],
+        "circulation": [],
+        "private": [],
+        "service": [],
+        "public": [],
+        "other": [],
+    }
+    for room in specs:
+        groups.get(placement_group(room), groups["other"]).append(room)
+
+    for rooms in groups.values():
+        rooms.sort(key=lambda room: (placement_priority.get(room.room_type, 50), room.label))
 
     result: list[dict] = []
     current_z = 0.0
 
-    for zone in (public, private, other):
-        if not zone:
+    for zone_rooms in groups.values():
+        if not zone_rooms:
             continue
         current_x = x_offset
         zone_max_d = 0.0
-        for room in zone:
+        for room in zone_rooms:
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)
             pos_z = round(current_z + room.d / 2, 2)
@@ -70,6 +166,7 @@ def _place_rooms(
                 "objectType": "room",
                 "floorId": floor_id,
                 "floorLevel": floor_level,
+                "zone": rules.zone_for(room.room_type),
                 "position": {"x": pos_x, "y": pos_y, "z": pos_z},
                 "size":     {"w": room.w, "h": room.h, "d": room.d},
                 "color":    ROOM_COLORS.get(room.room_type, "#94a3b8"),
@@ -89,6 +186,7 @@ def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
         "objectType": "stair",
         "floorId": floor_id,
         "floorLevel": floor_level,
+        "zone": "circulation",
         "position": {
             "x": _STAIRS_POSITION["x"],
             "y": round(elevation + _STAIRS_SIZE["h"] / 2, 2),
@@ -157,8 +255,17 @@ def generate_layout(
     prompt: str = "",
     building_type: str = "apartment",
     total_floors: int = 1,
+    pattern_rules: LayoutPatternRules | None = None,
+    total_area_sqm: float | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
+    template = get_building_template(building_type)
+    room_specs = apply_template_defaults(room_specs, building_type)
+    pattern_rules = pattern_rules or fallback_layout_rules(
+        building_type,
+        {room.room_type for room in room_specs},
+    )
+    room_specs = _size_room_specs(room_specs, pattern_rules, total_area_sqm)
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
     floors: list[dict] = []
     flat_rooms: list[dict] = []
@@ -168,6 +275,7 @@ def generate_layout(
         elevation = round(level * _FLOOR_HEIGHT, 2)
         rooms = _place_rooms(
             specs,
+            pattern_rules,
             floor_id=floor_id,
             floor_level=level,
             elevation=elevation,
@@ -186,7 +294,7 @@ def generate_layout(
         floors.append(floor)
         flat_rooms.extend(rooms)
 
-    return {
+    layout = {
         "version": "1.0",
         "metadata": {
             "prompt":        prompt,
@@ -197,6 +305,11 @@ def generate_layout(
             "totalFloors":   total_floors,
             "totalRooms":    len(room_specs),
             "totalAreaSqm":  _room_area(room_specs),
+            "requestedAreaSqm": total_area_sqm,
+            "patternDataUsed": pattern_rules.pattern_data_used,
+            "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
+            "template": template.name,
+            "templateStrategy": template.layout_pattern_strategy,
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
@@ -204,3 +317,9 @@ def generate_layout(
         "floors": floors,
         "rooms": flat_rooms,
     }
+    layout["insights"] = score_layout_quality(
+        layout,
+        required_room_types={room.room_type for room in room_specs},
+        pattern_rules=pattern_rules,
+    ).to_dict()
+    return layout

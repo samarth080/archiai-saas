@@ -56,6 +56,7 @@ class RoomResponse(BaseModel):
     objectType: str | None = None
     floorId: str | None = None
     floorLevel: int | None = None
+    zone: str | None = None
     position: RoomPosition
     size: RoomSize
     rotation: RoomRotation | None = None
@@ -71,6 +72,11 @@ class GenerateMetadata(BaseModel):
     totalFloors: int | None = None
     totalRooms: int | None = None
     totalAreaSqm: float | None = None
+    requestedAreaSqm: float | None = None
+    patternDataUsed: bool | None = None
+    zonesDetected: list[str] | None = None
+    template: str | None = None
+    templateStrategy: str | None = None
 
 
 class BuildingResponse(BaseModel):
@@ -85,6 +91,13 @@ class FloorResponse(BaseModel):
     rooms: list[RoomResponse]
 
 
+class GenerationInsights(BaseModel):
+    score: int
+    reasons: list[str]
+    warnings: list[str]
+    appliedRules: list[str]
+
+
 class GenerateResponse(BaseModel):
     version: str
     designId: str | None = None
@@ -93,6 +106,7 @@ class GenerateResponse(BaseModel):
     building: BuildingResponse | None = None
     floors: list[FloorResponse] | None = None
     rooms: list[RoomResponse]
+    insights: GenerationInsights | None = None
 
 
 class RefineResponse(GenerateResponse):
