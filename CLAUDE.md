@@ -323,7 +323,7 @@ Deferred beyond Sprint 9D:
 - Notifications
 - Workspace billing
 
-### Sprint 10 — Web Scraper and Data Pipeline ⏳ In Progress
+### Sprint 10 — Web Scraper and Data Pipeline ✅ Complete
 
 - [x] Task 1: Sprint 10 scraper/data-pipeline plan
 - [x] Task 2: Backend scraper pipeline tests
@@ -334,7 +334,22 @@ Deferred beyond Sprint 9D:
 - [x] Task 7: Structured LayoutPattern model/migration
 - [x] Task 8: Scraper management API endpoints
 - [x] Task 9: Scraper monitoring UI
-- [ ] Task 10: Final checks and Sprint 10 completion update
+- [x] Task 10: Final checks and Sprint 10 completion update
+- [x] Pipeline collects permitted public textual layout references only and stores source URL plus access timestamp provenance
+- [x] Every scrape run checks `robots.txt`; blocked or unreachable policy checks fail closed without fetching source content
+- [x] Raw text records and deterministic `LayoutPattern` metadata remain isolated from design generation
+- [x] Authenticated scraper APIs and the Data Pipeline monitoring UI cover source management, explicit runs, status, history, and extracted patterns
+- [x] Backend tests, frontend tests, typecheck, production build, PostgreSQL migrations, and local API smoke flow pass
+
+Deferred beyond Sprint 10:
+- AI training and layout-generation improvements belong to Sprint 11
+- Scheduled/background crawling and crawl queues
+- Dedicated system-admin authorization for pipeline management
+- Source-specific extraction adapters
+
+Intentionally excluded:
+- Scraping or storing copyrighted floor-plan images
+- Personal-data collection
 
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
 
