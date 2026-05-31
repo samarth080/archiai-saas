@@ -333,7 +333,7 @@ Deferred beyond Sprint 9D:
 - [x] Task 6: Data cleaning and deterministic metadata extraction
 - [x] Task 7: Structured LayoutPattern model/migration
 - [x] Task 8: Scraper management API endpoints
-- [ ] Task 9: Scraper monitoring UI
+- [x] Task 9: Scraper monitoring UI
 - [ ] Task 10: Final checks and Sprint 10 completion update
 
 ### Sprint 11 — AI / Layout Improvement ⏳ Not Started
