@@ -104,9 +104,9 @@ export default function ScraperPage() {
       <Sidebar userName={user?.name} userEmail={user?.email} onLogout={logOut} />
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Data Pipeline</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Internal Data Pipeline</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Public text reference sources for future layout learning.
+            Internal tool for collecting structured public layout-pattern references used to improve future layout generation. Not part of normal user workflow.
           </p>
         </div>
 

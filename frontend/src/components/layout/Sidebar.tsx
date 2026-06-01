@@ -1,14 +1,21 @@
 import { NavLink } from 'react-router-dom'
 
+import { isInternalDataPipelineEnabled } from '../../config/internalTools'
 import { Button } from '../ui/Button'
 
 interface SidebarProps {
   userName?: string
   userEmail?: string
   onLogout: () => void
+  showInternalTools?: boolean
 }
 
-export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
+export function Sidebar({
+  userName,
+  userEmail,
+  onLogout,
+  showInternalTools = isInternalDataPipelineEnabled(),
+}: SidebarProps) {
   const navClassName = ({ isActive }: { isActive: boolean }) =>
     `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
       isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
@@ -26,9 +33,11 @@ export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
         <NavLink to="/workspaces" className={navClassName}>
           Workspaces
         </NavLink>
-        <NavLink to="/scraper" className={navClassName}>
-          Data Pipeline
-        </NavLink>
+        {showInternalTools && (
+          <NavLink to="/scraper" className={navClassName}>
+            Internal Data Pipeline
+          </NavLink>
+        )}
       </nav>
       <div className="border-t border-slate-700 p-4">
         <p className="mb-2 truncate text-sm text-slate-300">

@@ -30,8 +30,10 @@ The resulting dataset is intended for rule improvement and later model experimen
 - Normalize whitespace and extract deterministic metadata from raw text.
 - Store structured layout patterns separately from raw records.
 - Expose authenticated MVP APIs for source CRUD, scraper execution, run history, status, and pattern listing.
-- Add a simple authenticated frontend monitoring page.
+- Add a simple authenticated internal/dev frontend monitoring page, hidden from normal product navigation by default.
 - Keep all scraper code isolated from project, design, and generator logic.
+
+The data-pipeline UI is internal/admin/dev tooling. Normal users should not manage scraper sources or see it as a customer-facing product feature. For MVP internal testing, frontend visibility is explicitly gated with `VITE_SHOW_DEV_TOOLS=true`.
 
 ## 4. Explicitly Excluded Scope
 

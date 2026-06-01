@@ -60,7 +60,7 @@ def score_layout_quality(
     ]
     applied_rules.extend(f"pattern:{pattern}" for pattern in rules.layout_patterns)
     if rules.pattern_data_used:
-        applied_rules.append("pattern-data:source-derived")
+        applied_rules.append(f"pattern-data:{rules.pattern_data_source}")
     else:
         applied_rules.append("pattern-data:fallback-defaults")
 
