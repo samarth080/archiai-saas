@@ -8,6 +8,18 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 })
 
+export function shouldRedirectOnUnauthorized(error: {
+  response?: { status?: number }
+  config?: { url?: string }
+}) {
+  const url = error.config?.url
+  return (
+    error.response?.status === 401 &&
+    url !== '/api/auth/login' &&
+    url !== '/api/auth/register'
+  )
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
   if (token) {
@@ -19,7 +31,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (shouldRedirectOnUnauthorized(error)) {
       useAuthStore.getState().logout()
       window.location.href = '/login'
     }

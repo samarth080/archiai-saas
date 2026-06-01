@@ -368,8 +368,6 @@ Intentionally excluded:
 - [x] Room sizing, zones, adjacency ordering, prompt extraction, building templates, multi-floor compatibility, and quality scoring improve concept layouts without external model calls
 - [x] Editor layout insights show detected building type, applied template, zones, quality score, and compact diagnostics
 - [x] Backend tests, frontend tests, typecheck, production build, and migration-head checks pass
-- [x] Sprint 10 to Sprint 11 pattern-data workflow is documented; generation remains safe with fallback defaults when the pattern table is empty
-- [x] Local MVP seed command creates clearly labeled `seed:mvp-patterns` records for repeatable data-informed generation testing
 
 Deferred beyond Sprint 11:
 - Paid AI API integration
@@ -386,7 +384,8 @@ Deferred beyond Sprint 11:
 
 ---
 
-## Development Rules
+## primary UX.
+- **Auto-save must never overwrite named version history.** Drafts are separate from named versions. Development Rules
 
 - **Never hardcode secrets.** All credentials and keys go in `.env` (gitignored). Use `.env.example` for documentation.
 - **Never push directly to `main`.** Use feature branches. Branch naming: `sprint-1/feature-name`.
@@ -394,8 +393,7 @@ Deferred beyond Sprint 11:
 - **Every significant action must be logged.** Canvas edits, generation events, team changes — all go to `ActivityLog`.
 - **Keep modules separate.** Frontend, backend, AI logic, scraper, and logging are distinct. Do not mix concerns.
 - **No TODOs in committed code.** If something is deferred, document it in the sprint spec or a GitHub issue.
-- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the primary UX.
-- **Auto-save must never overwrite named version history.** Drafts are separate from named versions.
+- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the
 
 ---
 

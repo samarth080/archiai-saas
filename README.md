@@ -89,7 +89,15 @@ cd backend
 ..\.venv311\Scripts\python.exe -m scripts.seed_layout_patterns --user-email you@example.com
 ```
 
-The seed command is idempotent and creates dev-only records with `source_url = "seed:mvp-patterns"`. You can also run vetted public-text sources explicitly from `http://localhost:5173/scraper`.
+The seed command is idempotent and creates dev-only records with `source_url = "seed:mvp-patterns"`. The scraper UI is an internal tool, hidden from the normal product navigation by default. To use vetted public-text sources internally, set `VITE_SHOW_DEV_TOOLS=true`, restart the frontend, and open `http://localhost:5173/scraper`.
+
+For a locally launched frontend in PowerShell:
+
+```powershell
+cd frontend
+$env:VITE_SHOW_DEV_TOOLS='true'
+npm run dev
+```
 
 See [docs/PATTERN_DATA_WORKFLOW.md](docs/PATTERN_DATA_WORKFLOW.md) for the Sprint 10 to Sprint 11 workflow, API verification commands, and before/after test prompts.
 

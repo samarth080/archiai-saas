@@ -8,6 +8,7 @@ import Register from './pages/Register'
 import ScraperPage from './pages/Scraper'
 import WorkspacePage from './pages/Workspace'
 import WorkspacesPage from './pages/Workspaces'
+import { isInternalDataPipelineEnabled } from './config/internalTools'
 import { useAuthStore } from './store/authStore'
 
 function ProtectedRoute() {
@@ -18,6 +19,10 @@ function ProtectedRoute() {
 function PublicOnlyRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Outlet />
+}
+
+function InternalToolsRoute() {
+  return isInternalDataPipelineEnabled() ? <Outlet /> : <Navigate to="/dashboard" replace />
 }
 
 export default function App() {
@@ -32,7 +37,9 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/projects/:id" element={<ProjectPage />} />
-          <Route path="/scraper" element={<ScraperPage />} />
+          <Route element={<InternalToolsRoute />}>
+            <Route path="/scraper" element={<ScraperPage />} />
+          </Route>
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/workspaces/:id" element={<WorkspacePage />} />
         </Route>

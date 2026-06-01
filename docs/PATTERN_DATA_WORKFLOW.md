@@ -29,7 +29,7 @@ Extracted `layout_patterns` fields include:
 - Circulation, opening, accessibility, egress, and placement notes
 - Source URL, access time, and confidence
 
-Authenticated users can register and run vetted public-text sources from the `/scraper` dashboard or through `/api/scraper/*`.
+The scraper UI is internal tooling, not part of the normal customer workflow. It is hidden by default and available to internal testers only when the frontend starts with `VITE_SHOW_DEV_TOOLS=true`. Authenticated internal users can register and run vetted public-text sources from the `/scraper` dashboard or through `/api/scraper/*`.
 
 ## Sprint 11: Pattern-Informed Deterministic Generation
 
@@ -100,17 +100,18 @@ The command is idempotent. Re-running it does not create duplicate pattern rows.
 
 ## Run A Vetted Public-Text Source
 
-1. Start the app and sign in.
-2. Open `http://localhost:5173/scraper`.
-3. Add a vetted HTTP or HTTPS public-text source and its `robots.txt` URL.
-4. Click `Run`.
-5. Confirm the run completed and inspect extracted patterns.
+1. Set `VITE_SHOW_DEV_TOOLS=true` in the frontend environment and restart the frontend. For local PowerShell development, run `$env:VITE_SHOW_DEV_TOOLS='true'` before `npm run dev`.
+2. Start the app and sign in as an internal tester.
+3. Open `http://localhost:5173/scraper`.
+4. Add a vetted HTTP or HTTPS public-text source and its `robots.txt` URL.
+5. Click `Run`.
+6. Confirm the run completed and inspect extracted patterns.
 
-The scraper does not crawl automatically. Every run is explicit.
+The scraper does not crawl automatically. Every run is explicit. Normal users should not manage scraper sources.
 
 ## Verify Pattern Records
 
-Use the Data Pipeline page at `http://localhost:5173/scraper`, or call the authenticated API:
+Internal testers with `VITE_SHOW_DEV_TOOLS=true` can use the Data Pipeline page at `http://localhost:5173/scraper`. You can also call the authenticated API directly:
 
 ```powershell
 $token = (Invoke-RestMethod `
