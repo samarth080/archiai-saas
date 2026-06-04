@@ -1,25 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import projectService, { ActivityEntry } from '../../services/project.service'
+import { activityLabel } from '../../utils/activity'
 import { formatRelative } from '../../utils/time'
 
 interface Props {
   projectId: string
   open: boolean
   onClose: () => void
-}
-
-const ACTION_LABEL: Record<string, string> = {
-  'project.created': 'Created project',
-  'project.updated': 'Updated project',
-  'project.deleted': 'Deleted project',
-  'project.duplicated': 'Duplicated project',
-  'design.generated': 'Generated layout',
-  'design.refined': 'Refined layout',
-  'layout.saved': 'Saved layout',
-}
-
-function labelFor(action: string): string {
-  return ACTION_LABEL[action] ?? action
 }
 
 export function ActivityDrawer({ projectId, open, onClose }: Props) {
@@ -91,7 +78,7 @@ export function ActivityDrawer({ projectId, open, onClose }: Props) {
               className="rounded border border-gray-200 p-3 flex flex-col gap-0.5"
             >
               <span className="text-sm font-medium text-gray-800">
-                {labelFor(e.action)}
+                {activityLabel(e.action)}
               </span>
               <span className="text-xs text-gray-400">
                 {formatRelative(e.timestamp)}

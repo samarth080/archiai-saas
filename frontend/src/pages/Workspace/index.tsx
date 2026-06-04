@@ -15,6 +15,7 @@ import workspaceService, {
   TeamMember,
   Workspace,
 } from '../../services/workspace.service'
+import { activityLabel } from '../../utils/activity'
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
@@ -164,7 +165,7 @@ export default function WorkspacePage() {
                 <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
                   {activity.map((entry) => (
                     <div key={entry.id} className="flex justify-between gap-4 px-4 py-3 text-sm">
-                      <span className="text-gray-700">{entry.action}</span>
+                      <span className="text-gray-700">{activityLabel(entry.action)}</span>
                       <time className="whitespace-nowrap text-xs text-gray-400">
                         {new Date(entry.timestamp).toLocaleString()}
                       </time>
