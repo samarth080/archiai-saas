@@ -6,6 +6,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ScraperPage from './pages/Scraper'
+import SharedProjectPage from './pages/SharedProject'
 import WorkspacePage from './pages/Workspace'
 import WorkspacesPage from './pages/Workspaces'
 import { isInternalDataPipelineEnabled } from './config/internalTools'
@@ -30,6 +31,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/share/:token" element={<SharedProjectPage />} />
         <Route element={<PublicOnlyRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

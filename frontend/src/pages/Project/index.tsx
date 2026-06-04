@@ -21,6 +21,7 @@ import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
 import { GenerationInsights } from '../../components/canvas/GenerationInsights'
+import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
 import type { CanvasLayout } from '../../store/canvasStore'
 
 function captureCanvasThumbnail() {
@@ -174,6 +175,7 @@ export default function ProjectPage() {
   const userPickedModeRef = useRef(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [exportingImage, setExportingImage] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -519,6 +521,9 @@ export default function ProjectPage() {
                 <Button variant="secondary" onClick={() => setActivityOpen(true)}>
                   Activity
                 </Button>
+                <Button variant="secondary" onClick={() => setShareOpen(true)}>
+                  Share
+                </Button>
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-2">
                     <Button
@@ -732,6 +737,13 @@ export default function ProjectPage() {
         projectId={id!}
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
+      />
+
+      <ShareProjectDialog
+        projectId={id!}
+        projectTitle={project.title}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
       />
     </div>
   )

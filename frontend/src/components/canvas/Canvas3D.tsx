@@ -6,9 +6,10 @@ import { useCanvasStore } from '../../store/canvasStore'
 
 interface Canvas3DProps {
   className?: string
+  readOnly?: boolean
 }
 
-export function Canvas3D({ className }: Canvas3DProps) {
+export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const orbitRef = useRef<{ enabled: boolean }>(null)
   const rooms = useCanvasStore((s) => s.rooms)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
@@ -19,6 +20,8 @@ export function Canvas3D({ className }: Canvas3DProps) {
       : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
 
   useEffect(() => {
+    if (readOnly) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       const tagName = target?.tagName.toLowerCase()
@@ -46,18 +49,18 @@ export function Canvas3D({ className }: Canvas3DProps) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [readOnly])
 
   return (
     <div className={className} style={{ background: '#f1f5f9' }}>
       <Canvas
         camera={{ position: [10, 12, 10] as [number, number, number], fov: 50 }}
         gl={{ preserveDrawingBuffer: true }}
-        onPointerMissed={deselectAll}
+        onPointerMissed={readOnly ? undefined : deselectAll}
       >
-        <Scene orbitRef={orbitRef} />
+        <Scene orbitRef={orbitRef} readOnly={readOnly} />
         {visibleRooms.map((r) => (
-          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} />
+          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} />
         ))}
       </Canvas>
     </div>
