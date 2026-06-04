@@ -393,7 +393,7 @@ Deferred beyond Sprint 11:
 - [x] Task 8: Export/share activity labels and integration
 - [x] Task 9: MVP user-interface polish
 - [x] Task 10: Full local MVP smoke testing and fixes
-- [ ] Task 11: README and deployment readiness
+- [x] Task 11: README and deployment readiness
 - [ ] Task 12: Final checks and Sprint 12 completion update
 
 Sprint 12 keeps exports lightweight, share links read-only and revocable, and all work focused on completing the existing MVP without CAD/BIM export, billing, paid APIs, or real-time collaboration.

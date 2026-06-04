@@ -128,7 +128,7 @@ Activity metadata should include project ID and the relevant export type or shar
 - [ ] Task 8: Integrate export/share activity labels
 - [ ] Task 9: Polish MVP user interface
 - [x] Task 10: Run and fix complete MVP smoke flow
-- [ ] Task 11: Update README and deployment readiness
+- [x] Task 11: Update README and deployment readiness
 - [ ] Task 12: Run final checks and complete Sprint 12 documentation
 
 ## 15. Commit Plan
@@ -163,3 +163,13 @@ Verified locally on 2026-06-05 against PostgreSQL migration `011`:
 - Backend tests, frontend tests, and TypeScript checks pass.
 
 Live canvas drag, browser downloads, and visual responsive inspection could not be clicked through because no in-app browser was attached. Existing editor, export-service, shared-view, and store tests cover these behaviors until a browser-assisted final manual pass is available.
+
+## 17. Task 11 Readiness Verification
+
+- README documents local Uvicorn/Vite setup, Docker Compose, migrations, checks, troubleshooting, exports, shares, internal pattern data, and future AI boundaries.
+- Backend and frontend Docker images build successfully.
+- Compose starts PostgreSQL, backend, and frontend with healthy service checks.
+- Frontend container startup reconciles the development `node_modules` volume after dependency changes.
+- Production dependency audit reports zero vulnerabilities.
+- `jsPDF` and React Router were upgraded to patched versions.
+- Vitest was aligned with Vite 5 so Linux `npm ci` and Docker builds are reproducible.
