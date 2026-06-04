@@ -385,7 +385,7 @@ Deferred beyond Sprint 11:
 - [x] Task 0: Clean `CLAUDE.md` development-rule formatting
 - [x] Task 1: Sprint 12 export/share/polish plan and checklist
 - [x] Task 2: Backend export/share tests
-- [ ] Task 3: Backend export/share models and services
+- [x] Task 3: Backend export/share models and services
 - [ ] Task 4: Backend export/share API endpoints
 - [ ] Task 5: Frontend image export
 - [ ] Task 6: Frontend PDF export
