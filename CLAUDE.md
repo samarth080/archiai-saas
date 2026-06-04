@@ -380,7 +380,7 @@ Deferred beyond Sprint 11:
 - Complex spatial optimization algorithms
 - CAD/BIM reasoning
 
-### Sprint 12 — Export, Share, and Polish ⏳ In Progress
+### Sprint 12 — Export, Share, and Polish ✅ Complete
 
 - [x] Task 0: Clean `CLAUDE.md` development-rule formatting
 - [x] Task 1: Sprint 12 export/share/polish plan and checklist
@@ -394,9 +394,26 @@ Deferred beyond Sprint 11:
 - [x] Task 9: MVP user-interface polish
 - [x] Task 10: Full local MVP smoke testing and fixes
 - [x] Task 11: README and deployment readiness
-- [ ] Task 12: Final checks and Sprint 12 completion update
+- [x] Task 12: Final checks and Sprint 12 completion update
 
-Sprint 12 keeps exports lightweight, share links read-only and revocable, and all work focused on completing the existing MVP without CAD/BIM export, billing, paid APIs, or real-time collaboration.
+- [x] `CLAUDE.md` Development Rules cleanup completed
+- [x] Image export downloads the current canvas and records project activity
+- [x] PDF export produces a lightweight project summary and records project activity
+- [x] Share links open a public read-only latest-saved-layout view and can be revoked
+- [x] Export/share actions are permission-safe and readable in activity history
+- [x] Core MVP UI polish and local smoke verification completed
+- [x] README, Docker, migrations, setup, and deployment-readiness notes updated
+- [x] Backend tests, frontend tests, typecheck, production build, production dependency audit, Docker image builds, and healthy Compose startup pass
+
+Deferred beyond Sprint 12:
+- CAD/BIM export
+- Real-time collaboration
+- Public template marketplace
+- Payment/subscription system
+- Advanced deployment automation
+- Mobile/tablet-specific UI
+- Advanced PDF styling/report templates
+- Cloud file storage for exports
 
 ---
 
