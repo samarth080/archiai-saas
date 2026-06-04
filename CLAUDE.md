@@ -391,7 +391,7 @@ Deferred beyond Sprint 11:
 - [x] Task 6: Frontend PDF export
 - [x] Task 7: Shareable read-only project links
 - [x] Task 8: Export/share activity labels and integration
-- [ ] Task 9: MVP user-interface polish
+- [x] Task 9: MVP user-interface polish
 - [ ] Task 10: Full local MVP smoke testing and fixes
 - [ ] Task 11: README and deployment readiness
 - [ ] Task 12: Final checks and Sprint 12 completion update

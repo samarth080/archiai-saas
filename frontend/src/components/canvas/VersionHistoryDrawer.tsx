@@ -85,7 +85,7 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Version history"
-        className="fixed inset-y-0 right-0 z-50 w-80 bg-white shadow-xl flex flex-col"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">

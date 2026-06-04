@@ -72,7 +72,7 @@ export function ShareProjectDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`Share ${projectTitle}`}
-        className="w-full max-w-lg rounded border border-gray-200 bg-white p-5 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded border border-gray-200 bg-white p-5 shadow-xl"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -121,4 +121,3 @@ export function ShareProjectDialog({
     </div>
   )
 }
-

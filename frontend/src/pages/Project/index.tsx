@@ -472,9 +472,9 @@ export default function ProjectPage() {
       />
 
       {/* Main */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
           <div className="flex-1 min-w-0">
             <button
               onClick={() => navigate('/dashboard')}
@@ -503,7 +503,7 @@ export default function ProjectPage() {
               <h1 className="text-xl font-bold text-gray-900 truncate">{project.title}</h1>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 pt-6">
+          <div className="flex flex-wrap items-start gap-2 xl:max-w-[72%] xl:justify-end xl:pt-6">
             {editing ? (
               <>
                 <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
@@ -546,7 +546,7 @@ export default function ProjectPage() {
                   {exportError && <p className="mt-1 text-sm text-red-600">{exportError}</p>}
                 </div>
                 <div className="flex flex-col items-end">
-                  <div className="mb-2 grid w-64 gap-1">
+                  <div className="mb-2 grid w-56 gap-1">
                     <input
                       type="text"
                       value={versionName}
