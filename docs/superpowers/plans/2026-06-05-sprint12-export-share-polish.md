@@ -127,7 +127,7 @@ Activity metadata should include project ID and the relevant export type or shar
 - [ ] Task 7: Add shareable read-only project links
 - [ ] Task 8: Integrate export/share activity labels
 - [ ] Task 9: Polish MVP user interface
-- [ ] Task 10: Run and fix complete MVP smoke flow
+- [x] Task 10: Run and fix complete MVP smoke flow
 - [ ] Task 11: Update README and deployment readiness
 - [ ] Task 12: Run final checks and complete Sprint 12 documentation
 
@@ -149,3 +149,17 @@ Each task receives a separate local commit after its relevant checks pass. Sprin
 12. `Update README and deployment setup`
 13. `Complete Sprint 12 export share polish`
 
+## 16. Task 10 Smoke Verification
+
+Verified locally on 2026-06-05 against PostgreSQL migration `011`:
+
+- Backend health and frontend development server respond on ports `8000` and `5173`.
+- Registration, project creation, two-floor generation, manual save, separate auto-draft save, version listing, and version fetch pass.
+- Image/PDF export audit records and project activity entries pass.
+- Public share returns the latest saved layout, while draft-only changes remain private.
+- Share revocation, private-project access checks, and project-delete share cleanup return the expected `403`/`404` responses.
+- Workspace owner/editor shared-project access passes.
+- Internal layout-pattern API remains available to authenticated internal tooling.
+- Backend tests, frontend tests, and TypeScript checks pass.
+
+Live canvas drag, browser downloads, and visual responsive inspection could not be clicked through because no in-app browser was attached. Existing editor, export-service, shared-view, and store tests cover these behaviors until a browser-assisted final manual pass is available.
