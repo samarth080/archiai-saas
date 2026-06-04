@@ -21,6 +21,7 @@ import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
 import { GenerationInsights } from '../../components/canvas/GenerationInsights'
+import type { CanvasLayout } from '../../store/canvasStore'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -48,6 +49,79 @@ function downloadDataUrl(dataUrl: string, fileName: string) {
   document.body.appendChild(link)
   link.click()
   link.remove()
+}
+
+async function downloadProjectPdf(
+  project: Project,
+  layout: CanvasLayout,
+  canvasImage: string,
+  recordExport: () => Promise<unknown>,
+) {
+  const { jsPDF } = await import('jspdf')
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const margin = 15
+  const contentWidth = 180
+  let y = 20
+
+  pdf.setFontSize(18)
+  pdf.text(project.title, margin, y)
+  y += 9
+  pdf.setFontSize(9)
+  pdf.setTextColor(90)
+  pdf.text(`Exported ${new Date().toLocaleString()}`, margin, y)
+  y += 8
+
+  if (project.description) {
+    pdf.setFontSize(11)
+    pdf.setTextColor(35)
+    const description = pdf.splitTextToSize(project.description, contentWidth)
+    pdf.text(description, margin, y)
+    y += description.length * 5 + 5
+  }
+
+  const prompt = typeof layout.metadata?.prompt === 'string' ? layout.metadata.prompt : null
+  if (prompt) {
+    pdf.setFontSize(10)
+    pdf.setTextColor(35)
+    pdf.text('Design brief', margin, y)
+    y += 5
+    pdf.setFontSize(9)
+    const promptLines = pdf.splitTextToSize(prompt, contentWidth)
+    pdf.text(promptLines, margin, y)
+    y += promptLines.length * 4.5 + 6
+  }
+
+  const imageProperties = pdf.getImageProperties(canvasImage)
+  const imageHeight = Math.min(112, contentWidth * (imageProperties.height / imageProperties.width))
+  pdf.addImage(canvasImage, 'PNG', margin, y, contentWidth, imageHeight)
+  y += imageHeight + 8
+
+  if (y > 250) {
+    pdf.addPage()
+    y = 20
+  }
+
+  const metadata = layout.metadata ?? {}
+  const details = [
+    typeof metadata.buildingType === 'string' ? `Building type: ${metadata.buildingType}` : null,
+    typeof metadata.totalFloors === 'number' ? `Floors: ${metadata.totalFloors}` : null,
+    typeof metadata.totalRooms === 'number' ? `Rooms: ${metadata.totalRooms}` : `Rooms: ${layout.rooms.length}`,
+    typeof metadata.totalAreaSqm === 'number' ? `Area: ${metadata.totalAreaSqm} sqm` : null,
+    layout.insights ? `Layout quality score: ${layout.insights.score}/100` : null,
+  ].filter((value): value is string => Boolean(value))
+
+  pdf.setFontSize(10)
+  pdf.setTextColor(35)
+  pdf.text('Layout summary', margin, y)
+  y += 5
+  pdf.setFontSize(9)
+  details.forEach((detail) => {
+    pdf.text(detail, margin, y)
+    y += 4.5
+  })
+
+  await recordExport()
+  pdf.save(exportFileName(project.title, 'pdf'))
 }
 
 function layoutSnapshotKey(layout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>) {
@@ -101,6 +175,7 @@ export default function ProjectPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [exportingImage, setExportingImage] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
@@ -327,6 +402,29 @@ export default function ProjectPage() {
     }
   }
 
+  const handleExportPdf = async () => {
+    if (!id || !project) return
+    setExportingPdf(true)
+    setExportError(null)
+    try {
+      const image = captureCanvasThumbnail()
+      if (!image) {
+        setExportError('The canvas is not ready for export yet.')
+        return
+      }
+      await downloadProjectPdf(
+        project,
+        serializeLayout(),
+        image,
+        () => projectService.recordExport(id, 'pdf'),
+      )
+    } catch (err) {
+      setExportError(getApiErrorMessage(err, 'Failed to export PDF'))
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const handleRecoverDraft = () => {
     if (!draftToRecover) return
     loadLayout(draftToRecover)
@@ -422,14 +520,24 @@ export default function ProjectPage() {
                   Activity
                 </Button>
                 <div className="flex flex-col items-end">
-                  <Button
-                    variant="secondary"
-                    onClick={handleExportImage}
-                    loading={exportingImage}
-                    disabled={roomCount === 0 || exportingImage}
-                  >
-                    Export PNG
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={handleExportImage}
+                      loading={exportingImage}
+                      disabled={roomCount === 0 || exportingImage || exportingPdf}
+                    >
+                      Export PNG
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={handleExportPdf}
+                      loading={exportingPdf}
+                      disabled={roomCount === 0 || exportingImage || exportingPdf}
+                    >
+                      Export PDF
+                    </Button>
+                  </div>
                   {exportError && <p className="mt-1 text-sm text-red-600">{exportError}</p>}
                 </div>
                 <div className="flex flex-col items-end">

@@ -24,5 +24,15 @@ describe('project export service', () => {
     expect(api.post).toHaveBeenCalledWith('/api/projects/project-1/export/image')
     expect(result.export_type).toBe('image')
   })
-})
 
+  it('records a PDF export through the project export endpoint', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: { id: 'export-2', export_type: 'pdf' },
+    })
+
+    const result = await projectService.recordExport('project-1', 'pdf')
+
+    expect(api.post).toHaveBeenCalledWith('/api/projects/project-1/export/pdf')
+    expect(result.export_type).toBe('pdf')
+  })
+})
