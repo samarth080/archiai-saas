@@ -384,8 +384,7 @@ Deferred beyond Sprint 11:
 
 ---
 
-## primary UX.
-- **Auto-save must never overwrite named version history.** Drafts are separate from named versions. Development Rules
+## Development Rules
 
 - **Never hardcode secrets.** All credentials and keys go in `.env` (gitignored). Use `.env.example` for documentation.
 - **Never push directly to `main`.** Use feature branches. Branch naming: `sprint-1/feature-name`.
@@ -393,7 +392,8 @@ Deferred beyond Sprint 11:
 - **Every significant action must be logged.** Canvas edits, generation events, team changes — all go to `ActivityLog`.
 - **Keep modules separate.** Frontend, backend, AI logic, scraper, and logging are distinct. Do not mix concerns.
 - **No TODOs in committed code.** If something is deferred, document it in the sprint spec or a GitHub issue.
-- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the
+- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the primary UX.
+- **Auto-save must never overwrite named version history.** Drafts are separate from named versions.
 
 ---
 
