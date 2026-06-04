@@ -380,7 +380,23 @@ Deferred beyond Sprint 11:
 - Complex spatial optimization algorithms
 - CAD/BIM reasoning
 
-### Sprint 12 — Export, Share, and Polish ⏳ Not Started
+### Sprint 12 — Export, Share, and Polish ⏳ In Progress
+
+- [x] Task 0: Clean `CLAUDE.md` development-rule formatting
+- [x] Task 1: Sprint 12 export/share/polish plan and checklist
+- [ ] Task 2: Backend export/share tests
+- [ ] Task 3: Backend export/share models and services
+- [ ] Task 4: Backend export/share API endpoints
+- [ ] Task 5: Frontend image export
+- [ ] Task 6: Frontend PDF export
+- [ ] Task 7: Shareable read-only project links
+- [ ] Task 8: Export/share activity labels and integration
+- [ ] Task 9: MVP user-interface polish
+- [ ] Task 10: Full local MVP smoke testing and fixes
+- [ ] Task 11: README and deployment readiness
+- [ ] Task 12: Final checks and Sprint 12 completion update
+
+Sprint 12 keeps exports lightweight, share links read-only and revocable, and all work focused on completing the existing MVP without CAD/BIM export, billing, paid APIs, or real-time collaboration.
 
 ---
 
