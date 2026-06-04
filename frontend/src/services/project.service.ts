@@ -29,6 +29,15 @@ export interface ActivityEntry {
   timestamp: string
 }
 
+export interface ExportRecord {
+  id: string
+  project_id: string
+  user_id: string
+  export_type: 'image' | 'pdf'
+  file_url?: string | null
+  created_at: string
+}
+
 export interface CreateProjectData {
   title: string
   description?: string
@@ -65,6 +74,9 @@ const projectService = {
 
   activity: (id: string): Promise<ActivityEntry[]> =>
     api.get(`/api/projects/${id}/activity`).then((r) => r.data),
+
+  recordExport: (id: string, exportType: 'image' | 'pdf'): Promise<ExportRecord> =>
+    api.post(`/api/projects/${id}/export/${exportType}`).then((r) => r.data),
 }
 
 export default projectService

@@ -387,7 +387,7 @@ Deferred beyond Sprint 11:
 - [x] Task 2: Backend export/share tests
 - [x] Task 3: Backend export/share models and services
 - [x] Task 4: Backend export/share API endpoints
-- [ ] Task 5: Frontend image export
+- [x] Task 5: Frontend image export
 - [ ] Task 6: Frontend PDF export
 - [ ] Task 7: Shareable read-only project links
 - [ ] Task 8: Export/share activity labels and integration

@@ -32,6 +32,24 @@ function captureCanvasThumbnail() {
   }
 }
 
+function exportFileName(projectTitle: string, extension: string) {
+  const safeTitle = projectTitle
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'archiai-project'
+  return `${safeTitle}-${new Date().toISOString().slice(0, 10)}.${extension}`
+}
+
+function downloadDataUrl(dataUrl: string, fileName: string) {
+  const link = document.createElement('a')
+  link.href = dataUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 function layoutSnapshotKey(layout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>) {
   return JSON.stringify({
     version: layout.version,
@@ -82,6 +100,8 @@ export default function ProjectPage() {
   const userPickedModeRef = useRef(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [exportingImage, setExportingImage] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
@@ -288,6 +308,25 @@ export default function ProjectPage() {
     }
   }
 
+  const handleExportImage = async () => {
+    if (!id || !project) return
+    setExportingImage(true)
+    setExportError(null)
+    try {
+      const image = captureCanvasThumbnail()
+      if (!image) {
+        setExportError('The canvas is not ready for export yet.')
+        return
+      }
+      await projectService.recordExport(id, 'image')
+      downloadDataUrl(image, exportFileName(project.title, 'png'))
+    } catch (err) {
+      setExportError(getApiErrorMessage(err, 'Failed to export PNG'))
+    } finally {
+      setExportingImage(false)
+    }
+  }
+
   const handleRecoverDraft = () => {
     if (!draftToRecover) return
     loadLayout(draftToRecover)
@@ -382,6 +421,17 @@ export default function ProjectPage() {
                 <Button variant="secondary" onClick={() => setActivityOpen(true)}>
                   Activity
                 </Button>
+                <div className="flex flex-col items-end">
+                  <Button
+                    variant="secondary"
+                    onClick={handleExportImage}
+                    loading={exportingImage}
+                    disabled={roomCount === 0 || exportingImage}
+                  >
+                    Export PNG
+                  </Button>
+                  {exportError && <p className="mt-1 text-sm text-red-600">{exportError}</p>}
+                </div>
                 <div className="flex flex-col items-end">
                   <div className="mb-2 grid w-64 gap-1">
                     <input
