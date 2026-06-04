@@ -2,10 +2,11 @@ import secrets
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.design import Design
+from app.models.design_version import DesignVersion
 from app.models.export_record import ExportRecord
 from app.models.project import Project
 from app.models.project_share import ProjectShare
@@ -105,7 +106,7 @@ async def revoke_share_link(
 async def get_shared_project_by_token(
     db: AsyncSession,
     token: str,
-) -> tuple[ProjectShare, Project, Design | None]:
+) -> tuple[ProjectShare, Project, Design | None, DesignVersion | None]:
     result = await db.execute(
         select(ProjectShare).where(
             ProjectShare.token == token,
@@ -126,5 +127,20 @@ async def get_shared_project_by_token(
         .order_by(desc(Design.updated_at))
         .limit(1)
     )
-    return share, project, design_result.scalar_one_or_none()
+    design = design_result.scalar_one_or_none()
+    if design is None:
+        return share, project, None, None
 
+    version_result = await db.execute(
+        select(DesignVersion)
+        .where(DesignVersion.design_id == design.id)
+        .where(
+            or_(
+                DesignVersion.version_type.is_(None),
+                DesignVersion.version_type != "auto_draft",
+            )
+        )
+        .order_by(desc(DesignVersion.created_at), desc(DesignVersion.version_number))
+        .limit(1)
+    )
+    return share, project, design, version_result.scalar_one_or_none()

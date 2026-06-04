@@ -3,8 +3,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import get_db
-from app.schemas.project import ActivityLogOut, ProjectCreate, ProjectOut, ProjectUpdate, ProjectVersionOut
+from app.schemas.project import (
+    ActivityLogOut,
+    ExportRecordOut,
+    ProjectCreate,
+    ProjectOut,
+    ProjectShareOut,
+    ProjectUpdate,
+    ProjectVersionOut,
+)
 from app.services.auth_service import get_current_user
+from app.services.export_share_service import create_export_record, create_share_link, revoke_share_link
 from app.services.project_service import (
     create_project,
     delete_project,
@@ -72,6 +81,53 @@ async def duplicate(
     db: AsyncSession = Depends(get_db),
 ):
     return await duplicate_project(db, user_id, project_id)
+
+
+@router.post("/{project_id}/export/image", response_model=ExportRecordOut, status_code=201)
+async def export_image(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_export_record(db, user_id, project_id, "image")
+
+
+@router.post("/{project_id}/export/pdf", response_model=ExportRecordOut, status_code=201)
+async def export_pdf(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_export_record(db, user_id, project_id, "pdf")
+
+
+@router.post("/{project_id}/share", response_model=ProjectShareOut, status_code=201)
+async def share(
+    project_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    share_link = await create_share_link(db, user_id, project_id)
+    return ProjectShareOut(
+        id=share_link.id,
+        project_id=share_link.project_id,
+        token=share_link.token,
+        share_url=f"/share/{share_link.token}",
+        access_type=share_link.access_type,
+        is_active=share_link.is_active,
+        created_at=share_link.created_at,
+        revoked_at=share_link.revoked_at,
+    )
+
+
+@router.delete("/{project_id}/share/{share_id}", status_code=204)
+async def revoke_share(
+    project_id: str,
+    share_id: str,
+    user_id: str = Depends(_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await revoke_share_link(db, user_id, project_id, share_id)
 
 
 @router.put("/{project_id}", response_model=ProjectOut)
