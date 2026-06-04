@@ -21,6 +21,8 @@ import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
 import { GenerationInsights } from '../../components/canvas/GenerationInsights'
+import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
+import type { CanvasLayout } from '../../store/canvasStore'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -30,6 +32,97 @@ function captureCanvasThumbnail() {
   } catch {
     return null
   }
+}
+
+function exportFileName(projectTitle: string, extension: string) {
+  const safeTitle = projectTitle
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'archiai-project'
+  return `${safeTitle}-${new Date().toISOString().slice(0, 10)}.${extension}`
+}
+
+function downloadDataUrl(dataUrl: string, fileName: string) {
+  const link = document.createElement('a')
+  link.href = dataUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+async function downloadProjectPdf(
+  project: Project,
+  layout: CanvasLayout,
+  canvasImage: string,
+  recordExport: () => Promise<unknown>,
+) {
+  const { jsPDF } = await import('jspdf')
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const margin = 15
+  const contentWidth = 180
+  let y = 20
+
+  pdf.setFontSize(18)
+  pdf.text(project.title, margin, y)
+  y += 9
+  pdf.setFontSize(9)
+  pdf.setTextColor(90)
+  pdf.text(`Exported ${new Date().toLocaleString()}`, margin, y)
+  y += 8
+
+  if (project.description) {
+    pdf.setFontSize(11)
+    pdf.setTextColor(35)
+    const description = pdf.splitTextToSize(project.description, contentWidth)
+    pdf.text(description, margin, y)
+    y += description.length * 5 + 5
+  }
+
+  const prompt = typeof layout.metadata?.prompt === 'string' ? layout.metadata.prompt : null
+  if (prompt) {
+    pdf.setFontSize(10)
+    pdf.setTextColor(35)
+    pdf.text('Design brief', margin, y)
+    y += 5
+    pdf.setFontSize(9)
+    const promptLines = pdf.splitTextToSize(prompt, contentWidth)
+    pdf.text(promptLines, margin, y)
+    y += promptLines.length * 4.5 + 6
+  }
+
+  const imageProperties = pdf.getImageProperties(canvasImage)
+  const imageHeight = Math.min(112, contentWidth * (imageProperties.height / imageProperties.width))
+  pdf.addImage(canvasImage, 'PNG', margin, y, contentWidth, imageHeight)
+  y += imageHeight + 8
+
+  if (y > 250) {
+    pdf.addPage()
+    y = 20
+  }
+
+  const metadata = layout.metadata ?? {}
+  const details = [
+    typeof metadata.buildingType === 'string' ? `Building type: ${metadata.buildingType}` : null,
+    typeof metadata.totalFloors === 'number' ? `Floors: ${metadata.totalFloors}` : null,
+    typeof metadata.totalRooms === 'number' ? `Rooms: ${metadata.totalRooms}` : `Rooms: ${layout.rooms.length}`,
+    typeof metadata.totalAreaSqm === 'number' ? `Area: ${metadata.totalAreaSqm} sqm` : null,
+    layout.insights ? `Layout quality score: ${layout.insights.score}/100` : null,
+  ].filter((value): value is string => Boolean(value))
+
+  pdf.setFontSize(10)
+  pdf.setTextColor(35)
+  pdf.text('Layout summary', margin, y)
+  y += 5
+  pdf.setFontSize(9)
+  details.forEach((detail) => {
+    pdf.text(detail, margin, y)
+    y += 4.5
+  })
+
+  await recordExport()
+  pdf.save(exportFileName(project.title, 'pdf'))
 }
 
 function layoutSnapshotKey(layout: Pick<DesignDraftResponse, 'version' | 'metadata' | 'building' | 'floors' | 'rooms'>) {
@@ -82,6 +175,10 @@ export default function ProjectPage() {
   const userPickedModeRef = useRef(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [exportingImage, setExportingImage] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
@@ -288,6 +385,48 @@ export default function ProjectPage() {
     }
   }
 
+  const handleExportImage = async () => {
+    if (!id || !project) return
+    setExportingImage(true)
+    setExportError(null)
+    try {
+      const image = captureCanvasThumbnail()
+      if (!image) {
+        setExportError('The canvas is not ready for export yet.')
+        return
+      }
+      await projectService.recordExport(id, 'image')
+      downloadDataUrl(image, exportFileName(project.title, 'png'))
+    } catch (err) {
+      setExportError(getApiErrorMessage(err, 'Failed to export PNG'))
+    } finally {
+      setExportingImage(false)
+    }
+  }
+
+  const handleExportPdf = async () => {
+    if (!id || !project) return
+    setExportingPdf(true)
+    setExportError(null)
+    try {
+      const image = captureCanvasThumbnail()
+      if (!image) {
+        setExportError('The canvas is not ready for export yet.')
+        return
+      }
+      await downloadProjectPdf(
+        project,
+        serializeLayout(),
+        image,
+        () => projectService.recordExport(id, 'pdf'),
+      )
+    } catch (err) {
+      setExportError(getApiErrorMessage(err, 'Failed to export PDF'))
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const handleRecoverDraft = () => {
     if (!draftToRecover) return
     loadLayout(draftToRecover)
@@ -333,9 +472,9 @@ export default function ProjectPage() {
       />
 
       {/* Main */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
           <div className="flex-1 min-w-0">
             <button
               onClick={() => navigate('/dashboard')}
@@ -364,7 +503,7 @@ export default function ProjectPage() {
               <h1 className="text-xl font-bold text-gray-900 truncate">{project.title}</h1>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 pt-6">
+          <div className="flex flex-wrap items-start gap-2 xl:max-w-[72%] xl:justify-end xl:pt-6">
             {editing ? (
               <>
                 <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
@@ -382,8 +521,32 @@ export default function ProjectPage() {
                 <Button variant="secondary" onClick={() => setActivityOpen(true)}>
                   Activity
                 </Button>
+                <Button variant="secondary" onClick={() => setShareOpen(true)}>
+                  Share
+                </Button>
                 <div className="flex flex-col items-end">
-                  <div className="mb-2 grid w-64 gap-1">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={handleExportImage}
+                      loading={exportingImage}
+                      disabled={roomCount === 0 || exportingImage || exportingPdf}
+                    >
+                      Export PNG
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={handleExportPdf}
+                      loading={exportingPdf}
+                      disabled={roomCount === 0 || exportingImage || exportingPdf}
+                    >
+                      Export PDF
+                    </Button>
+                  </div>
+                  {exportError && <p className="mt-1 text-sm text-red-600">{exportError}</p>}
+                </div>
+                <div className="flex flex-col items-end">
+                  <div className="mb-2 grid w-56 gap-1">
                     <input
                       type="text"
                       value={versionName}
@@ -574,6 +737,13 @@ export default function ProjectPage() {
         projectId={id!}
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
+      />
+
+      <ShareProjectDialog
+        projectId={id!}
+        projectTitle={project.title}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
       />
     </div>
   )

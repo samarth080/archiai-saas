@@ -12,9 +12,10 @@ interface OrbitHandle {
 interface RoomMeshProps {
   room: Room
   orbitRef: RefObject<OrbitHandle>
+  readOnly?: boolean
 }
 
-export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
+export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   const dragStartRef = useRef<Room['position'] | null>(null)
   const dragOffsetRef = useRef<{ x: number; z: number } | null>(null)
@@ -117,13 +118,17 @@ export function RoomMesh({ room, orbitRef }: RoomMeshProps) {
         THREE.MathUtils.degToRad(room.rotation.y),
         THREE.MathUtils.degToRad(room.rotation.z),
       ]}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={finishPointerDrag}
-      onPointerCancel={finishPointerDrag}
-      onPointerOut={(e) => {
-        if (dragPointerIdRef.current === e.pointerId) e.stopPropagation()
-      }}
+      onPointerDown={readOnly ? undefined : handlePointerDown}
+      onPointerMove={readOnly ? undefined : handlePointerMove}
+      onPointerUp={readOnly ? undefined : finishPointerDrag}
+      onPointerCancel={readOnly ? undefined : finishPointerDrag}
+      onPointerOut={
+        readOnly
+          ? undefined
+          : (e) => {
+              if (dragPointerIdRef.current === e.pointerId) e.stopPropagation()
+            }
+      }
     >
       <boxGeometry args={[room.size.w, room.size.h, room.size.d]} />
       <meshStandardMaterial

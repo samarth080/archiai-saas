@@ -22,7 +22,7 @@ export function Sidebar({
     }`
 
   return (
-    <aside className="flex w-52 flex-shrink-0 flex-col bg-slate-800 text-white">
+    <aside className="flex w-44 flex-shrink-0 flex-col bg-slate-800 text-white lg:w-52">
       <div className="border-b border-slate-700 p-4">
         <span className="text-lg font-bold">ArchiAI</span>
       </div>

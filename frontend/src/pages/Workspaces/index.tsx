@@ -28,8 +28,8 @@ export default function WorkspacesPage() {
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar userName={user?.name} userEmail={user?.email} onLogout={logOut} />
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
+      <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Workspaces</h1>
             <p className="mt-1 text-sm text-gray-500">Shared projects for your design teams.</p>
@@ -46,7 +46,7 @@ export default function WorkspacesPage() {
           </div>
         )}
         {!loading && !error && workspaces.length === 0 && (
-          <p className="py-12 text-center text-gray-400">
+          <p className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-12 text-center text-gray-400">
             No workspaces yet. Create one for your first shared project.
           </p>
         )}

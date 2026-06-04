@@ -1,97 +1,204 @@
 # ArchiAI
 
-AI-powered architectural design platform. Users enter a natural language design brief and receive a 3D architectural layout they can view, edit, and refine in an interactive browser-based canvas.
+ArchiAI is an MVP architectural concept-layout tool. A user describes a space in plain language, receives a deterministic rule-guided 3D layout, edits it in the browser, saves versions, collaborates through workspaces, exports PNG/PDF handoffs, and shares a revocable read-only link.
 
----
+The current MVP does not call paid AI APIs. Prompt extraction, pattern-informed sizing, zoning, adjacency, and layout generation use deterministic services with built-in fallback rules.
+
+## Current MVP
+
+- Register and log in with JWT authentication.
+- Create personal or workspace projects.
+- Generate single-floor and multi-floor concept layouts from prompts.
+- Select, drag, resize, rename, add, duplicate, and delete layout objects.
+- Save named/manual versions and recover separate auto-save drafts.
+- View version history and project/workspace activity.
+- Export the current canvas as PNG or a basic project-summary PDF.
+- Create and revoke public token-based read-only project links.
+- Use the internal data pipeline to collect permitted public-text layout references when explicitly enabled.
+
+Exports are concept handoffs, not CAD/BIM or construction documents.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Router v6, Zustand |
-| Backend | Python 3.11+, FastAPI, SQLAlchemy (async), Alembic, Pydantic v2 |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Router, Zustand, React Three Fiber |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy async, Alembic, Pydantic v2 |
 | Database | PostgreSQL 16 |
 | Auth | JWT (HS256), bcrypt |
-| Dev | Docker, Docker Compose |
+| Testing | Pytest, Vitest, React Testing Library |
+| Development | Docker and Docker Compose |
 
----
+## Prerequisites
 
-## Local Setup
+- Python 3.11+
+- Node.js 20+
+- PostgreSQL 16, or Docker Desktop with Docker Compose
+- Git
 
-**Prerequisites:** Docker and Docker Compose
+## Environment Setup
 
-```bash
-git clone https://github.com/samarth080/archiai-saas.git
-cd archiai-saas
-cp .env.example .env
-docker-compose up
-```
-
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API docs: http://localhost:8000/docs
-
----
-
-## Turn On The Backend
-
-### Option 1: Docker Compose
-
-From the repo root:
-
-```bash
-cp .env.example .env
-docker-compose up backend
-```
-
-The backend runs at `http://localhost:8000`.
-
-### Option 2: Run Backend Locally
-
-Start PostgreSQL first, then run the API from the `backend` folder.
-
-PowerShell:
+Copy the documented example and replace all placeholder credentials:
 
 ```powershell
-cd backend
-copy ..\.env.example .env
-..\.venv311\Scripts\python.exe -m pip install -r requirements.txt
-..\.venv311\Scripts\python.exe -m alembic upgrade head
-..\.venv311\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Copy-Item .env.example .env
 ```
 
-If you do not already have `.venv311`, create it from the repo root:
+Required values:
+
+```dotenv
+POSTGRES_USER=your_postgres_user
+POSTGRES_PASSWORD=your_postgres_password
+POSTGRES_DB=your_database_name
+DATABASE_URL=postgresql+asyncpg://your_postgres_user:your_postgres_password@db:5432/your_database_name
+SECRET_KEY=replace-with-a-long-random-secret
+VITE_API_URL=http://localhost:8000
+VITE_SHOW_DEV_TOOLS=false
+```
+
+Never commit `.env` or real credentials. Keep `VITE_SHOW_DEV_TOOLS=false` for the normal product UI.
+
+## Run Locally
+
+### 1. Start PostgreSQL
+
+Use an existing local PostgreSQL server on `localhost:5432`, or start only the Docker database:
+
+```powershell
+docker compose up -d db
+```
+
+The committed `docker-compose.override.yml` publishes the Docker database on host port `5433` to avoid conflicting with a local PostgreSQL installation. If the backend runs on your host while using the Docker database, set:
+
+```dotenv
+DATABASE_URL=postgresql+asyncpg://your_postgres_user:your_postgres_password@localhost:5433/your_database_name
+```
+
+### 2. Start The Backend With Uvicorn
+
+From the repository root:
 
 ```powershell
 py -3.11 -m venv .venv311
 .\.venv311\Scripts\python.exe -m pip install --upgrade pip
+.\.venv311\Scripts\python.exe -m pip install -r backend\requirements.txt
+
+cd backend
+Copy-Item ..\.env.example .env
+..\.venv311\Scripts\python.exe -m alembic upgrade head
+..\.venv311\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Check that it is running:
+Verify:
 
-```bash
-curl http://localhost:8000/api/health
+- Health: http://localhost:8000/api/health
+- API docs: http://localhost:8000/docs
+
+When `backend/.env` contains a Docker hostname such as `@db:5432` but `db` is not resolvable, local settings fall back to `@localhost:5432`. Use an explicit `localhost:5433` URL when connecting a host-run backend to the Docker database.
+
+### 3. Start The Frontend
+
+In another terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-API docs are available at `http://localhost:8000/docs`.
+Open http://localhost:5173.
 
-> Note: when running the backend locally, `backend/.env` is used. If `DATABASE_URL` contains `@db:5432`, the app will fall back to `@localhost:5432` for local development when `db` is not resolvable.
+## Run Everything With Docker Compose
 
----
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
 
-## Populate Layout Pattern Data
+Compose starts PostgreSQL, runs Alembic migrations, starts Uvicorn on port `8000`, and starts Vite on port `5173`.
 
-Sprint 11 layout generation works without pattern records by using built-in fallback rules. To test the data-informed path locally, register a user and seed clearly labeled MVP pattern rows:
+Useful commands:
+
+```powershell
+docker compose ps
+docker compose logs -f backend
+docker compose exec backend alembic current
+docker compose down
+```
+
+The current frontend container runs the Vite development server. A production deployment should serve `npm run build` output through a production web server and provide HTTPS, secure secrets, database backups, and deployment-specific CORS configuration.
+
+## Database Migrations
 
 ```powershell
 cd backend
+..\.venv311\Scripts\python.exe -m alembic heads
+..\.venv311\Scripts\python.exe -m alembic current
 ..\.venv311\Scripts\python.exe -m alembic upgrade head
+```
+
+Sprint 12 adds migration `011` for export audit records and project share links.
+
+## Run Checks
+
+Backend:
+
+```powershell
+cd backend
+pytest
+```
+
+Frontend:
+
+```powershell
+cd frontend
+npm test
+npx tsc --noEmit
+npm run build
+npm audit --omit=dev
+```
+
+Docker:
+
+```powershell
+docker compose config
+docker compose build backend frontend
+```
+
+## Core User Flow
+
+1. Register or log in.
+2. Create a personal project or workspace project.
+3. Enter a layout prompt and generate a concept.
+4. Select and edit objects directly in the 3D canvas.
+5. Let auto-save preserve a separate draft, then use **Save Layout** for a named/manual version.
+6. Review history and activity.
+7. Export PNG or PDF from the project editor.
+8. Create a read-only share link, open it without authentication, and revoke it when finished.
+
+## Export And Share Behavior
+
+- PNG and PDF files are generated in the browser and downloaded locally.
+- The backend records export audit entries but does not store generated files.
+- PDF export is a lightweight project summary containing the current canvas image and available layout metadata.
+- Share links use possession-based public tokens and expose only project title, description, and latest saved layout.
+- Public links never expose drafts, versions, activity, users, workspace membership, or editor controls.
+- Revoking a link makes the public token unavailable.
+
+Treat share links as sensitive. The MVP does not yet support passwords, expiry dates, link analytics, or cloud file storage.
+
+## Internal Layout Pattern Data
+
+Layout generation works immediately with built-in fallback rules. Optional seed and source-derived `LayoutPattern` records improve deterministic sizing, zoning, and adjacency defaults.
+
+Seed local sample patterns:
+
+```powershell
+cd backend
 ..\.venv311\Scripts\python.exe -m scripts.seed_layout_patterns --user-email you@example.com
 ```
 
-The seed command is idempotent and creates dev-only records with `source_url = "seed:mvp-patterns"`. The scraper UI is an internal tool, hidden from the normal product navigation by default. To use vetted public-text sources internally, set `VITE_SHOW_DEV_TOOLS=true`, restart the frontend, and open `http://localhost:5173/scraper`.
-
-For a locally launched frontend in PowerShell:
+The scraper/data-pipeline UI is internal tooling and is hidden from normal navigation. To enable it for local development:
 
 ```powershell
 cd frontend
@@ -99,51 +206,72 @@ $env:VITE_SHOW_DEV_TOOLS='true'
 npm run dev
 ```
 
-See [docs/PATTERN_DATA_WORKFLOW.md](docs/PATTERN_DATA_WORKFLOW.md) for the Sprint 10 to Sprint 11 workflow, API verification commands, and before/after test prompts.
+Then open http://localhost:5173/scraper. See [docs/PATTERN_DATA_WORKFLOW.md](docs/PATTERN_DATA_WORKFLOW.md).
 
----
+## API Highlights
 
-## API Overview
-
-### Auth
 | Method | Route | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Register new user, returns JWT |
-| POST | `/api/auth/login` | Login, returns JWT |
-| POST | `/api/auth/logout` | Client-side logout |
-| GET | `/api/auth/me` | Get current user info |
+| POST | `/api/auth/register` | Register and receive JWT |
+| POST | `/api/auth/login` | Log in and receive JWT |
+| GET | `/api/auth/me` | Load current user |
+| POST | `/api/projects` | Create project |
+| GET | `/api/projects/{id}` | Load project |
+| POST | `/api/design/generate` | Generate and persist layout |
+| PUT | `/api/design/{id}` | Manual save and create named version |
+| PUT | `/api/design/{id}/draft` | Save/update separate auto-draft |
+| POST | `/api/projects/{id}/export/image` | Record image export |
+| POST | `/api/projects/{id}/export/pdf` | Record PDF export |
+| POST | `/api/projects/{id}/share` | Create read-only share link |
+| DELETE | `/api/projects/{id}/share/{share_id}` | Revoke share link |
+| GET | `/api/share/{token}` | Public latest-saved-layout response |
 
-### Projects
-| Method | Route | Description |
-|---|---|---|
-| POST | `/api/projects` | Create a project |
-| GET | `/api/projects` | List your projects |
-| GET | `/api/projects/{id}` | Get a project |
-| PUT | `/api/projects/{id}` | Update a project |
-| DELETE | `/api/projects/{id}` | Delete a project |
+Authenticated errors use:
 
-All project endpoints require `Authorization: Bearer <token>`.
-
-Error responses follow the format:
 ```json
 { "error": "Human-readable message", "code": "MACHINE_CODE", "status": 404 }
 ```
 
----
+## Common Troubleshooting
 
-## Run Backend Tests
+**Frontend says the server is unavailable**
 
-```bash
-cd backend
-pip install -r requirements.txt
-SECRET_KEY=test DATABASE_URL=sqlite+aiosqlite:///:memory: pytest app/tests/ -v
-```
+- Confirm http://localhost:8000/api/health responds.
+- Confirm `VITE_API_URL=http://localhost:8000`.
+- Restart Vite after changing frontend environment variables.
 
----
+**Backend cannot connect to PostgreSQL**
+
+- Run `alembic current` to verify connectivity.
+- Use port `5432` for a normal local PostgreSQL server.
+- Use port `5433` when a host-run backend connects to the Docker database through the committed override.
+- Use hostname `db:5432` only inside Docker Compose.
+
+**A public share does not show recent edits**
+
+- Share links expose the latest manually saved layout, not the auto-save draft.
+- Click **Save Layout**, then reload the public link.
+
+**Canvas export fails**
+
+- Wait until the 3D canvas has rendered.
+- Cross-origin assets added in the future must permit canvas export.
+
+## Future AI Scope
+
+The MVP intentionally avoids paid AI APIs and model training. Future work may add an optional provider behind a strict interface while retaining deterministic parsing, fallback rules, provenance, and testable layout generation. See [docs/PROJECT_STRATEGY.md](docs/PROJECT_STRATEGY.md).
+
+## Contribution Workflow
+
+- Never push directly to `main`.
+- Create a focused feature branch.
+- Write tests before or alongside implementation.
+- Keep frontend, backend, generation, scraper, and logging concerns separate.
+- Run relevant checks before each commit and use a clear commit message.
+- Open a pull request for review.
 
 ## License
 
 Copyright (c) 2026 Udai Batta & Samarth Chatli. All rights reserved.
 
-This project is proprietary software. See [LICENSE](LICENSE) for full terms.
-Unauthorized use, copying, or distribution is strictly prohibited and will have legal consequences.
+This project is proprietary software. See [LICENSE](LICENSE) for full terms. Unauthorized use, copying, or distribution is prohibited.

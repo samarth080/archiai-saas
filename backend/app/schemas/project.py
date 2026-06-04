@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -82,3 +83,36 @@ class ActivityLogOut(BaseModel):
     timestamp: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExportRecordOut(BaseModel):
+    id: str
+    project_id: str
+    user_id: str
+    export_type: str
+    file_url: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProjectShareOut(BaseModel):
+    id: str
+    project_id: str
+    token: str
+    share_url: str
+    access_type: str
+    is_active: bool
+    created_at: datetime
+    revoked_at: datetime | None = None
+
+
+class PublicProjectSummary(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+
+
+class PublicSharedProjectOut(BaseModel):
+    project: PublicProjectSummary
+    layout: dict[str, Any] | None = None

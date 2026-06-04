@@ -15,6 +15,7 @@ import workspaceService, {
   TeamMember,
   Workspace,
 } from '../../services/workspace.service'
+import { activityLabel } from '../../utils/activity'
 
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>()
@@ -89,7 +90,7 @@ export default function WorkspacePage() {
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar userName={user?.name} userEmail={user?.email} onLogout={logOut} />
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
         {loading && <p className="py-12 text-center text-gray-400">Loading...</p>}
         {!loading && error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -98,7 +99,7 @@ export default function WorkspacePage() {
         )}
         {!loading && workspace && (
           <>
-            <div className="mb-6 flex items-start justify-between gap-4">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <Button variant="secondary" onClick={() => navigate('/workspaces')} className="mb-4">
                   Back
@@ -164,7 +165,7 @@ export default function WorkspacePage() {
                 <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
                   {activity.map((entry) => (
                     <div key={entry.id} className="flex justify-between gap-4 px-4 py-3 text-sm">
-                      <span className="text-gray-700">{entry.action}</span>
+                      <span className="text-gray-700">{activityLabel(entry.action)}</span>
                       <time className="whitespace-nowrap text-xs text-gray-400">
                         {new Date(entry.timestamp).toLocaleString()}
                       </time>

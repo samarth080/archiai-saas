@@ -380,12 +380,44 @@ Deferred beyond Sprint 11:
 - Complex spatial optimization algorithms
 - CAD/BIM reasoning
 
-### Sprint 12 — Export, Share, and Polish ⏳ Not Started
+### Sprint 12 — Export, Share, and Polish ✅ Complete
+
+- [x] Task 0: Clean `CLAUDE.md` development-rule formatting
+- [x] Task 1: Sprint 12 export/share/polish plan and checklist
+- [x] Task 2: Backend export/share tests
+- [x] Task 3: Backend export/share models and services
+- [x] Task 4: Backend export/share API endpoints
+- [x] Task 5: Frontend image export
+- [x] Task 6: Frontend PDF export
+- [x] Task 7: Shareable read-only project links
+- [x] Task 8: Export/share activity labels and integration
+- [x] Task 9: MVP user-interface polish
+- [x] Task 10: Full local MVP smoke testing and fixes
+- [x] Task 11: README and deployment readiness
+- [x] Task 12: Final checks and Sprint 12 completion update
+
+- [x] `CLAUDE.md` Development Rules cleanup completed
+- [x] Image export downloads the current canvas and records project activity
+- [x] PDF export produces a lightweight project summary and records project activity
+- [x] Share links open a public read-only latest-saved-layout view and can be revoked
+- [x] Export/share actions are permission-safe and readable in activity history
+- [x] Core MVP UI polish and local smoke verification completed
+- [x] README, Docker, migrations, setup, and deployment-readiness notes updated
+- [x] Backend tests, frontend tests, typecheck, production build, production dependency audit, Docker image builds, and healthy Compose startup pass
+
+Deferred beyond Sprint 12:
+- CAD/BIM export
+- Real-time collaboration
+- Public template marketplace
+- Payment/subscription system
+- Advanced deployment automation
+- Mobile/tablet-specific UI
+- Advanced PDF styling/report templates
+- Cloud file storage for exports
 
 ---
 
-## primary UX.
-- **Auto-save must never overwrite named version history.** Drafts are separate from named versions. Development Rules
+## Development Rules
 
 - **Never hardcode secrets.** All credentials and keys go in `.env` (gitignored). Use `.env.example` for documentation.
 - **Never push directly to `main`.** Use feature branches. Branch naming: `sprint-1/feature-name`.
@@ -393,7 +425,8 @@ Deferred beyond Sprint 11:
 - **Every significant action must be logged.** Canvas edits, generation events, team changes — all go to `ActivityLog`.
 - **Keep modules separate.** Frontend, backend, AI logic, scraper, and logging are distinct. Do not mix concerns.
 - **No TODOs in committed code.** If something is deferred, document it in the sprint spec or a GitHub issue.
-- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the
+- **Mouse drag-and-drop in the 3D canvas must work directly.** Inspector editing is a complement, not the primary UX.
+- **Auto-save must never overwrite named version history.** Drafts are separate from named versions.
 
 ---
 

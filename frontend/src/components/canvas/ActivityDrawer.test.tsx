@@ -22,6 +22,21 @@ const ENTRY_FIXTURES = [
     action: 'design.generated',
     timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
   },
+  {
+    id: 'a3',
+    action: 'project.exported',
+    timestamp: new Date(Date.now() - 15 * 60_000).toISOString(),
+  },
+  {
+    id: 'a4',
+    action: 'project.shared',
+    timestamp: new Date(Date.now() - 20 * 60_000).toISOString(),
+  },
+  {
+    id: 'a5',
+    action: 'project.share_revoked',
+    timestamp: new Date(Date.now() - 25 * 60_000).toISOString(),
+  },
 ]
 
 beforeEach(() => {
@@ -40,6 +55,9 @@ describe('ActivityDrawer', () => {
       expect(screen.getByText('Saved layout')).toBeInTheDocument()
     )
     expect(screen.getByText('Generated layout')).toBeInTheDocument()
+    expect(screen.getByText('Exported project')).toBeInTheDocument()
+    expect(screen.getByText('Created read-only share link')).toBeInTheDocument()
+    expect(screen.getByText('Revoked share link')).toBeInTheDocument()
   })
 
   it('renders empty state when API returns an empty list', async () => {

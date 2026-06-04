@@ -1,4 +1,5 @@
 import api from './api'
+import type { CanvasLayout } from '../store/canvasStore'
 
 export interface Project {
   id: string
@@ -27,6 +28,31 @@ export interface ActivityEntry {
   id: string
   action: string
   timestamp: string
+}
+
+export interface ExportRecord {
+  id: string
+  project_id: string
+  user_id: string
+  export_type: 'image' | 'pdf'
+  file_url?: string | null
+  created_at: string
+}
+
+export interface ProjectShare {
+  id: string
+  project_id: string
+  token: string
+  share_url: string
+  access_type: 'public'
+  is_active: boolean
+  created_at: string
+  revoked_at?: string | null
+}
+
+export interface SharedProject {
+  project: Pick<Project, 'id' | 'title' | 'description'>
+  layout: CanvasLayout | null
 }
 
 export interface CreateProjectData {
@@ -65,6 +91,18 @@ const projectService = {
 
   activity: (id: string): Promise<ActivityEntry[]> =>
     api.get(`/api/projects/${id}/activity`).then((r) => r.data),
+
+  recordExport: (id: string, exportType: 'image' | 'pdf'): Promise<ExportRecord> =>
+    api.post(`/api/projects/${id}/export/${exportType}`).then((r) => r.data),
+
+  createShare: (id: string): Promise<ProjectShare> =>
+    api.post(`/api/projects/${id}/share`).then((r) => r.data),
+
+  revokeShare: (projectId: string, shareId: string): Promise<void> =>
+    api.delete(`/api/projects/${projectId}/share/${shareId}`).then(() => undefined),
+
+  getShared: (token: string): Promise<SharedProject> =>
+    api.get(`/api/share/${token}`).then((r) => r.data),
 }
 
 export default projectService

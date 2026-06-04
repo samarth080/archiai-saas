@@ -8,9 +8,10 @@ interface OrbitHandle {
 
 interface SceneProps {
   orbitRef: RefObject<OrbitHandle>
+  readOnly?: boolean
 }
 
-export function Scene({ orbitRef }: SceneProps) {
+export function Scene({ orbitRef, readOnly = false }: SceneProps) {
   const deselectAll = useCanvasStore((s) => s.deselectAll)
 
   return (
@@ -35,7 +36,7 @@ export function Scene({ orbitRef }: SceneProps) {
         position={[0, -0.01, 0]}
         onPointerDown={(event) => {
           event.stopPropagation()
-          deselectAll()
+          if (!readOnly) deselectAll()
         }}
       >
         <planeGeometry args={[200, 200]} />

@@ -4,8 +4,8 @@ import { LoginForm } from '../../components/auth/LoginForm'
 
 export default function Login() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow w-full max-w-md">
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 className="text-2xl font-bold mb-6 text-gray-900">Sign In</h2>
         <LoginForm />
         <p className="mt-4 text-sm text-gray-600">
