@@ -30,9 +30,13 @@ ROOM_COLORS: dict[str, str] = {
     "garage":         "#78716c",
     "utility":        "#cbd5e1",
     "stairs":         "#9ca3af",
+    "wall":           "#475569",
+    "door":           "#a16207",
+    "window":         "#38bdf8",
 }
 
 _GAP     = 1.0   # metres between rooms in same row
+_ADJACENCY_ROW_GAP = 0.5
 _ZONE_GAP = 2.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
 _STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
@@ -295,19 +299,41 @@ def _place_rooms(
         rooms.sort(key=lambda room: _flow_priority(building_type, room))
 
     result: list[dict] = []
+    placed_by_type: dict[str, list[dict]] = {}
     current_z = 0.0
+    previous_zone_max_d = 0.0
 
     for group_name in ordered_groups:
         zone_rooms = groups.get(group_name, [])
         if not zone_rooms:
             continue
+        has_adjacent_anchor = any(
+            target_type in placed_by_type
+            for room in zone_rooms
+            for target_type in rules.adjacency_for(room.room_type)
+        )
+        if result:
+            current_z += previous_zone_max_d + (_ADJACENCY_ROW_GAP if has_adjacent_anchor else _ZONE_GAP)
+
         current_x = x_offset
         zone_max_d = 0.0
         for room in zone_rooms:
+            anchor = next(
+                (
+                    candidate
+                    for target_type in rules.adjacency_for(room.room_type)
+                    for candidate in placed_by_type.get(target_type, [])
+                    if candidate["position"]["z"] + candidate["size"]["d"] / 2 <= current_z + 0.001
+                ),
+                None,
+            )
+            if anchor is not None:
+                current_x = max(current_x, x_offset, round(anchor["position"]["x"] - room.w / 2, 2))
+
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)
             pos_z = round(current_z + room.d / 2, 2)
-            result.append({
+            placed_room = {
                 "id":       str(uuid.uuid4()),
                 "label":    room.label,
                 "roomType": room.room_type,
@@ -318,10 +344,12 @@ def _place_rooms(
                 "position": {"x": pos_x, "y": pos_y, "z": pos_z},
                 "size":     {"w": room.w, "h": room.h, "d": room.d},
                 "color":    ROOM_COLORS.get(room.room_type, "#94a3b8"),
-            })
+            }
+            result.append(placed_room)
+            placed_by_type.setdefault(room.room_type, []).append(placed_room)
             current_x += room.w + _GAP
             zone_max_d = max(zone_max_d, room.d)
-        current_z += zone_max_d + _ZONE_GAP
+        previous_zone_max_d = zone_max_d
 
     return result
 
@@ -362,8 +390,11 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
         waiting = next((room for room in repaired if room.get("roomType") == "waiting_room"), None)
         bathroom = next((room for room in repaired if room.get("roomType") == "bathroom"), None)
         if waiting is not None and bathroom is not None and _edge_gap(waiting, bathroom) > 1.0:
-            bathroom["position"]["x"] = round(waiting["position"]["x"] + waiting["size"]["w"] / 2 + _GAP + bathroom["size"]["w"] / 2, 2)
-            bathroom["position"]["z"] = waiting["position"]["z"]
+            bathroom["position"]["x"] = waiting["position"]["x"]
+            bathroom["position"]["z"] = round(
+                waiting["position"]["z"] + waiting["size"]["d"] / 2 + _GAP + bathroom["size"]["d"] / 2,
+                2,
+            )
 
     return repaired
 
@@ -385,6 +416,136 @@ def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
         "size": _STAIRS_SIZE.copy(),
         "color": ROOM_COLORS["stairs"],
     }
+
+
+def _footprint_for_rooms(rooms: list[dict], margin: float = 0.5) -> dict:
+    if not rooms:
+        return {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    min_x = min(room["position"]["x"] - room["size"]["w"] / 2 for room in rooms) - margin
+    max_x = max(room["position"]["x"] + room["size"]["w"] / 2 for room in rooms) + margin
+    min_z = min(room["position"]["z"] - room["size"]["d"] / 2 for room in rooms) - margin
+    max_z = max(room["position"]["z"] + room["size"]["d"] / 2 for room in rooms) + margin
+    return {
+        "x": round(min_x, 2),
+        "z": round(min_z, 2),
+        "w": round(max_x - min_x, 2),
+        "d": round(max_z - min_z, 2),
+    }
+
+
+def _make_marker(
+    *,
+    label: str,
+    room_type: str,
+    object_type: str,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    position: dict[str, float],
+    size: dict[str, float],
+    rotation_y: float = 0.0,
+) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "label": label,
+        "roomType": room_type,
+        "objectType": object_type,
+        "floorId": floor_id,
+        "floorLevel": floor_level,
+        "zone": "boundary",
+        "position": {
+            "x": round(position["x"], 2),
+            "y": round(elevation + position["y"], 2),
+            "z": round(position["z"], 2),
+        },
+        "size": size,
+        "rotation": {"x": 0, "y": rotation_y, "z": 0},
+        "color": ROOM_COLORS.get(room_type, "#64748b"),
+    }
+
+
+def _architectural_markers(
+    rooms: list[dict],
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    footprint: dict,
+) -> list[dict]:
+    if not rooms or not footprint["w"] or not footprint["d"]:
+        return []
+
+    x = footprint["x"]
+    z = footprint["z"]
+    w = footprint["w"]
+    d = footprint["d"]
+    wall_h = 2.8
+    wall_t = 0.18
+    horizontal_wall_w = max(0.1, w - wall_t * 2)
+    markers = [
+        _make_marker(
+            label="Front Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z},
+            size={"w": horizontal_wall_w, "h": wall_h, "d": wall_t},
+        ),
+        _make_marker(
+            label="Rear Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z + d},
+            size={"w": horizontal_wall_w, "h": wall_h, "d": wall_t},
+        ),
+        _make_marker(
+            label="Left Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": d},
+        ),
+        _make_marker(
+            label="Right Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": d},
+        ),
+        _make_marker(
+            label="Entry Door",
+            room_type="door",
+            object_type="door",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.7},
+            size={"w": 1.0, "h": 2.2, "d": 0.12},
+        ),
+        _make_marker(
+            label="Exterior Window",
+            room_type="window",
+            object_type="window",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + 0.7},
+            size={"w": 1.4, "h": 1.0, "d": 0.12},
+        ),
+    ]
+    return markers
 
 
 def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[list[RoomSpec]]:
@@ -489,12 +650,23 @@ def _build_layout_candidate(
         rooms = _repair_rooms(rooms, building_type=building_type)
         if total_floors > 1:
             rooms.insert(0, _add_stairs(floor_id, level, elevation))
+        footprint = _footprint_for_rooms(rooms)
+        rooms.extend(
+            _architectural_markers(
+                rooms,
+                floor_id=floor_id,
+                floor_level=level,
+                elevation=elevation,
+                footprint=footprint,
+            )
+        )
 
         floor = {
             "id": floor_id,
             "name": _floor_name(level),
             "level": level,
             "elevation": elevation,
+            "footprint": footprint,
             "rooms": rooms,
         }
         floors.append(floor)
@@ -508,13 +680,16 @@ def _build_layout_candidate(
             "building_type": building_type,
             "buildingType":  building_type,
             "style":         "modern",
-            "room_count":    len(flat_rooms),
+            "room_count":    len(room_specs),
             "totalFloors":   total_floors,
             "totalRooms":    len(room_specs),
+            "totalObjects":   len(flat_rooms),
             "totalAreaSqm":  _room_area(room_specs),
             "requestedAreaSqm": total_area_sqm,
             "patternDataUsed": pattern_rules.pattern_data_used,
             "patternDataSource": pattern_rules.pattern_data_source,
+            "appliedPatternCount": pattern_rules.applied_pattern_count,
+            "ignoredPatternCount": pattern_rules.ignored_pattern_count,
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,
@@ -522,6 +697,7 @@ def _build_layout_candidate(
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
+            "footprint": _footprint_for_rooms(flat_rooms),
             "bounds": bounds,
         },
         "floors": floors,

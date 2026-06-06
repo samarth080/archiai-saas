@@ -4,6 +4,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.layout_pattern import LayoutPattern
+from app.services.layout_vocabulary_service import normalize_building_type, normalize_room_type
 
 
 DEFAULT_ROOM_RULES: dict[str, dict] = {
@@ -42,6 +43,10 @@ DEFAULT_LAYOUT_PATTERNS = {
     "restaurant": ("public_dining_rear_service",),
 }
 
+SUPPORTED_PATTERN_CONFIDENCES = {"high", "medium", "seed"}
+SUPPORTED_ZONES = {"public", "private", "service", "circulation", "other"}
+MAX_REASONABLE_ROOM_AREA_SQM = 250.0
+
 
 @dataclass(frozen=True)
 class RoomPatternRule:
@@ -63,6 +68,8 @@ class LayoutPatternRules:
     layout_patterns: tuple[str, ...]
     pattern_data_used: bool = False
     pattern_data_source: str = "fallback-defaults"
+    applied_pattern_count: int = 0
+    ignored_pattern_count: int = 0
 
     def room_size_range(self, room_type: str) -> tuple[float, float]:
         rule = self.rule_for(room_type)
@@ -81,6 +88,63 @@ class LayoutPatternRules:
         return self.room_rules.get(room_type) or _fallback_room_rule(room_type)
 
 
+@dataclass(frozen=True)
+class LayoutPatternAudit:
+    pattern_id: str | None
+    usable: bool
+    warnings: tuple[str, ...]
+
+
+def audit_layout_pattern(pattern: LayoutPattern) -> LayoutPatternAudit:
+    warnings: list[str] = []
+
+    if not pattern.room_type:
+        warnings.append("Missing room type")
+
+    if pattern.confidence not in SUPPORTED_PATTERN_CONFIDENCES:
+        warnings.append("Pattern confidence is not trusted for generation")
+
+    if pattern.zone is not None and pattern.zone not in SUPPORTED_ZONES:
+        warnings.append(f"Unsupported zone: {pattern.zone}")
+
+    min_area = pattern.typical_area_sqm_min
+    max_area = pattern.typical_area_sqm_max
+    if min_area is not None or max_area is not None:
+        if min_area is None or max_area is None:
+            warnings.append("Room area range is incomplete")
+        elif min_area <= 0 or max_area <= 0:
+            warnings.append("Room area range must be positive")
+        elif min_area > max_area:
+            warnings.append("Room area minimum is greater than maximum")
+        elif max_area > MAX_REASONABLE_ROOM_AREA_SQM:
+            warnings.append("Room area range is unrealistically large")
+
+    min_ratio = pattern.room_to_total_area_ratio_min
+    max_ratio = pattern.room_to_total_area_ratio_max
+    if min_ratio is not None or max_ratio is not None:
+        if min_ratio is None or max_ratio is None:
+            warnings.append("Room-to-total-area ratio range is incomplete")
+        elif min_ratio <= 0 or max_ratio <= 0 or min_ratio > max_ratio or max_ratio > 1:
+            warnings.append("Room-to-total-area ratio range is invalid")
+
+    for field_name, value in (
+        ("adjacent_to", pattern.adjacent_to),
+        ("avoid_adjacent_to", pattern.avoid_adjacent_to),
+    ):
+        if not isinstance(value, list):
+            warnings.append(f"{field_name} must be a list")
+
+    return LayoutPatternAudit(
+        pattern_id=pattern.id,
+        usable=not warnings,
+        warnings=tuple(warnings),
+    )
+
+
+def _is_usable_layout_pattern(pattern: LayoutPattern) -> bool:
+    return audit_layout_pattern(pattern).usable
+
+
 def _fallback_room_rule(room_type: str) -> RoomPatternRule:
     defaults = DEFAULT_ROOM_RULES.get(room_type, {"area": (8.0, 16.0), "zone": "service"})
     return RoomPatternRule(
@@ -97,11 +161,18 @@ def fallback_layout_rules(
     building_type: str,
     room_types: set[str] | list[str] | tuple[str, ...],
 ) -> LayoutPatternRules:
+    normalized_building_type = normalize_building_type(building_type) or building_type
+    normalized_room_types = {
+        normalize_room_type(room_type) or room_type
+        for room_type in room_types
+    }
     return LayoutPatternRules(
-        building_type=building_type,
-        room_rules={room_type: _fallback_room_rule(room_type) for room_type in room_types},
-        layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(building_type, (building_type,)),
+        building_type=normalized_building_type,
+        room_rules={room_type: _fallback_room_rule(room_type) for room_type in normalized_room_types},
+        layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(normalized_building_type, (normalized_building_type,)),
         pattern_data_source="fallback-defaults",
+        applied_pattern_count=0,
+        ignored_pattern_count=0,
     )
 
 
@@ -124,12 +195,16 @@ async def get_layout_pattern_rules(
     building_type: str,
     room_types: set[str] | list[str] | tuple[str, ...],
 ) -> LayoutPatternRules:
-    rules = fallback_layout_rules(building_type, room_types)
+    normalized_building_type = normalize_building_type(building_type) or building_type
+    normalized_room_types = {
+        normalize_room_type(room_type) or room_type
+        for room_type in room_types
+    }
+    rules = fallback_layout_rules(normalized_building_type, normalized_room_types)
     result = await db.execute(
         select(LayoutPattern)
-        .where(LayoutPattern.room_type.in_(room_types))
-        .where(or_(LayoutPattern.building_type == building_type, LayoutPattern.building_type.is_(None)))
-        .where(LayoutPattern.confidence.in_(("high", "medium", "seed")))
+        .where(LayoutPattern.room_type.in_(normalized_room_types))
+        .where(or_(LayoutPattern.building_type == normalized_building_type, LayoutPattern.building_type.is_(None)))
     )
     patterns = result.scalars().all()
     confidence_order = {"high": 3, "medium": 2, "seed": 1}
@@ -145,17 +220,23 @@ async def get_layout_pattern_rules(
     room_rules = dict(rules.room_rules)
     used_rooms: set[str] = set()
     used_confidences: set[str] = set()
+    applied_pattern_count = 0
+    ignored_pattern_count = 0
     layout_patterns = list(rules.layout_patterns)
     for pattern in patterns:
+        if not _is_usable_layout_pattern(pattern):
+            ignored_pattern_count += 1
+            continue
         if pattern.room_type not in used_rooms:
             room_rules[pattern.room_type] = _merge_pattern(rules.rule_for(pattern.room_type), pattern)
             used_rooms.add(pattern.room_type)
             used_confidences.add(pattern.confidence)
+            applied_pattern_count += 1
         if pattern.layout_pattern and pattern.layout_pattern not in layout_patterns:
             layout_patterns.append(pattern.layout_pattern)
 
     return LayoutPatternRules(
-        building_type=building_type,
+        building_type=normalized_building_type,
         room_rules=room_rules,
         layout_patterns=tuple(layout_patterns),
         pattern_data_used=bool(used_rooms),
@@ -166,4 +247,6 @@ async def get_layout_pattern_rules(
             if used_confidences
             else "fallback-defaults"
         ),
+        applied_pattern_count=applied_pattern_count,
+        ignored_pattern_count=ignored_pattern_count,
     )

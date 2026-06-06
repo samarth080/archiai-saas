@@ -8,6 +8,7 @@ class LayoutQualityScore:
     score: int
     reasons: list[str]
     warnings: list[str]
+    suggestions: list[str]
     applied_rules: list[str]
 
     def to_dict(self) -> dict:
@@ -37,6 +38,10 @@ def _rooms_by_type(rooms: list[dict]) -> dict[str, list[dict]]:
     return grouped
 
 
+def _label_room_type(room_type: str) -> str:
+    return room_type.replace("_", " ").title()
+
+
 def _room_bounds(room: dict) -> tuple[float, float, float, float]:
     return (
         room["position"]["x"] - room["size"]["w"] / 2,
@@ -54,6 +59,21 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
     return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
 
 
+def _outside_footprint(room: dict, footprint: dict) -> bool:
+    if not footprint:
+        return False
+    min_x = footprint["x"]
+    max_x = footprint["x"] + footprint["w"]
+    min_z = footprint["z"]
+    max_z = footprint["z"] + footprint["d"]
+    return (
+        room["position"]["x"] - room["size"]["w"] / 2 < min_x
+        or room["position"]["x"] + room["size"]["w"] / 2 > max_x
+        or room["position"]["z"] - room["size"]["d"] / 2 < min_z
+        or room["position"]["z"] + room["size"]["d"] / 2 > max_z
+    )
+
+
 def _near_any(source_rooms: list[dict], target_rooms: list[dict], max_gap: float = 1.0) -> bool:
     return any(_edge_gap(source, target) <= max_gap for source in source_rooms for target in target_rooms)
 
@@ -67,7 +87,12 @@ def score_layout_quality(
     rooms = layout.get("rooms", [])
     metadata = layout.get("metadata", {})
     building_type = metadata.get("buildingType") or metadata.get("building_type") or "apartment"
-    architectural_rooms = [room for room in rooms if room.get("roomType") != "stairs"]
+    architectural_rooms = [room for room in rooms if room.get("objectType") == "room"]
+    overlap_checked_rooms = [
+        room
+        for room in rooms
+        if room.get("objectType") in {"room", "stair"}
+    ]
     room_types = {room.get("roomType", "unknown") for room in architectural_rooms}
     rules = pattern_rules or fallback_layout_rules(building_type, room_types)
     required_room_types = required_room_types or room_types
@@ -75,6 +100,7 @@ def score_layout_quality(
     score = 100
     reasons: list[str] = []
     warnings: list[str] = []
+    suggestions: list[str] = []
     applied_rules = [
         f"template:{metadata.get('template', building_type)}",
         f"zones:{','.join(metadata.get('zonesDetected', []))}",
@@ -84,17 +110,6 @@ def score_layout_quality(
         applied_rules.append(f"pattern-data:{rules.pattern_data_source}")
     else:
         applied_rules.append("pattern-data:fallback-defaults")
-
-    overlap_pairs: list[str] = []
-    for index, room in enumerate(architectural_rooms):
-        for other in architectural_rooms[index + 1:]:
-            if _rooms_overlap(room, other):
-                overlap_pairs.append(f"{room.get('label', room.get('roomType'))} / {other.get('label', other.get('roomType'))}")
-    if overlap_pairs:
-        score -= min(30, len(overlap_pairs) * 10)
-        warnings.append(f"Overlapping rooms detected: {', '.join(overlap_pairs)}")
-    else:
-        reasons.append("Rooms do not overlap")
 
     bounds = layout.get("building", {}).get("bounds")
     if bounds:
@@ -121,10 +136,55 @@ def score_layout_quality(
         score -= 20
         warnings.append("Layout schema is incomplete")
 
+    floor_levels = {floor.get("level") for floor in layout.get("floors", [])}
+    invalid_floor_rooms = [
+        room.get("label", room.get("roomType", "unknown"))
+        for room in rooms
+        if floor_levels and room.get("floorLevel") not in floor_levels
+    ]
+    if invalid_floor_rooms:
+        score -= min(20, len(invalid_floor_rooms) * 5)
+        warnings.append(f"Rooms assigned to invalid floors: {', '.join(invalid_floor_rooms)}")
+        suggestions.append("Move invalid rooms back onto one of the generated floors")
+    else:
+        reasons.append("Room floor assignments are valid")
+
+    overlap_issues: list[str] = []
+    for index, room in enumerate(overlap_checked_rooms):
+        for other in overlap_checked_rooms[index + 1:]:
+            if _rooms_overlap(room, other):
+                room_label = room.get("label", room.get("roomType"))
+                other_label = other.get("label", other.get("roomType"))
+                overlap_issues.append(f"{room_label} overlaps {other_label}")
+    if overlap_issues:
+        score -= min(25, len(overlap_issues) * 8)
+        warnings.append(f"Room overlaps detected: {', '.join(overlap_issues)}")
+        suggestions.append("Move overlapping rooms apart before saving or exporting")
+    else:
+        reasons.append("Rooms do not overlap within each floor")
+
+    footprints = {
+        floor.get("level"): floor.get("footprint", {})
+        for floor in layout.get("floors", [])
+    }
+    overflow_rooms = [
+        room.get("label", room.get("roomType", "unknown"))
+        for room in overlap_checked_rooms
+        if room.get("floorLevel") in footprints and _outside_footprint(room, footprints[room.get("floorLevel")])
+    ]
+    if overflow_rooms:
+        score -= min(20, len(overflow_rooms) * 5)
+        warnings.append(f"Rooms outside floor footprint: {', '.join(overflow_rooms)}")
+        suggestions.append("Keep rooms inside the visible floor plate")
+    elif footprints:
+        reasons.append("Rooms stay inside floor footprints")
+
     missing_rooms = sorted(required_room_types - room_types)
     if missing_rooms:
         score -= min(30, len(missing_rooms) * 8)
-        warnings.append(f"Missing required rooms: {', '.join(missing_rooms)}")
+        readable_missing = ", ".join(_label_room_type(room_type) for room_type in missing_rooms)
+        warnings.append(f"Missing required rooms: {readable_missing}")
+        suggestions.append(f"Add the missing required rooms: {readable_missing}")
     else:
         reasons.append("Required rooms are present")
 
@@ -142,12 +202,14 @@ def score_layout_quality(
     if size_issues:
         score -= min(20, len(size_issues) * 3)
         warnings.append(f"Rooms outside expected size ranges: {', '.join(size_issues)}")
+        suggestions.append("Resize flagged rooms toward their typical area ranges")
     else:
         reasons.append("Room sizes are within expected ranges")
 
     if zone_issues:
         score -= min(15, len(zone_issues) * 2)
         warnings.append(f"Rooms outside expected zones: {', '.join(zone_issues)}")
+        suggestions.append("Move flagged rooms back into their public, private, service, or circulation zones")
     else:
         reasons.append("Room zones match resolved rules")
 
@@ -162,23 +224,25 @@ def score_layout_quality(
                 continue
             checked_pairs.add(pair)
             if not any(_edge_gap(a, b) <= 1.0 for a in rooms_by_type[room_type] for b in rooms_by_type[target_type]):
-                adjacency_issues.add(f"{room_type} near {target_type}")
+                adjacency_issues.add(f"{_label_room_type(room_type)} near {_label_room_type(target_type)}")
         for target_type in rule.avoid_adjacent_to:
             pair = tuple(sorted((room_type, target_type)))
             if target_type not in rooms_by_type:
                 continue
             if any(_edge_gap(a, b) <= 1.0 for a in rooms_by_type[room_type] for b in rooms_by_type[target_type]):
-                avoid_issues.add(f"{room_type} next to {target_type}")
+                avoid_issues.add(f"{_label_room_type(room_type)} next to {_label_room_type(target_type)}")
 
     if adjacency_issues:
         score -= min(15, len(adjacency_issues) * 2)
         warnings.append(f"Preferred adjacency not met: {', '.join(sorted(adjacency_issues))}")
+        suggestions.append("Move preferred room pairs closer together")
     else:
         reasons.append("Preferred adjacency rules are satisfied where applicable")
 
     if avoid_issues:
         score -= min(20, len(avoid_issues) * 5)
         warnings.append(f"Avoid-adjacency violations: {', '.join(sorted(avoid_issues))}")
+        suggestions.append("Separate rooms that should not sit directly beside each other")
     else:
         reasons.append("No avoid-adjacency violations detected")
 
@@ -232,6 +296,7 @@ def score_layout_quality(
     if total_floors > 1 and len(stairs_by_floor) != total_floors:
         score -= 10
         warnings.append("Multi-floor layout is missing consistent stair placeholders")
+        suggestions.append("Add one aligned stair object to every generated floor")
     elif total_floors > 1:
         reasons.append("Multi-floor stair placeholders are present")
 
@@ -240,10 +305,12 @@ def score_layout_quality(
     else:
         score -= 5
         warnings.append("Building template metadata is missing")
+        suggestions.append("Regenerate the layout so a building template can be applied")
 
     return LayoutQualityScore(
         score=max(0, min(100, score)),
         reasons=reasons,
         warnings=warnings,
+        suggestions=suggestions,
         applied_rules=applied_rules,
     )

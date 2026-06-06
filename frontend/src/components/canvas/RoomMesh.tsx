@@ -3,7 +3,7 @@ import { Html } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
-import { useCanvasStore, Room } from '../../store/canvasStore'
+import { CanvasViewMode, useCanvasStore, Room } from '../../store/canvasStore'
 
 interface OrbitHandle {
   enabled: boolean
@@ -13,9 +13,10 @@ interface RoomMeshProps {
   room: Room
   orbitRef: RefObject<OrbitHandle>
   readOnly?: boolean
+  viewMode?: CanvasViewMode
 }
 
-export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
+export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: RoomMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   const dragStartRef = useRef<Room['position'] | null>(null)
   const dragOffsetRef = useRef<{ x: number; z: number } | null>(null)
@@ -26,6 +27,16 @@ export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
   const updateRoom = useCanvasStore((s) => s.updateRoom)
 
   const isSelected = selectedId === room.id
+  const isBoundaryMarker = room.objectType === 'wall' || room.objectType === 'door' || room.objectType === 'window'
+  const isPlanView = viewMode !== '3d'
+  const materialOpacity =
+    room.objectType === 'window'
+      ? 0.7
+      : room.objectType === 'door'
+        ? 0.9
+        : isPlanView && room.objectType === 'room'
+          ? 0.58
+          : 1
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
@@ -135,6 +146,10 @@ export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
         color={room.color}
         emissive={isSelected ? '#312e81' : '#000000'}
         emissiveIntensity={isSelected ? 0.35 : 0}
+        transparent={materialOpacity < 1}
+        opacity={materialOpacity}
+        roughness={0.82}
+        metalness={0.02}
       />
       {isSelected && (
         <lineSegments>
@@ -145,7 +160,8 @@ export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
     </mesh>
   )
 
-  const label = (
+  const shouldShowLabel = !isBoundaryMarker || isSelected
+  const label = shouldShowLabel ? (
     <Html
       position={[room.position.x, room.position.y + room.size.h / 2 + 0.35, room.position.z]}
       center
@@ -159,7 +175,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false }: RoomMeshProps) {
         {room.label}
       </div>
     </Html>
-  )
+  ) : null
 
   return (
     <>

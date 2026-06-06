@@ -13,11 +13,17 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const orbitRef = useRef<{ enabled: boolean }>(null)
   const rooms = useCanvasStore((s) => s.rooms)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
+  const viewMode = useCanvasStore((s) => s.viewMode)
   const deselectAll = useCanvasStore((s) => s.deselectAll)
   const visibleRooms =
     selectedFloor === 'all'
       ? rooms
       : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
+  const camera =
+    viewMode === '3d'
+      ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
+      : { position: [0, 28, 0.01] as [number, number, number], fov: 42 }
+  const background = viewMode === 'floor_plan' ? '#f8fafc' : '#eef2f7'
 
   useEffect(() => {
     if (readOnly) return
@@ -52,15 +58,16 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   }, [readOnly])
 
   return (
-    <div className={className} style={{ background: '#f1f5f9' }}>
+    <div className={className} style={{ background }}>
       <Canvas
-        camera={{ position: [10, 12, 10] as [number, number, number], fov: 50 }}
+        key={viewMode}
+        camera={camera}
         gl={{ preserveDrawingBuffer: true }}
         onPointerMissed={readOnly ? undefined : deselectAll}
       >
-        <Scene orbitRef={orbitRef} readOnly={readOnly} />
+        <Scene orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         {visibleRooms.map((r) => (
-          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} />
+          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         ))}
       </Canvas>
     </div>

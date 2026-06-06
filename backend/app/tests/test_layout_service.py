@@ -24,18 +24,20 @@ def test_all_rooms_have_position_and_size():
 def test_room_count_matches_input():
     specs = _make_specs()
     layout = generate_layout(specs)
-    assert len(layout["rooms"]) == len(specs)
+    architectural_rooms = [room for room in layout["rooms"] if room["objectType"] == "room"]
+    assert len(architectural_rooms) == len(specs)
+    assert len(layout["rooms"]) == layout["metadata"]["totalObjects"]
 
 
 def test_y_position_equals_half_height():
     layout = generate_layout(_make_specs())
-    for room in layout["rooms"]:
+    for room in [room for room in layout["rooms"] if room["objectType"] in {"room", "stair"}]:
         assert room["position"]["y"] == pytest.approx(room["size"]["h"] / 2)
 
 
 def test_no_room_overlaps_in_xz_plane():
     layout = generate_layout(_make_specs())
-    rooms = layout["rooms"]
+    rooms = [room for room in layout["rooms"] if room["objectType"] in {"room", "stair"}]
     for i, a in enumerate(rooms):
         for j, b in enumerate(rooms):
             if i == j:
@@ -67,6 +69,9 @@ def test_metadata_fields_are_populated():
     assert layout["metadata"]["prompt"] == "test prompt"
     assert layout["metadata"]["building_type"] == "house"
     assert layout["metadata"]["room_count"] == 3
+    assert layout["building"]["footprint"]["w"] > 0
+    assert layout["building"]["footprint"]["d"] > 0
+    assert layout["floors"][0]["footprint"]["w"] > 0
 
 
 def test_other_zone_rooms_are_placed():
@@ -75,8 +80,9 @@ def test_other_zone_rooms_are_placed():
         RoomSpec(label="Garage", room_type="garage", w=5.0, h=3.0, d=6.0),
     ]
     layout = generate_layout(specs)
-    assert len(layout["rooms"]) == 2
-    for room in layout["rooms"]:
+    rooms = [room for room in layout["rooms"] if room["objectType"] == "room"]
+    assert len(rooms) == 2
+    for room in rooms:
         assert "position" in room
         assert room["position"]["y"] == pytest.approx(room["size"]["h"] / 2)
 
@@ -85,6 +91,17 @@ def test_rooms_have_unique_ids():
     layout = generate_layout(_make_specs())
     ids = [r["id"] for r in layout["rooms"]]
     assert len(ids) == len(set(ids))
+
+
+def test_generated_layout_includes_simple_wall_door_and_window_markers():
+    layout = generate_layout(_make_specs())
+    object_types = {room["objectType"] for room in layout["rooms"]}
+
+    assert {"wall", "door", "window"}.issubset(object_types)
+    for marker in [room for room in layout["rooms"] if room["objectType"] in {"wall", "door", "window"}]:
+        assert marker["floorId"] == "floor_0"
+        assert marker["floorLevel"] == 0
+        assert marker["zone"] == "boundary"
 
 
 def test_multi_floor_layout_returns_requested_floor_count():
@@ -195,6 +212,8 @@ def test_fallback_sizing_metadata_does_not_claim_pattern_data():
     layout = generate_layout(_make_specs())
 
     assert layout["metadata"]["patternDataUsed"] is False
+    assert layout["metadata"]["appliedPatternCount"] == 0
+    assert layout["metadata"]["ignoredPatternCount"] == 0
 
 
 def test_rooms_include_resolved_zone_metadata():
@@ -214,7 +233,7 @@ def test_living_kitchen_and_dining_cluster_are_ordered_together():
         RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
     ]
     layout = generate_layout(specs)
-    rooms = {room["roomType"]: room for room in layout["rooms"]}
+    rooms = {room["roomType"]: room for room in layout["rooms"] if room["objectType"] == "room"}
 
     front_edges = {
         room["position"]["z"] - room["size"]["d"] / 2
@@ -234,6 +253,31 @@ def test_private_bedroom_row_is_separated_from_kitchen_cluster():
     bedroom_edge = bedroom["position"]["z"] - bedroom["size"]["d"] / 2
 
     assert bedroom_edge - kitchen_edge >= 2.0
+
+
+def test_bathroom_row_aligns_near_bedroom_when_adjacency_rules_request_it():
+    specs = [
+        RoomSpec(label="Living Room", room_type="living_room", w=5.0, h=3.0, d=5.0),
+        RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bathroom", room_type="bathroom", w=3.0, h=3.0, d=3.0),
+        RoomSpec(label="Bedroom", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+    ]
+    layout = generate_layout(specs)
+    rooms = {room["roomType"]: room for room in layout["rooms"] if room["objectType"] == "room"}
+    bathroom = rooms["bathroom"]
+    bedroom = rooms["bedroom"]
+    x_gap = max(
+        0.0,
+        abs(bathroom["position"]["x"] - bedroom["position"]["x"])
+        - (bathroom["size"]["w"] + bedroom["size"]["w"]) / 2,
+    )
+    z_gap = max(
+        0.0,
+        abs(bathroom["position"]["z"] - bedroom["position"]["z"])
+        - (bathroom["size"]["d"] + bedroom["size"]["d"]) / 2,
+    )
+
+    assert round(x_gap + z_gap, 2) <= 1.0
 
 
 def test_stairs_are_marked_as_circulation():

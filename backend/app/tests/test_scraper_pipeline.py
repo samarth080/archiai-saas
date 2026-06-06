@@ -360,7 +360,7 @@ def test_metadata_extraction_finds_layout_learning_fields():
     assert bedroom["typical_area_sqm_min"] == 10
     assert bedroom["typical_area_sqm_max"] == 16
     assert bedroom["zone"] == "private"
-    assert bedroom["adjacent_to"] == ["bathroom", "corridor"]
+    assert bedroom["adjacent_to"] == ["bathroom", "hallway"]
     assert bedroom["avoid_adjacent_to"] == ["garage", "kitchen"]
     assert bedroom["source_url"] == "https://example.com/public-layout-guide"
     assert bedroom["accessed_at"] == datetime(2026, 5, 31, tzinfo=timezone.utc)
@@ -392,6 +392,23 @@ def test_metadata_extraction_converts_square_feet_to_square_metres():
     bedroom = next(record for record in metadata if record["room_type"] == "bedroom")
     assert bedroom["typical_area_sqm_min"] == 9.29
     assert bedroom["typical_area_sqm_max"] == 13.94
+
+
+def test_metadata_extraction_normalizes_scraped_vocabulary():
+    cleaning_service = import_module("app.services.scraper_cleaning_service")
+
+    metadata = cleaning_service.extract_layout_metadata(
+        "Flat guidance: lounge should be near the foyer. Washroom is typically 35-55 sqft.",
+        source_url="https://example.com/public-layout-guide",
+        accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+    )
+
+    living = next(record for record in metadata if record["room_type"] == "living_room")
+    bathroom = next(record for record in metadata if record["room_type"] == "bathroom")
+
+    assert living["building_type"] == "apartment"
+    assert living["adjacent_to"] == ["entry"]
+    assert bathroom["typical_area_sqm_min"] == 3.25
 
 
 async def test_processed_layout_pattern_persists_source_and_access_timestamp(client: AsyncClient, monkeypatch):

@@ -150,3 +150,14 @@ def test_extract_total_area_sqm(prompt: str, expected: float):
 )
 def test_detect_building_type_for_sprint11_templates(prompt: str, expected: str):
     assert detect_building_type(prompt) == expected
+
+
+def test_detect_building_type_normalizes_common_aliases():
+    assert detect_building_type("two bedroom residential unit") == "apartment"
+    assert detect_building_type("small family residence with kitchen") == "house"
+
+
+def test_extract_rooms_normalizes_common_room_aliases():
+    types = {room.room_type for room in extract_rooms("flat with lounge, wc, foyer and bed room")}
+
+    assert {"living_room", "bathroom", "entry", "bedroom"}.issubset(types)
