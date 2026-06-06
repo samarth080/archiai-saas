@@ -3,7 +3,11 @@ from datetime import datetime, timezone
 from app.models.layout_pattern import LayoutPattern
 from app.models.scraper_source import ScraperSource
 from app.models.user import User
-from app.services.layout_pattern_service import fallback_layout_rules, get_layout_pattern_rules
+from app.services.layout_pattern_service import (
+    audit_layout_pattern,
+    fallback_layout_rules,
+    get_layout_pattern_rules,
+)
 from app.tests.conftest import TestSessionLocal
 
 
@@ -96,3 +100,66 @@ async def test_low_confidence_database_pattern_does_not_replace_fallback():
     assert rules.pattern_data_used is False
     assert rules.room_size_range("bedroom") == (10.0, 16.0)
     assert rules.zone_for("bedroom") == "private"
+
+
+async def test_invalid_high_confidence_pattern_is_ignored_by_rule_resolver():
+    async with TestSessionLocal() as session:
+        user = User(name="Pattern User", email="pattern-invalid@example.com", hashed_password="unused")
+        session.add(user)
+        await session.flush()
+        source = ScraperSource(
+            name="Invalid public guidance",
+            base_url="https://example.com/invalid-guide",
+            robots_txt_url="https://example.com/robots.txt",
+            data_type="text/html",
+            source_category="room_size_reference",
+            created_by=user.id,
+        )
+        session.add(source)
+        await session.flush()
+        session.add(
+            LayoutPattern(
+                source_id=source.id,
+                source_url=source.base_url,
+                accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+                building_type="apartment",
+                room_type="bedroom",
+                typical_area_sqm_min=40.0,
+                typical_area_sqm_max=4.0,
+                zone="sleeping-zone",
+                adjacent_to=["bathroom"],
+                avoid_adjacent_to=["kitchen"],
+                confidence="high",
+            )
+        )
+        await session.commit()
+
+        rules = await get_layout_pattern_rules(session, "apartment", {"bedroom"})
+
+    assert rules.pattern_data_used is False
+    assert rules.room_size_range("bedroom") == (10.0, 16.0)
+    assert rules.zone_for("bedroom") == "private"
+
+
+def test_pattern_audit_flags_missing_or_unsafe_scraped_data():
+    pattern = LayoutPattern(
+        source_id="source-id",
+        source_url="https://example.com/bad-guide",
+        accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        building_type=None,
+        room_type=None,
+        typical_area_sqm_min=-1.0,
+        typical_area_sqm_max=400.0,
+        zone="mystery",
+        adjacent_to=[],
+        avoid_adjacent_to=[],
+        confidence="low",
+    )
+
+    audit = audit_layout_pattern(pattern)
+
+    assert audit.usable is False
+    assert "Missing room type" in audit.warnings
+    assert "Pattern confidence is not trusted for generation" in audit.warnings
+    assert "Unsupported zone: mystery" in audit.warnings
+    assert "Room area range must be positive" in audit.warnings

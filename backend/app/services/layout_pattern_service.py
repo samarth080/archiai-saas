@@ -41,6 +41,10 @@ DEFAULT_LAYOUT_PATTERNS = {
     "retail": ("public_display_rear_support",),
 }
 
+SUPPORTED_PATTERN_CONFIDENCES = {"high", "medium", "seed"}
+SUPPORTED_ZONES = {"public", "private", "service", "circulation", "other"}
+MAX_REASONABLE_ROOM_AREA_SQM = 250.0
+
 
 @dataclass(frozen=True)
 class RoomPatternRule:
@@ -78,6 +82,63 @@ class LayoutPatternRules:
 
     def rule_for(self, room_type: str) -> RoomPatternRule:
         return self.room_rules.get(room_type) or _fallback_room_rule(room_type)
+
+
+@dataclass(frozen=True)
+class LayoutPatternAudit:
+    pattern_id: str | None
+    usable: bool
+    warnings: tuple[str, ...]
+
+
+def audit_layout_pattern(pattern: LayoutPattern) -> LayoutPatternAudit:
+    warnings: list[str] = []
+
+    if not pattern.room_type:
+        warnings.append("Missing room type")
+
+    if pattern.confidence not in SUPPORTED_PATTERN_CONFIDENCES:
+        warnings.append("Pattern confidence is not trusted for generation")
+
+    if pattern.zone is not None and pattern.zone not in SUPPORTED_ZONES:
+        warnings.append(f"Unsupported zone: {pattern.zone}")
+
+    min_area = pattern.typical_area_sqm_min
+    max_area = pattern.typical_area_sqm_max
+    if min_area is not None or max_area is not None:
+        if min_area is None or max_area is None:
+            warnings.append("Room area range is incomplete")
+        elif min_area <= 0 or max_area <= 0:
+            warnings.append("Room area range must be positive")
+        elif min_area > max_area:
+            warnings.append("Room area minimum is greater than maximum")
+        elif max_area > MAX_REASONABLE_ROOM_AREA_SQM:
+            warnings.append("Room area range is unrealistically large")
+
+    min_ratio = pattern.room_to_total_area_ratio_min
+    max_ratio = pattern.room_to_total_area_ratio_max
+    if min_ratio is not None or max_ratio is not None:
+        if min_ratio is None or max_ratio is None:
+            warnings.append("Room-to-total-area ratio range is incomplete")
+        elif min_ratio <= 0 or max_ratio <= 0 or min_ratio > max_ratio or max_ratio > 1:
+            warnings.append("Room-to-total-area ratio range is invalid")
+
+    for field_name, value in (
+        ("adjacent_to", pattern.adjacent_to),
+        ("avoid_adjacent_to", pattern.avoid_adjacent_to),
+    ):
+        if not isinstance(value, list):
+            warnings.append(f"{field_name} must be a list")
+
+    return LayoutPatternAudit(
+        pattern_id=pattern.id,
+        usable=not warnings,
+        warnings=tuple(warnings),
+    )
+
+
+def _is_usable_layout_pattern(pattern: LayoutPattern) -> bool:
+    return audit_layout_pattern(pattern).usable
 
 
 def _fallback_room_rule(room_type: str) -> RoomPatternRule:
@@ -146,6 +207,8 @@ async def get_layout_pattern_rules(
     used_confidences: set[str] = set()
     layout_patterns = list(rules.layout_patterns)
     for pattern in patterns:
+        if not _is_usable_layout_pattern(pattern):
+            continue
         if pattern.room_type not in used_rooms:
             room_rules[pattern.room_type] = _merge_pattern(rules.rule_for(pattern.room_type), pattern)
             used_rooms.add(pattern.room_type)
