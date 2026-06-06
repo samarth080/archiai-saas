@@ -42,17 +42,30 @@ This keeps the MVP affordable and explainable for students. The scraper remains 
 ## Task Checklist
 
 - [x] Task 1: Sprint 13 plan and tracker
-- [ ] Task 2: Pattern audit and validation
-- [ ] Task 3: Pattern normalization
-- [ ] Task 4: Pattern-weighted rule resolver
-- [ ] Task 5: Adjacency-aware placement engine
-- [ ] Task 6: Footprint and layout sanity checks
-- [ ] Task 7: Wall, door, and window placeholders
-- [ ] Task 8: Canvas visual polish
-- [ ] Task 9: Quality feedback and insights
-- [ ] Task 10: Benchmark suite
-- [ ] Task 11: Pattern data workflow documentation
+- [x] Task 2: Pattern audit and validation
+- [x] Task 3: Pattern normalization
+- [x] Task 4: Pattern-weighted rule resolver
+- [x] Task 5: Adjacency-aware placement engine
+- [x] Task 6: Footprint and layout sanity checks
+- [x] Task 7: Wall, door, and window placeholders
+- [x] Task 8: Canvas visual polish
+- [x] Task 9: Quality feedback and insights
+- [x] Task 10: Benchmark suite
+- [x] Task 11: Pattern data workflow documentation
 - [ ] Task 12: Final checks and sprint completion
+
+## Implementation Notes
+
+- Pattern validation now prevents malformed or low-confidence scraped records from influencing generation.
+- Pattern normalization gives prompt parsing, scraper extraction, and pattern lookup a shared vocabulary.
+- Pattern resolution tracks applied and ignored pattern counts in layout metadata.
+- Placement uses zone rows, adjacency-aware row spacing, and forward-only anchoring to prevent duplicate-room overlap.
+- Layout JSON now includes simple floor footprints and lightweight wall, door, and window marker objects.
+- Canvas view modes now include 3D, top view, and floor-plan view.
+- Quality insights include suggestions and pattern-source metadata.
+- Benchmark coverage now asserts no overlaps, minimum quality score, and key non-residential adjacencies.
+
+Pattern data workflow reference: `docs/PATTERN_DATA_WORKFLOW.md`.
 
 ## Verification Plan
 
@@ -79,4 +92,3 @@ Manual QA:
 - Inspect 3D, top, and floor-plan style views.
 - Move/edit/save/export/share a layout.
 - Confirm normal users do not see scraper/data-pipeline tooling as a primary workflow.
-

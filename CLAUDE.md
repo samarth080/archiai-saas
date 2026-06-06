@@ -418,23 +418,24 @@ Deferred beyond Sprint 12:
 ### Sprint 13 — Smarter Layouts, Pattern Learning, and Better Canvas ⏳ In Progress
 
 - [x] Task 1: Sprint 13 plan and tracker
-- [ ] Task 2: Pattern audit and validation
-- [ ] Task 3: Pattern normalization
-- [ ] Task 4: Pattern-weighted rule resolver
-- [ ] Task 5: Adjacency-aware placement engine
-- [ ] Task 6: Footprint and layout sanity checks
-- [ ] Task 7: Wall, door, and window placeholders
-- [ ] Task 8: Canvas visual polish
-- [ ] Task 9: Quality feedback and insights
-- [ ] Task 10: Benchmark suite
-- [ ] Task 11: Pattern data workflow documentation
+- [x] Task 2: Pattern audit and validation
+- [x] Task 3: Pattern normalization
+- [x] Task 4: Pattern-weighted rule resolver
+- [x] Task 5: Adjacency-aware placement engine
+- [x] Task 6: Footprint and layout sanity checks
+- [x] Task 7: Wall, door, and window placeholders
+- [x] Task 8: Canvas visual polish
+- [x] Task 9: Quality feedback and insights
+- [x] Task 10: Benchmark suite
+- [x] Task 11: Pattern data workflow documentation
 - [ ] Task 12: Final checks and sprint completion
 
 - [x] Sprint 13 implementation plan created at `docs/superpowers/plans/2026-06-07-sprint13-smarter-layouts-pattern-canvas.md`
-- [ ] Pattern data validation keeps low-quality scraped data from influencing generation
-- [ ] Normalized pattern vocabulary maps messy scraped terms to internal room/building types
-- [ ] Pattern-weighted generation improves room sizes, zones, adjacency, and layout metadata without paid AI APIs
-- [ ] Canvas visualization improves readability while preserving editing, save, export, and share behavior
+- [x] Pattern data validation keeps low-quality scraped data from influencing generation
+- [x] Normalized pattern vocabulary maps messy scraped terms to internal room/building types
+- [x] Pattern-weighted generation improves room sizes, zones, adjacency, and layout metadata without paid AI APIs
+- [x] Canvas visualization improves readability while preserving editing, save, export, and share behavior
+- [x] Non-AI pattern data workflow documented at `docs/PATTERN_DATA_WORKFLOW.md`
 
 Deferred beyond Sprint 13:
 - Paid AI API integration

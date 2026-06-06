@@ -1,12 +1,36 @@
-# Sprint 10 To Sprint 11 Pattern Data Workflow
+# Pattern Data Workflow
 
 ## Short Answer
 
-You do not need to run the Sprint 10 scraper before generating layouts.
+You do not need to run the scraper before generating layouts.
 
-Sprint 11 always has deterministic fallback rules for room sizing, zoning, adjacency, avoid-adjacency, building templates, and layout-quality scoring. Layout generation continues to work when the `layout_patterns` table is empty.
+ArchiAI always has deterministic fallback rules for room sizing, zoning, adjacency, avoid-adjacency, building templates, and layout-quality scoring. Layout generation continues to work when the `layout_patterns` table is empty.
 
-Run the scraper or seed local MVP patterns before testing the data-informed path. Pattern records act as a structured knowledge base that overlays the built-in defaults. This is not neural-model training and does not require a paid AI API.
+Run the scraper or seed local MVP patterns when you want to test the data-informed path. Pattern records act as a structured knowledge base that overlays the built-in defaults. This is not neural-model training and does not require a paid AI API.
+
+## The Non-AI Learning Flow
+
+Sprint 13 makes the pattern workflow clearer and more useful:
+
+```text
+public text source
+  -> robots.txt check
+  -> visible text extraction
+  -> LayoutPattern rows
+  -> validation and audit
+  -> vocabulary normalization
+  -> confidence-weighted rule resolution
+  -> deterministic layout generation
+  -> quality scoring and suggestions
+  -> clearer canvas rendering
+```
+
+The important idea is separation:
+
+- The scraper collects structured reference facts.
+- Pattern validation decides which facts are safe enough to use.
+- The generator remains deterministic and explainable.
+- The canvas stays editable by the user.
 
 ## Sprint 10: Structured Public-Text Collection
 
@@ -43,7 +67,7 @@ The scraper UI is internal tooling, not part of the normal customer workflow. It
 6. Generate room blocks and floor assignments.
 7. Score the generated concept layout and return compact generation insights.
 
-Database pattern records currently improve:
+Database pattern records improve:
 
 - Room area ranges
 - Room-to-total-area ratios
@@ -52,7 +76,34 @@ Database pattern records currently improve:
 - Avoid-adjacency
 - Layout-pattern diagnostics and quality scoring
 
-Prompt keyword detection and building-type detection remain code-defined keyword maps. Scraped or seeded patterns do not add arbitrary new prompt vocabulary yet.
+Prompt keyword detection and building-type detection still use code-defined keyword maps. Sprint 13 adds a shared normalization layer for known aliases such as `washroom -> bathroom`, `lounge -> living_room`, and `flat -> apartment`, but scraped records do not dynamically teach the parser arbitrary new vocabulary yet.
+
+## Sprint 13: Smarter Layouts Without Paid AI
+
+Sprint 13 improves the deterministic rule system without adding OpenAI, Claude, Gemini, local model training, or fine-tuning.
+
+It adds:
+
+- Pattern audit and validation for invalid sizes, unsupported zones, missing room/building data, and low confidence.
+- Shared vocabulary normalization across prompts, scraped text, and pattern lookup.
+- Confidence-weighted pattern resolution where trusted source-derived records can beat seed and fallback rules.
+- Pattern metadata in generated layouts, including applied and ignored pattern counts.
+- Adjacency-aware placement that separates public, private, service, and circulation zones.
+- Per-floor footprint sanity checks for overlaps, overflow, missing stairs, and invalid floor assignments.
+- Simple wall, door, and window marker objects for clearer plan reading.
+- Canvas view modes for 3D, top view, and floor-plan style inspection.
+- Quality suggestions that explain sizing, adjacency, zoning, overlap, and footprint issues in user-friendly language.
+- Benchmark prompts for apartments, houses, clinics, offices, retail shops, classrooms, and studios.
+
+This gives three students a practical MVP learning path:
+
+```text
+better public reference data
+  -> better validated LayoutPattern rows
+  -> better deterministic rules
+  -> better generated starting layouts
+  -> fewer manual canvas edits
+```
 
 ## No Pattern Data Flow
 
@@ -69,13 +120,24 @@ User prompt
 
 ```text
 User prompt
-  -> rule-based parser
+  -> rule-based parser and vocabulary normalization
   -> detected building type and rooms
   -> query layout_patterns
+  -> validate and audit pattern records
   -> overlay pattern-informed sizing, zoning, and adjacency rules
   -> deterministic building template and layout
   -> quality score with pattern-data:source-derived or pattern-data:seed
 ```
+
+## Confidence Flow
+
+Pattern sources are resolved in this order:
+
+1. High or medium confidence source-derived patterns
+2. Seed patterns for predictable local testing
+3. Built-in fallback defaults
+
+Low-confidence, malformed, or unsupported patterns are kept as data provenance but ignored during generation.
 
 ## Local MVP Seed Data
 
@@ -143,7 +205,9 @@ Seed the records, generate again, and inspect:
 ```json
 {
   "patternDataUsed": true,
-  "patternDataSource": "seed"
+  "patternDataSource": "seed",
+  "appliedPatternCount": 4,
+  "ignoredPatternCount": 0
 }
 ```
 
@@ -152,7 +216,9 @@ Vetted scraper-derived records produce:
 ```json
 {
   "patternDataUsed": true,
-  "patternDataSource": "source-derived"
+  "patternDataSource": "source-derived",
+  "appliedPatternCount": 4,
+  "ignoredPatternCount": 1
 }
 ```
 
@@ -162,6 +228,8 @@ Useful prompts:
 - `small clinic with waiting area, reception, 2 consultation rooms and bathroom`
 - `office with reception, meeting room and open workspace`
 - `2 floor house with bedrooms upstairs, living room and kitchen downstairs`
+- `retail shop with entry, display area, checkout, storage and bathroom`
+- `classroom with teaching area, storage and shared hallway access`
 
 ## Future AI Scope
 
