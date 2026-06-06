@@ -42,6 +42,7 @@ export interface GenerationInsights {
   score: number
   reasons: string[]
   warnings: string[]
+  suggestions?: string[]
   appliedRules: string[]
 }
 

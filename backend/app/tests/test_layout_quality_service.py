@@ -20,6 +20,7 @@ def test_generated_layout_includes_readable_quality_insights():
 
     assert 0 <= layout["insights"]["score"] <= 100
     assert layout["insights"]["reasons"]
+    assert "suggestions" in layout["insights"]
     assert "template:apartment" in layout["insights"]["appliedRules"]
     assert "pattern-data:fallback-defaults" in layout["insights"]["appliedRules"]
 
@@ -30,7 +31,8 @@ def test_quality_score_reports_missing_required_room():
     result = score_layout_quality(layout, required_room_types={"living_room", "garage"})
 
     assert result.score < 100
-    assert any("Missing required rooms: garage" in warning for warning in result.warnings)
+    assert any("Missing required rooms: Garage" in warning for warning in result.warnings)
+    assert any("Add the missing required rooms" in suggestion for suggestion in result.suggestions)
 
 
 def test_quality_score_reports_avoid_adjacency_violation():
@@ -43,6 +45,7 @@ def test_quality_score_reports_avoid_adjacency_violation():
 
     assert result.score < 100
     assert any("Avoid-adjacency violations" in warning for warning in result.warnings)
+    assert any("Separate rooms" in suggestion for suggestion in result.suggestions)
 
 
 def test_quality_score_reports_missing_multifloor_stairs():
@@ -65,6 +68,7 @@ def test_quality_score_reports_room_overlap():
 
     assert result.score < 100
     assert any("Room overlaps detected" in warning for warning in result.warnings)
+    assert any("overlapping rooms" in suggestion for suggestion in result.suggestions)
 
 
 def test_quality_score_reports_footprint_overflow():

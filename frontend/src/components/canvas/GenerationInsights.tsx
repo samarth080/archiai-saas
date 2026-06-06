@@ -18,6 +18,11 @@ export function GenerationInsights() {
     stringMetadata(metadata.buildingType) ?? stringMetadata(metadata.building_type)
   const template = stringMetadata(metadata.template)
   const zones = listMetadata(metadata.zonesDetected)
+  const patternSource = stringMetadata(metadata.patternDataSource)
+  const appliedPatternCount =
+    typeof metadata.appliedPatternCount === 'number' ? metadata.appliedPatternCount : null
+  const ignoredPatternCount =
+    typeof metadata.ignoredPatternCount === 'number' ? metadata.ignoredPatternCount : null
 
   if (!insights && !buildingType && !template && zones.length === 0) return null
 
@@ -31,16 +36,24 @@ export function GenerationInsights() {
         {buildingType && <span>Building: {buildingType}</span>}
         {template && <span>Template: {template}</span>}
         {zones.length > 0 && <span>Zones: {zones.join(', ')}</span>}
+        {patternSource && <span>Pattern source: {patternSource}</span>}
+        {appliedPatternCount !== null && <span>Patterns applied: {appliedPatternCount}</span>}
+        {ignoredPatternCount ? <span>Ignored: {ignoredPatternCount}</span> : null}
         {insights && (
           <span className="font-medium text-emerald-700">Quality: {insights.score}/100</span>
         )}
       </div>
 
-      {insights && (insights.warnings.length > 0 || insights.reasons.length > 0) && (
+      {insights && (
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
           {insights.warnings.slice(0, 2).map((warning) => (
             <span key={warning} className="text-amber-700">
               Warning: {warning}
+            </span>
+          ))}
+          {(insights.suggestions ?? []).slice(0, 2).map((suggestion) => (
+            <span key={suggestion} className="text-indigo-700">
+              Suggestion: {suggestion}
             </span>
           ))}
           {insights.reasons.slice(0, 2).map((reason) => (
