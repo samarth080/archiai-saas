@@ -415,6 +415,35 @@ Deferred beyond Sprint 12:
 - Advanced PDF styling/report templates
 - Cloud file storage for exports
 
+### Sprint 13 — Smarter Layouts, Pattern Learning, and Better Canvas ⏳ In Progress
+
+- [x] Task 1: Sprint 13 plan and tracker
+- [ ] Task 2: Pattern audit and validation
+- [ ] Task 3: Pattern normalization
+- [ ] Task 4: Pattern-weighted rule resolver
+- [ ] Task 5: Adjacency-aware placement engine
+- [ ] Task 6: Footprint and layout sanity checks
+- [ ] Task 7: Wall, door, and window placeholders
+- [ ] Task 8: Canvas visual polish
+- [ ] Task 9: Quality feedback and insights
+- [ ] Task 10: Benchmark suite
+- [ ] Task 11: Pattern data workflow documentation
+- [ ] Task 12: Final checks and sprint completion
+
+- [x] Sprint 13 implementation plan created at `docs/superpowers/plans/2026-06-07-sprint13-smarter-layouts-pattern-canvas.md`
+- [ ] Pattern data validation keeps low-quality scraped data from influencing generation
+- [ ] Normalized pattern vocabulary maps messy scraped terms to internal room/building types
+- [ ] Pattern-weighted generation improves room sizes, zones, adjacency, and layout metadata without paid AI APIs
+- [ ] Canvas visualization improves readability while preserving editing, save, export, and share behavior
+
+Deferred beyond Sprint 13:
+- Paid AI API integration
+- OpenAI, Claude, Gemini, or local model integration
+- AI model training or fine-tuning
+- CAD/BIM export and structural validation
+- Advanced spatial optimization
+- Public scraper/source-management workflow for normal users
+
 ---
 
 ## Development Rules
