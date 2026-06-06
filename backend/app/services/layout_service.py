@@ -35,9 +35,9 @@ ROOM_COLORS: dict[str, str] = {
     "window":         "#38bdf8",
 }
 
-_GAP     = 1.0   # metres between rooms in same row
-_ADJACENCY_ROW_GAP = 0.5
-_ZONE_GAP = 2.0  # metres between zone rows
+_GAP = 0.6  # metres between rooms in same row
+_ADJACENCY_ROW_GAP = 0.35
+_ZONE_GAP = 1.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
 _STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
 _STAIRS_POSITION = {"x": 1.0, "z": 1.5}
@@ -610,12 +610,12 @@ def _layout_bounds(rooms: list[dict]) -> dict:
     min_z = min(bound[2] for bound in bounds)
     max_z = max(bound[3] for bound in bounds)
     return {
-        "minX": round(min_x, 2),
-        "maxX": round(max_x, 2),
-        "minZ": round(min_z, 2),
-        "maxZ": round(max_z, 2),
-        "width": round(max_x - min_x, 2),
-        "depth": round(max_z - min_z, 2),
+        "minX": round(min_x - 0.01, 2),
+        "maxX": round(max_x + 0.01, 2),
+        "minZ": round(min_z - 0.01, 2),
+        "maxZ": round(max_z + 0.01, 2),
+        "width": round(max_x - min_x + 0.02, 2),
+        "depth": round(max_z - min_z + 0.02, 2),
     }
 
 
