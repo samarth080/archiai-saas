@@ -308,6 +308,8 @@ def generate_layout(
             "requestedAreaSqm": total_area_sqm,
             "patternDataUsed": pattern_rules.pattern_data_used,
             "patternDataSource": pattern_rules.pattern_data_source,
+            "appliedPatternCount": pattern_rules.applied_pattern_count,
+            "ignoredPatternCount": pattern_rules.ignored_pattern_count,
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,

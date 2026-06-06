@@ -67,6 +67,8 @@ class LayoutPatternRules:
     layout_patterns: tuple[str, ...]
     pattern_data_used: bool = False
     pattern_data_source: str = "fallback-defaults"
+    applied_pattern_count: int = 0
+    ignored_pattern_count: int = 0
 
     def room_size_range(self, room_type: str) -> tuple[float, float]:
         rule = self.rule_for(room_type)
@@ -168,6 +170,8 @@ def fallback_layout_rules(
         room_rules={room_type: _fallback_room_rule(room_type) for room_type in normalized_room_types},
         layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(normalized_building_type, (normalized_building_type,)),
         pattern_data_source="fallback-defaults",
+        applied_pattern_count=0,
+        ignored_pattern_count=0,
     )
 
 
@@ -200,7 +204,6 @@ async def get_layout_pattern_rules(
         select(LayoutPattern)
         .where(LayoutPattern.room_type.in_(normalized_room_types))
         .where(or_(LayoutPattern.building_type == normalized_building_type, LayoutPattern.building_type.is_(None)))
-        .where(LayoutPattern.confidence.in_(("high", "medium", "seed")))
     )
     patterns = result.scalars().all()
     confidence_order = {"high": 3, "medium": 2, "seed": 1}
@@ -216,14 +219,18 @@ async def get_layout_pattern_rules(
     room_rules = dict(rules.room_rules)
     used_rooms: set[str] = set()
     used_confidences: set[str] = set()
+    applied_pattern_count = 0
+    ignored_pattern_count = 0
     layout_patterns = list(rules.layout_patterns)
     for pattern in patterns:
         if not _is_usable_layout_pattern(pattern):
+            ignored_pattern_count += 1
             continue
         if pattern.room_type not in used_rooms:
             room_rules[pattern.room_type] = _merge_pattern(rules.rule_for(pattern.room_type), pattern)
             used_rooms.add(pattern.room_type)
             used_confidences.add(pattern.confidence)
+            applied_pattern_count += 1
         if pattern.layout_pattern and pattern.layout_pattern not in layout_patterns:
             layout_patterns.append(pattern.layout_pattern)
 
@@ -239,4 +246,6 @@ async def get_layout_pattern_rules(
             if used_confidences
             else "fallback-defaults"
         ),
+        applied_pattern_count=applied_pattern_count,
+        ignored_pattern_count=ignored_pattern_count,
     )

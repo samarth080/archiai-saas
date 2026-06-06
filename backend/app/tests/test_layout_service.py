@@ -195,6 +195,8 @@ def test_fallback_sizing_metadata_does_not_claim_pattern_data():
     layout = generate_layout(_make_specs())
 
     assert layout["metadata"]["patternDataUsed"] is False
+    assert layout["metadata"]["appliedPatternCount"] == 0
+    assert layout["metadata"]["ignoredPatternCount"] == 0
 
 
 def test_rooms_include_resolved_zone_metadata():
