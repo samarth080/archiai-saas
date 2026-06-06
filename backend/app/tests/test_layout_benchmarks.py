@@ -125,7 +125,7 @@ def test_benchmark_room_sizes_stay_within_realistic_ranges():
     )
 
     for room in layout["rooms"]:
-        if room["roomType"] == "stairs":
+        if room["objectType"] != "room":
             continue
         area = room["size"]["w"] * room["size"]["d"]
         minimum, maximum = REALISTIC_AREA_RANGES[room["roomType"]]

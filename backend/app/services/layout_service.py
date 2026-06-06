@@ -30,6 +30,9 @@ ROOM_COLORS: dict[str, str] = {
     "garage":         "#78716c",
     "utility":        "#cbd5e1",
     "stairs":         "#9ca3af",
+    "wall":           "#475569",
+    "door":           "#a16207",
+    "window":         "#38bdf8",
 }
 
 _GAP     = 1.0   # metres between rooms in same row
@@ -238,6 +241,119 @@ def _footprint_for_rooms(rooms: list[dict], margin: float = 0.5) -> dict:
     }
 
 
+def _make_marker(
+    *,
+    label: str,
+    room_type: str,
+    object_type: str,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    position: dict[str, float],
+    size: dict[str, float],
+    rotation_y: float = 0.0,
+) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "label": label,
+        "roomType": room_type,
+        "objectType": object_type,
+        "floorId": floor_id,
+        "floorLevel": floor_level,
+        "zone": "boundary",
+        "position": {
+            "x": round(position["x"], 2),
+            "y": round(elevation + position["y"], 2),
+            "z": round(position["z"], 2),
+        },
+        "size": size,
+        "rotation": {"x": 0, "y": rotation_y, "z": 0},
+        "color": ROOM_COLORS.get(room_type, "#64748b"),
+    }
+
+
+def _architectural_markers(
+    rooms: list[dict],
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    footprint: dict,
+) -> list[dict]:
+    if not rooms or not footprint["w"] or not footprint["d"]:
+        return []
+
+    x = footprint["x"]
+    z = footprint["z"]
+    w = footprint["w"]
+    d = footprint["d"]
+    wall_h = 2.8
+    wall_t = 0.18
+    markers = [
+        _make_marker(
+            label="Front Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z},
+            size={"w": w, "h": wall_h, "d": wall_t},
+        ),
+        _make_marker(
+            label="Rear Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z + d},
+            size={"w": w, "h": wall_h, "d": wall_t},
+        ),
+        _make_marker(
+            label="Left Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": d},
+        ),
+        _make_marker(
+            label="Right Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": d},
+        ),
+        _make_marker(
+            label="Entry Door",
+            room_type="door",
+            object_type="door",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.02},
+            size={"w": 1.0, "h": 2.2, "d": 0.12},
+        ),
+        _make_marker(
+            label="Exterior Window",
+            room_type="window",
+            object_type="window",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + 0.02},
+            size={"w": 1.4, "h": 1.0, "d": 0.12},
+        ),
+    ]
+    return markers
+
+
 def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[list[RoomSpec]]:
     floors: list[list[RoomSpec]] = [[] for _ in range(total_floors)]
     if total_floors <= 1:
@@ -324,13 +440,23 @@ def generate_layout(
         )
         if total_floors > 1:
             rooms.insert(0, _add_stairs(floor_id, level, elevation))
+        footprint = _footprint_for_rooms(rooms)
+        rooms.extend(
+            _architectural_markers(
+                rooms,
+                floor_id=floor_id,
+                floor_level=level,
+                elevation=elevation,
+                footprint=footprint,
+            )
+        )
 
         floor = {
             "id": floor_id,
             "name": _floor_name(level),
             "level": level,
             "elevation": elevation,
-            "footprint": _footprint_for_rooms(rooms),
+            "footprint": footprint,
             "rooms": rooms,
         }
         floors.append(floor)
@@ -343,9 +469,10 @@ def generate_layout(
             "building_type": building_type,
             "buildingType":  building_type,
             "style":         "modern",
-            "room_count":    len(flat_rooms),
+            "room_count":    len(room_specs),
             "totalFloors":   total_floors,
             "totalRooms":    len(room_specs),
+            "totalObjects":   len(flat_rooms),
             "totalAreaSqm":  _room_area(room_specs),
             "requestedAreaSqm": total_area_sqm,
             "patternDataUsed": pattern_rules.pattern_data_used,

@@ -75,7 +75,12 @@ def score_layout_quality(
     rooms = layout.get("rooms", [])
     metadata = layout.get("metadata", {})
     building_type = metadata.get("buildingType") or metadata.get("building_type") or "apartment"
-    architectural_rooms = [room for room in rooms if room.get("roomType") != "stairs"]
+    architectural_rooms = [room for room in rooms if room.get("objectType") == "room"]
+    overlap_checked_rooms = [
+        room
+        for room in rooms
+        if room.get("objectType") in {"room", "stair"}
+    ]
     room_types = {room.get("roomType", "unknown") for room in architectural_rooms}
     rules = pattern_rules or fallback_layout_rules(building_type, room_types)
     required_room_types = required_room_types or room_types
@@ -118,8 +123,8 @@ def score_layout_quality(
         reasons.append("Room floor assignments are valid")
 
     overlap_issues: list[str] = []
-    for index, room in enumerate(rooms):
-        for other in rooms[index + 1:]:
+    for index, room in enumerate(overlap_checked_rooms):
+        for other in overlap_checked_rooms[index + 1:]:
             if _overlap_in_xz(room, other):
                 room_label = room.get("label", room.get("roomType"))
                 other_label = other.get("label", other.get("roomType"))
