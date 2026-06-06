@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { EditorToolbar } from './EditorToolbar'
@@ -9,6 +9,7 @@ beforeEach(() => {
     draftStatus: 'idle',
     draftError: null,
     lastDraftSavedAt: null,
+    viewMode: '3d',
   })
 })
 
@@ -55,5 +56,15 @@ describe('EditorToolbar draft indicator', () => {
     render(<EditorToolbar />)
 
     expect(screen.getByText('Draft: Save failed')).toHaveAttribute('title', 'Server unavailable')
+  })
+
+  it('lets users switch canvas view modes from the toolbar', () => {
+    render(<EditorToolbar />)
+
+    fireEvent.change(screen.getByLabelText('Canvas view mode'), {
+      target: { value: 'top' },
+    })
+
+    expect(useCanvasStore.getState().viewMode).toBe('top')
   })
 })

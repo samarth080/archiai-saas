@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { CanvasObjectType, DraftStatus, SaveStatus, useCanvasStore } from '../../store/canvasStore'
+import {
+  CanvasObjectType,
+  CanvasViewMode,
+  DraftStatus,
+  SaveStatus,
+  useCanvasStore,
+} from '../../store/canvasStore'
 
 const OBJECT_TYPES: { value: CanvasObjectType; label: string }[] = [
   { value: 'room', label: 'Room' },
@@ -40,6 +46,7 @@ export function EditorToolbar() {
   const selectedId = useCanvasStore((s) => s.selectedId)
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
+  const viewMode = useCanvasStore((s) => s.viewMode)
   const snapToGrid = useCanvasStore((s) => s.snapToGrid)
   const saveStatus = useCanvasStore((s) => s.saveStatus)
   const lastSavedAt = useCanvasStore((s) => s.lastSavedAt)
@@ -47,6 +54,7 @@ export function EditorToolbar() {
   const lastDraftSavedAt = useCanvasStore((s) => s.lastDraftSavedAt)
   const draftError = useCanvasStore((s) => s.draftError)
   const setSelectedFloor = useCanvasStore((s) => s.setSelectedFloor)
+  const setViewMode = useCanvasStore((s) => s.setViewMode)
   const setSnapToGrid = useCanvasStore((s) => s.setSnapToGrid)
   const addObject = useCanvasStore((s) => s.addObject)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
@@ -93,6 +101,17 @@ export function EditorToolbar() {
         />
         Snap
       </label>
+
+      <select
+        aria-label="Canvas view mode"
+        className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        value={viewMode}
+        onChange={(event) => setViewMode(event.target.value as CanvasViewMode)}
+      >
+        <option value="3d">3D</option>
+        <option value="top">Top View</option>
+        <option value="floor_plan">Floor Plan</option>
+      </select>
 
       {floors.length > 1 && (
         <select

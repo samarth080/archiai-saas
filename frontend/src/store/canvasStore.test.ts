@@ -13,6 +13,7 @@ beforeEach(() => {
     })),
     floors: [DEFAULT_FLOOR],
     selectedFloor: 0,
+    viewMode: '3d',
     floorHeight: DEFAULT_FLOOR_HEIGHT,
     designId: null,
     designVersionId: null,
@@ -89,6 +90,17 @@ describe('draft state', () => {
     useCanvasStore.getState().setRecoveredDraftAvailable(true)
 
     expect(useCanvasStore.getState().recoveredDraftAvailable).toBe(true)
+  })
+})
+
+describe('view mode', () => {
+  it('starts in 3D mode and can switch to floor plan mode', () => {
+    const store = useCanvasStore.getState()
+
+    expect(store.viewMode).toBe('3d')
+    store.setViewMode('floor_plan')
+
+    expect(useCanvasStore.getState().viewMode).toBe('floor_plan')
   })
 })
 
@@ -324,6 +336,7 @@ describe('loadLayout and serializeLayout', () => {
           name: 'Ground Floor',
           level: 0,
           elevation: 0,
+          footprint: { x: -1, z: -1, w: 8, d: 8 },
           rooms: [
             {
               id: 'ground-room',
@@ -359,6 +372,7 @@ describe('loadLayout and serializeLayout', () => {
     const state = useCanvasStore.getState()
     expect(state.designId).toBe('design-1')
     expect(state.floors).toHaveLength(2)
+    expect(state.floors[0].footprint).toEqual({ x: -1, z: -1, w: 8, d: 8 })
     expect(state.rooms).toHaveLength(2)
     expect(state.selectedFloor).toBe(0)
     expect(state.rooms.find((room) => room.id === 'upper-room')?.floorLevel).toBe(1)
@@ -386,6 +400,8 @@ describe('loadLayout and serializeLayout', () => {
     expect(layout.floors).toHaveLength(2)
     expect(layout.floors?.[1].rooms).toHaveLength(1)
     expect(layout.metadata?.totalFloors).toBe(2)
+    expect(layout.metadata?.totalRooms).toBe(1)
+    expect(layout.metadata?.totalObjects).toBe(1)
   })
 
   it('preserves generation insights when loading and serializing a layout', () => {

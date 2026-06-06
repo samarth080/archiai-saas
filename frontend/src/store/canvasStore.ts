@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 export type CanvasObjectType = 'room' | 'wall' | 'door' | 'window' | 'stair' | 'floor' | 'open_space'
+export type CanvasViewMode = '3d' | 'top' | 'floor_plan'
 
 export type CanvasEditAction =
   | 'object.added'
@@ -33,6 +34,7 @@ export interface CanvasFloor {
   name: string
   level: number
   elevation: number
+  footprint?: { x: number; z: number; w: number; d: number }
   rooms?: Room[]
 }
 
@@ -51,6 +53,7 @@ export interface CanvasLayout {
   insights?: GenerationInsights
   building?: {
     floorHeight?: number
+    footprint?: { x: number; z: number; w: number; d: number }
   }
   floors?: CanvasFloor[]
   rooms: Room[]
@@ -76,6 +79,7 @@ interface CanvasState {
   rooms: Room[]
   floors: CanvasFloor[]
   selectedFloor: number | 'all'
+  viewMode: CanvasViewMode
   floorHeight: number
   designId: string | null
   designVersionId: string | null
@@ -96,6 +100,7 @@ interface CanvasState {
   selectRoom: (id: string) => void
   deselectAll: () => void
   setSelectedFloor: (floor: number | 'all') => void
+  setViewMode: (mode: CanvasViewMode) => void
   setSnapToGrid: (enabled: boolean) => void
   markDirty: () => void
   markDraftSaving: () => void
@@ -265,6 +270,7 @@ function normalizeLayout(layout: CanvasLayout) {
     name: floor.name || floorName(floor.level),
     level: floor.level,
     elevation: floor.elevation ?? floor.level * floorHeight,
+    footprint: floor.footprint,
   }))
   const rooms = layout.floors?.length
     ? layout.floors.flatMap((floor) =>
@@ -298,6 +304,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   rooms: INITIAL_ROOMS.map((room) => normalizeRoom(room, DEFAULT_FLOOR)),
   floors: [DEFAULT_FLOOR],
   selectedFloor: 0,
+  viewMode: '3d',
   floorHeight: DEFAULT_FLOOR_HEIGHT,
   designId: null,
   designVersionId: null,
@@ -321,6 +328,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ? state.selectedId
           : null,
     })),
+  setViewMode: (mode) => set({ viewMode: mode }),
   setSnapToGrid: (enabled) => set({ snapToGrid: enabled }),
   markDirty: () =>
     set({
@@ -513,6 +521,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rooms,
       floors,
       selectedFloor: floors[0]?.level ?? 0,
+      viewMode: '3d',
       floorHeight,
       designId: layout.designId ?? null,
       designVersionId: layout.designVersionId ?? null,
@@ -530,6 +539,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rooms: [],
       floors: [DEFAULT_FLOOR],
       selectedFloor: 0,
+      viewMode: '3d',
       floorHeight: DEFAULT_FLOOR_HEIGHT,
       designId: null,
       designVersionId: null,
@@ -554,7 +564,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       metadata: {
         ...state.layoutMetadata,
         totalFloors: state.floors.length,
-        totalRooms: state.rooms.length,
+        totalRooms: state.rooms.filter((room) => room.objectType === 'room').length,
+        totalObjects: state.rooms.length,
       },
       ...(state.generationInsights ? { insights: state.generationInsights } : {}),
       building: { floorHeight: state.floorHeight },
