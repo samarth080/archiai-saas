@@ -4,6 +4,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.layout_pattern import LayoutPattern
+from app.services.layout_vocabulary_service import normalize_building_type, normalize_room_type
 
 
 DEFAULT_ROOM_RULES: dict[str, dict] = {
@@ -157,10 +158,15 @@ def fallback_layout_rules(
     building_type: str,
     room_types: set[str] | list[str] | tuple[str, ...],
 ) -> LayoutPatternRules:
+    normalized_building_type = normalize_building_type(building_type) or building_type
+    normalized_room_types = {
+        normalize_room_type(room_type) or room_type
+        for room_type in room_types
+    }
     return LayoutPatternRules(
-        building_type=building_type,
-        room_rules={room_type: _fallback_room_rule(room_type) for room_type in room_types},
-        layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(building_type, (building_type,)),
+        building_type=normalized_building_type,
+        room_rules={room_type: _fallback_room_rule(room_type) for room_type in normalized_room_types},
+        layout_patterns=DEFAULT_LAYOUT_PATTERNS.get(normalized_building_type, (normalized_building_type,)),
         pattern_data_source="fallback-defaults",
     )
 
@@ -184,11 +190,16 @@ async def get_layout_pattern_rules(
     building_type: str,
     room_types: set[str] | list[str] | tuple[str, ...],
 ) -> LayoutPatternRules:
-    rules = fallback_layout_rules(building_type, room_types)
+    normalized_building_type = normalize_building_type(building_type) or building_type
+    normalized_room_types = {
+        normalize_room_type(room_type) or room_type
+        for room_type in room_types
+    }
+    rules = fallback_layout_rules(normalized_building_type, normalized_room_types)
     result = await db.execute(
         select(LayoutPattern)
-        .where(LayoutPattern.room_type.in_(room_types))
-        .where(or_(LayoutPattern.building_type == building_type, LayoutPattern.building_type.is_(None)))
+        .where(LayoutPattern.room_type.in_(normalized_room_types))
+        .where(or_(LayoutPattern.building_type == normalized_building_type, LayoutPattern.building_type.is_(None)))
         .where(LayoutPattern.confidence.in_(("high", "medium", "seed")))
     )
     patterns = result.scalars().all()
@@ -217,7 +228,7 @@ async def get_layout_pattern_rules(
             layout_patterns.append(pattern.layout_pattern)
 
     return LayoutPatternRules(
-        building_type=building_type,
+        building_type=normalized_building_type,
         room_rules=room_rules,
         layout_patterns=tuple(layout_patterns),
         pattern_data_used=bool(used_rooms),

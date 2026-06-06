@@ -2,6 +2,11 @@ import re
 from dataclasses import dataclass
 from math import sqrt
 
+from app.services.layout_vocabulary_service import (
+    BUILDING_TYPE_ALIASES,
+    find_building_type_in_text,
+)
+
 WORD_TO_NUM = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -56,8 +61,8 @@ ROOM_PATTERNS: list[tuple[str, list[str]]] = [
     ("classroom",      ["classroom"]),
     ("bedroom",        ["bedroom", "bed room", "guest bedroom", "guest room", "kids room"]),
     ("office",         ["office"]),
-    ("hallway",        ["hallway", "hall", "corridor", "foyer"]),
-    ("entry",          ["entry", "entrance"]),
+    ("hallway",        ["hallway", "hall", "corridor", "passage", "passageway"]),
+    ("entry",          ["entry", "entrance", "foyer", "lobby"]),
     ("balcony",        ["balcony", "terrace", "porch"]),
     ("garage",         ["garage", "car park", "parking"]),
     ("storage",        ["storage", "store room", "stock room"]),
@@ -70,13 +75,8 @@ SIZE_MODIFIERS: dict[str, float] = {
 }
 
 BUILDING_KEYWORDS: dict[str, list[str]] = {
-    "studio":    ["studio apartment", "studio flat", "studio"],
-    "clinic":    ["clinic", "medical practice"],
-    "classroom": ["classroom", "school room", "teaching room"],
-    "retail":    ["retail", "shop", "store"],
-    "apartment": ["apartment", "flat", "condo"],
-    "house":     ["house", "home", "villa", "cottage"],
-    "office":    ["office building", "office", "workspace"],
+    building_type: list(aliases)
+    for building_type, aliases in BUILDING_TYPE_ALIASES.items()
 }
 
 _COUNT_ALTS = "|".join(WORD_TO_NUM.keys())
@@ -93,11 +93,7 @@ class RoomSpec:
 
 
 def detect_building_type(prompt: str) -> str:
-    text = prompt.lower()
-    for building_type, keywords in BUILDING_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            return building_type
-    return "apartment"
+    return find_building_type_in_text(prompt) or "apartment"
 
 
 def _parse_number(raw: str) -> int | None:

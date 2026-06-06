@@ -1,30 +1,19 @@
 import re
 from datetime import datetime
 
+from app.services.layout_vocabulary_service import (
+    BUILDING_TYPE_ALIASES,
+    ROOM_TYPE_ALIASES,
+    contains_alias,
+    find_building_type_in_text,
+    room_types_in_text,
+)
+
 
 SQFT_TO_SQM = 0.092903
 
-BUILDING_TYPES = {
-    "apartment": ("apartment", "apartments", "flat", "flats"),
-    "house": ("house", "houses", "home", "homes"),
-    "office": ("office", "offices"),
-    "retail": ("retail", "shop", "shops", "store", "stores"),
-}
-
-ROOM_TYPES = {
-    "bedroom": ("bedroom", "bedrooms"),
-    "bathroom": ("bathroom", "bathrooms"),
-    "living_room": ("living room", "living rooms", "lounge", "lounges"),
-    "dining_room": ("dining room", "dining rooms"),
-    "kitchen": ("kitchen", "kitchens"),
-    "corridor": ("corridor", "corridors", "hallway", "hallways"),
-    "garage": ("garage", "garages"),
-    "entry": ("entry", "entries", "entrance", "entrances"),
-    "study": ("study", "studies", "office", "offices"),
-    "balcony": ("balcony", "balconies"),
-    "utility": ("utility", "utilities"),
-    "terrace": ("terrace", "terraces"),
-}
+BUILDING_TYPES = BUILDING_TYPE_ALIASES
+ROOM_TYPES = ROOM_TYPE_ALIASES
 
 ZONE_KEYWORDS = {
     "private": ("private zone", "private room", "private rooms", "private area"),
@@ -40,7 +29,7 @@ def normalize_text(text: str) -> str:
 
 
 def _contains_alias(text: str, aliases: tuple[str, ...]) -> bool:
-    return any(re.search(rf"\b{re.escape(alias)}\b", text, re.IGNORECASE) for alias in aliases)
+    return contains_alias(text, aliases)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -49,11 +38,7 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _find_building_type(text: str) -> str | None:
-    lowered = text.lower()
-    return next(
-        (building_type for building_type, aliases in BUILDING_TYPES.items() if _contains_alias(lowered, aliases)),
-        None,
-    )
+    return find_building_type_in_text(text)
 
 
 def _find_area_range(text: str) -> tuple[float, float] | None:
@@ -82,11 +67,7 @@ def _find_zone(text: str) -> str | None:
 
 
 def _room_types_in_text(text: str, *, exclude: str | None = None) -> list[str]:
-    return sorted(
-        room_type
-        for room_type, aliases in ROOM_TYPES.items()
-        if room_type != exclude and _contains_alias(text, aliases)
-    )
+    return room_types_in_text(text, exclude=exclude)
 
 
 def _relationship_rooms(sentences: list[str], room_type: str, *, avoid: bool) -> list[str]:
