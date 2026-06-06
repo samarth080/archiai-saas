@@ -6,7 +6,7 @@ from app.services.prompt_service import RoomSpec
 
 @pytest.mark.parametrize(
     "building_type",
-    ["apartment", "studio", "house", "office", "clinic", "classroom", "retail"],
+    ["apartment", "studio", "house", "office", "clinic", "restaurant", "classroom", "retail"],
 )
 def test_supported_building_templates_define_generation_strategy(building_type: str):
     template = get_building_template(building_type)
@@ -39,4 +39,13 @@ def test_residential_template_keeps_prompt_driven_room_list_small():
 
 
 def test_registry_contains_only_supported_mvp_templates():
-    assert set(BUILDING_TEMPLATES) == {"apartment", "studio", "house", "office", "clinic", "classroom", "retail"}
+    assert set(BUILDING_TEMPLATES) == {
+        "apartment",
+        "studio",
+        "house",
+        "office",
+        "clinic",
+        "restaurant",
+        "classroom",
+        "retail",
+    }

@@ -72,6 +72,7 @@ SIZE_MODIFIERS: dict[str, float] = {
 BUILDING_KEYWORDS: dict[str, list[str]] = {
     "studio":    ["studio apartment", "studio flat", "studio"],
     "clinic":    ["clinic", "medical practice"],
+    "restaurant": ["restaurant", "cafe", "diner", "food court"],
     "classroom": ["classroom", "school room", "teaching room"],
     "retail":    ["retail", "shop", "store"],
     "apartment": ["apartment", "flat", "condo"],

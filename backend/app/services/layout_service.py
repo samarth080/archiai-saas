@@ -1,7 +1,7 @@
 import uuid
 from math import sqrt
 
-from app.services.building_template_service import apply_template_defaults, get_building_template
+from app.services.building_template_service import BuildingTemplate, apply_template_defaults, get_building_template
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
@@ -37,6 +37,80 @@ _ZONE_GAP = 2.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
 _STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
 _STAIRS_POSITION = {"x": 1.0, "z": 1.5}
+
+BUILDING_FLOW_PRIORITY: dict[str, dict[str, int]] = {
+    "clinic": {
+        "entry": 0,
+        "reception": 1,
+        "waiting_room": 2,
+        "consultation_room": 3,
+        "bathroom": 4,
+        "storage": 5,
+        "utility": 6,
+    },
+    "house": {
+        "entry": 0,
+        "living_room": 1,
+        "dining_room": 2,
+        "kitchen": 3,
+        "hallway": 4,
+        "bathroom": 5,
+        "bedroom": 6,
+        "master_bedroom": 7,
+        "storage": 8,
+    },
+    "apartment": {
+        "entry": 0,
+        "living_room": 1,
+        "kitchen": 2,
+        "dining_room": 3,
+        "hallway": 4,
+        "bathroom": 5,
+        "bedroom": 6,
+        "master_bedroom": 7,
+    },
+    "studio": {
+        "entry": 0,
+        "living_room": 1,
+        "kitchen": 2,
+        "bathroom": 3,
+    },
+    "office": {
+        "entry": 0,
+        "reception": 1,
+        "waiting_room": 2,
+        "workspace": 3,
+        "meeting_room": 4,
+        "office": 5,
+        "storage": 6,
+        "bathroom": 7,
+    },
+    "restaurant": {
+        "entry": 0,
+        "reception": 1,
+        "waiting_room": 2,
+        "dining_room": 3,
+        "kitchen": 4,
+        "storage": 5,
+        "bathroom": 6,
+    },
+    "retail": {
+        "entry": 0,
+        "retail_display": 1,
+        "checkout": 2,
+        "storage": 3,
+        "bathroom": 4,
+    },
+}
+
+ENTRY_PRIVATE_AVOID_TYPES = {
+    "bedroom",
+    "master_bedroom",
+    "consultation_room",
+    "office",
+    "storage",
+    "utility",
+}
 
 
 def _floor_name(level: int) -> str:
@@ -110,47 +184,121 @@ def _size_room_specs(
     return sized
 
 
+def _edge_gap(a: dict, b: dict) -> float:
+    if a.get("floorLevel") != b.get("floorLevel"):
+        return float("inf")
+    x_gap = max(
+        0.0,
+        abs(a["position"]["x"] - b["position"]["x"]) - (a["size"]["w"] + b["size"]["w"]) / 2,
+    )
+    z_gap = max(
+        0.0,
+        abs(a["position"]["z"] - b["position"]["z"]) - (a["size"]["d"] + b["size"]["d"]) / 2,
+    )
+    return round(x_gap + z_gap, 2)
+
+
+def _room_bounds(room: dict) -> tuple[float, float, float, float]:
+    return (
+        room["position"]["x"] - room["size"]["w"] / 2,
+        room["position"]["x"] + room["size"]["w"] / 2,
+        room["position"]["z"] - room["size"]["d"] / 2,
+        room["position"]["z"] + room["size"]["d"] / 2,
+    )
+
+
+def _rooms_overlap(a: dict, b: dict) -> bool:
+    if a.get("floorLevel") != b.get("floorLevel"):
+        return False
+    ax1, ax2, az1, az2 = _room_bounds(a)
+    bx1, bx2, bz1, bz2 = _room_bounds(b)
+    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+
+
+def _flow_priority(building_type: str, room: RoomSpec) -> tuple[int, str]:
+    priority = BUILDING_FLOW_PRIORITY.get(building_type, BUILDING_FLOW_PRIORITY["apartment"])
+    return priority.get(room.room_type, 80), room.label
+
+
+def _placement_group(
+    room: RoomSpec,
+    *,
+    building_type: str,
+    rules: LayoutPatternRules,
+) -> str:
+    room_type = room.room_type
+    if building_type in {"apartment", "studio", "house"} and room_type in {
+        "entry",
+        "living_room",
+        "kitchen",
+        "dining_room",
+        "hallway",
+    }:
+        return "front_public_flow"
+    if building_type == "clinic" and room_type in {
+        "entry",
+        "reception",
+        "waiting_room",
+        "consultation_room",
+        "bathroom",
+    }:
+        return "front_public_flow"
+    if building_type == "office" and room_type in {
+        "entry",
+        "reception",
+        "waiting_room",
+        "workspace",
+        "meeting_room",
+    }:
+        return "front_public_flow"
+    if building_type == "restaurant" and room_type in {
+        "entry",
+        "reception",
+        "waiting_room",
+        "dining_room",
+        "kitchen",
+    }:
+        return "front_public_flow"
+    if building_type == "retail" and room_type in {"entry", "retail_display", "checkout"}:
+        return "front_public_flow"
+    return rules.zone_for(room_type)
+
+
+def _ordered_group_names(template: BuildingTemplate) -> list[str]:
+    names = ["front_public_flow"]
+    for zone in template.zone_priorities:
+        if zone not in names:
+            names.append(zone)
+    for zone in ("circulation", "public", "semi_private", "private", "service", "other"):
+        if zone not in names:
+            names.append(zone)
+    return names
+
+
 def _place_rooms(
     specs: list[RoomSpec],
     rules: LayoutPatternRules,
+    template: BuildingTemplate,
+    building_type: str,
     floor_id: str = "floor_0",
     floor_level: int = 0,
     elevation: float = 0.0,
     x_offset: float = 0.0,
 ) -> list[dict]:
-    public_cluster = {"entry", "living_room", "kitchen", "dining_room"}
-    placement_priority = {
-        "entry": 0,
-        "living_room": 1,
-        "kitchen": 2,
-        "dining_room": 3,
-        "hallway": 4,
-    }
-
-    def placement_group(room: RoomSpec) -> str:
-        zone = rules.zone_for(room.room_type)
-        if room.room_type in public_cluster:
-            return "public_cluster"
-        return zone
-
-    groups: dict[str, list[RoomSpec]] = {
-        "public_cluster": [],
-        "circulation": [],
-        "private": [],
-        "service": [],
-        "public": [],
-        "other": [],
-    }
+    ordered_groups = _ordered_group_names(template)
+    groups: dict[str, list[RoomSpec]] = {group: [] for group in ordered_groups}
     for room in specs:
-        groups.get(placement_group(room), groups["other"]).append(room)
+        group = _placement_group(room, building_type=building_type, rules=rules)
+        groups.setdefault(group, []).append(room)
 
     for rooms in groups.values():
-        rooms.sort(key=lambda room: (placement_priority.get(room.room_type, 50), room.label))
+        rooms.sort(key=lambda room: _flow_priority(building_type, room))
 
     result: list[dict] = []
     current_z = 0.0
 
-    for zone_rooms in groups.values():
+    for group_name in ordered_groups:
+        zone_rooms = groups.get(group_name, [])
         if not zone_rooms:
             continue
         current_x = x_offset
@@ -176,6 +324,48 @@ def _place_rooms(
         current_z += zone_max_d + _ZONE_GAP
 
     return result
+
+
+def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
+    repaired = [dict(room) for room in rooms]
+    for room in repaired:
+        room["position"] = dict(room["position"])
+        room["size"] = dict(room["size"])
+        room["position"]["x"] = max(room["size"]["w"] / 2, room["position"]["x"])
+        room["position"]["z"] = max(room["size"]["d"] / 2, room["position"]["z"])
+
+    by_floor: dict[int, list[dict]] = {}
+    for room in repaired:
+        by_floor.setdefault(room.get("floorLevel", 0), []).append(room)
+
+    for floor_rooms in by_floor.values():
+        floor_rooms.sort(key=lambda room: (room["position"]["z"], room["position"]["x"], room["label"]))
+        for i, room in enumerate(floor_rooms):
+            for previous in floor_rooms[:i]:
+                if _rooms_overlap(previous, room):
+                    previous_bottom = previous["position"]["z"] + previous["size"]["d"] / 2
+                    room["position"]["z"] = round(previous_bottom + _GAP + room["size"]["d"] / 2, 2)
+
+        entry = next((room for room in floor_rooms if room.get("roomType") == "entry"), None)
+        if entry is None:
+            continue
+        for room in floor_rooms:
+            if room.get("roomType") not in ENTRY_PRIVATE_AVOID_TYPES:
+                continue
+            if _edge_gap(entry, room) <= 1.0:
+                room["position"]["z"] = round(
+                    entry["position"]["z"] + entry["size"]["d"] / 2 + _ZONE_GAP + room["size"]["d"] / 2,
+                    2,
+                )
+
+    if building_type == "clinic":
+        waiting = next((room for room in repaired if room.get("roomType") == "waiting_room"), None)
+        bathroom = next((room for room in repaired if room.get("roomType") == "bathroom"), None)
+        if waiting is not None and bathroom is not None and _edge_gap(waiting, bathroom) > 1.0:
+            bathroom["position"]["x"] = round(waiting["position"]["x"] + waiting["size"]["w"] / 2 + _GAP + bathroom["size"]["w"] / 2, 2)
+            bathroom["position"]["z"] = waiting["position"]["z"]
+
+    return repaired
 
 
 def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
@@ -250,22 +440,35 @@ def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[li
     return floors
 
 
-def generate_layout(
+def _layout_bounds(rooms: list[dict]) -> dict:
+    if not rooms:
+        return {"minX": 0.0, "maxX": 0.0, "minZ": 0.0, "maxZ": 0.0, "width": 0.0, "depth": 0.0}
+    bounds = [_room_bounds(room) for room in rooms]
+    min_x = min(bound[0] for bound in bounds)
+    max_x = max(bound[1] for bound in bounds)
+    min_z = min(bound[2] for bound in bounds)
+    max_z = max(bound[3] for bound in bounds)
+    return {
+        "minX": round(min_x, 2),
+        "maxX": round(max_x, 2),
+        "minZ": round(min_z, 2),
+        "maxZ": round(max_z, 2),
+        "width": round(max_x - min_x, 2),
+        "depth": round(max_z - min_z, 2),
+    }
+
+
+def _build_layout_candidate(
+    *,
     room_specs: list[RoomSpec],
-    prompt: str = "",
-    building_type: str = "apartment",
-    total_floors: int = 1,
-    pattern_rules: LayoutPatternRules | None = None,
-    total_area_sqm: float | None = None,
+    prompt: str,
+    building_type: str,
+    total_floors: int,
+    pattern_rules: LayoutPatternRules,
+    total_area_sqm: float | None,
+    template: BuildingTemplate,
+    x_offset: float,
 ) -> dict:
-    total_floors = max(1, total_floors)
-    template = get_building_template(building_type)
-    room_specs = apply_template_defaults(room_specs, building_type)
-    pattern_rules = pattern_rules or fallback_layout_rules(
-        building_type,
-        {room.room_type for room in room_specs},
-    )
-    room_specs = _size_room_specs(room_specs, pattern_rules, total_area_sqm)
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
     floors: list[dict] = []
     flat_rooms: list[dict] = []
@@ -276,11 +479,14 @@ def generate_layout(
         rooms = _place_rooms(
             specs,
             pattern_rules,
+            template,
+            building_type,
             floor_id=floor_id,
             floor_level=level,
             elevation=elevation,
-            x_offset=(_STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0),
+            x_offset=x_offset,
         )
+        rooms = _repair_rooms(rooms, building_type=building_type)
         if total_floors > 1:
             rooms.insert(0, _add_stairs(floor_id, level, elevation))
 
@@ -294,6 +500,7 @@ def generate_layout(
         floors.append(floor)
         flat_rooms.extend(rooms)
 
+    bounds = _layout_bounds(flat_rooms)
     layout = {
         "version": "1.0",
         "metadata": {
@@ -311,9 +518,11 @@ def generate_layout(
             "zonesDetected": sorted({pattern_rules.zone_for(room.room_type) for room in room_specs}),
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,
+            "candidateCount": 1,
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
+            "bounds": bounds,
         },
         "floors": floors,
         "rooms": flat_rooms,
@@ -324,3 +533,38 @@ def generate_layout(
         pattern_rules=pattern_rules,
     ).to_dict()
     return layout
+
+
+def generate_layout(
+    room_specs: list[RoomSpec],
+    prompt: str = "",
+    building_type: str = "apartment",
+    total_floors: int = 1,
+    pattern_rules: LayoutPatternRules | None = None,
+    total_area_sqm: float | None = None,
+) -> dict:
+    total_floors = max(1, total_floors)
+    template = get_building_template(building_type)
+    room_specs = apply_template_defaults(room_specs, building_type)
+    pattern_rules = pattern_rules or fallback_layout_rules(
+        building_type,
+        {room.room_type for room in room_specs},
+    )
+    room_specs = _size_room_specs(room_specs, pattern_rules, total_area_sqm)
+    base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
+    candidates = [
+        _build_layout_candidate(
+            room_specs=room_specs,
+            prompt=prompt,
+            building_type=building_type,
+            total_floors=total_floors,
+            pattern_rules=pattern_rules,
+            total_area_sqm=total_area_sqm,
+            template=template,
+            x_offset=base_offset + offset,
+        )
+        for offset in (0.0, 0.5, 1.0)
+    ]
+    best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
+    best["metadata"]["candidateCount"] = len(candidates)
+    return best
