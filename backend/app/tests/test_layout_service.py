@@ -67,6 +67,9 @@ def test_metadata_fields_are_populated():
     assert layout["metadata"]["prompt"] == "test prompt"
     assert layout["metadata"]["building_type"] == "house"
     assert layout["metadata"]["room_count"] == 3
+    assert layout["building"]["footprint"]["w"] > 0
+    assert layout["building"]["footprint"]["d"] > 0
+    assert layout["floors"][0]["footprint"]["w"] > 0
 
 
 def test_other_zone_rooms_are_placed():

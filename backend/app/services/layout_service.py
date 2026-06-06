@@ -222,6 +222,22 @@ def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
     }
 
 
+def _footprint_for_rooms(rooms: list[dict], margin: float = 0.5) -> dict:
+    if not rooms:
+        return {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    min_x = min(room["position"]["x"] - room["size"]["w"] / 2 for room in rooms) - margin
+    max_x = max(room["position"]["x"] + room["size"]["w"] / 2 for room in rooms) + margin
+    min_z = min(room["position"]["z"] - room["size"]["d"] / 2 for room in rooms) - margin
+    max_z = max(room["position"]["z"] + room["size"]["d"] / 2 for room in rooms) + margin
+    return {
+        "x": round(min_x, 2),
+        "z": round(min_z, 2),
+        "w": round(max_x - min_x, 2),
+        "d": round(max_z - min_z, 2),
+    }
+
+
 def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[list[RoomSpec]]:
     floors: list[list[RoomSpec]] = [[] for _ in range(total_floors)]
     if total_floors <= 1:
@@ -314,6 +330,7 @@ def generate_layout(
             "name": _floor_name(level),
             "level": level,
             "elevation": elevation,
+            "footprint": _footprint_for_rooms(rooms),
             "rooms": rooms,
         }
         floors.append(floor)
@@ -341,6 +358,7 @@ def generate_layout(
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
+            "footprint": _footprint_for_rooms(flat_rooms),
         },
         "floors": floors,
         "rooms": flat_rooms,

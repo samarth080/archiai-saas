@@ -53,3 +53,38 @@ def test_quality_score_reports_missing_multifloor_stairs():
 
     assert result.score < 100
     assert any("missing consistent stair" in warning.lower() for warning in result.warnings)
+
+
+def test_quality_score_reports_room_overlap():
+    layout = deepcopy(generate_layout(_residential_specs()))
+    bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")
+    kitchen = next(room for room in layout["rooms"] if room["roomType"] == "kitchen")
+    bedroom["position"] = kitchen["position"].copy()
+
+    result = score_layout_quality(layout)
+
+    assert result.score < 100
+    assert any("Room overlaps detected" in warning for warning in result.warnings)
+
+
+def test_quality_score_reports_footprint_overflow():
+    layout = deepcopy(generate_layout(_residential_specs()))
+    bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")
+    bedroom["position"]["x"] = 999
+
+    result = score_layout_quality(layout)
+
+    assert result.score < 100
+    assert any("outside floor footprint" in warning for warning in result.warnings)
+
+
+def test_quality_score_reports_invalid_floor_assignment():
+    layout = deepcopy(generate_layout(_residential_specs()))
+    bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")
+    bedroom["floorLevel"] = 99
+    bedroom["floorId"] = "floor_99"
+
+    result = score_layout_quality(layout)
+
+    assert result.score < 100
+    assert any("invalid floors" in warning for warning in result.warnings)

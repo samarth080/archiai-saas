@@ -37,6 +37,35 @@ def _rooms_by_type(rooms: list[dict]) -> dict[str, list[dict]]:
     return grouped
 
 
+def _overlap_in_xz(a: dict, b: dict) -> bool:
+    if a.get("floorLevel") != b.get("floorLevel"):
+        return False
+    ax1 = a["position"]["x"] - a["size"]["w"] / 2
+    ax2 = a["position"]["x"] + a["size"]["w"] / 2
+    az1 = a["position"]["z"] - a["size"]["d"] / 2
+    az2 = a["position"]["z"] + a["size"]["d"] / 2
+    bx1 = b["position"]["x"] - b["size"]["w"] / 2
+    bx2 = b["position"]["x"] + b["size"]["w"] / 2
+    bz1 = b["position"]["z"] - b["size"]["d"] / 2
+    bz2 = b["position"]["z"] + b["size"]["d"] / 2
+    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+
+
+def _outside_footprint(room: dict, footprint: dict) -> bool:
+    if not footprint:
+        return False
+    min_x = footprint["x"]
+    max_x = footprint["x"] + footprint["w"]
+    min_z = footprint["z"]
+    max_z = footprint["z"] + footprint["d"]
+    return (
+        room["position"]["x"] - room["size"]["w"] / 2 < min_x
+        or room["position"]["x"] + room["size"]["w"] / 2 > max_x
+        or room["position"]["z"] - room["size"]["d"] / 2 < min_z
+        or room["position"]["z"] + room["size"]["d"] / 2 > max_z
+    )
+
+
 def score_layout_quality(
     layout: dict,
     *,
@@ -75,6 +104,46 @@ def score_layout_quality(
     else:
         score -= 20
         warnings.append("Layout schema is incomplete")
+
+    floor_levels = {floor.get("level") for floor in layout.get("floors", [])}
+    invalid_floor_rooms = [
+        room.get("label", room.get("roomType", "unknown"))
+        for room in rooms
+        if floor_levels and room.get("floorLevel") not in floor_levels
+    ]
+    if invalid_floor_rooms:
+        score -= min(20, len(invalid_floor_rooms) * 5)
+        warnings.append(f"Rooms assigned to invalid floors: {', '.join(invalid_floor_rooms)}")
+    else:
+        reasons.append("Room floor assignments are valid")
+
+    overlap_issues: list[str] = []
+    for index, room in enumerate(rooms):
+        for other in rooms[index + 1:]:
+            if _overlap_in_xz(room, other):
+                room_label = room.get("label", room.get("roomType"))
+                other_label = other.get("label", other.get("roomType"))
+                overlap_issues.append(f"{room_label} overlaps {other_label}")
+    if overlap_issues:
+        score -= min(25, len(overlap_issues) * 8)
+        warnings.append(f"Room overlaps detected: {', '.join(overlap_issues)}")
+    else:
+        reasons.append("Rooms do not overlap within each floor")
+
+    footprints = {
+        floor.get("level"): floor.get("footprint", {})
+        for floor in layout.get("floors", [])
+    }
+    overflow_rooms = [
+        room.get("label", room.get("roomType", "unknown"))
+        for room in rooms
+        if room.get("floorLevel") in footprints and _outside_footprint(room, footprints[room.get("floorLevel")])
+    ]
+    if overflow_rooms:
+        score -= min(20, len(overflow_rooms) * 5)
+        warnings.append(f"Rooms outside floor footprint: {', '.join(overflow_rooms)}")
+    elif footprints:
+        reasons.append("Rooms stay inside floor footprints")
 
     missing_rooms = sorted(required_room_types - room_types)
     if missing_rooms:
