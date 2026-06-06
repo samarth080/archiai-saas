@@ -36,6 +36,7 @@ ROOM_COLORS: dict[str, str] = {
 }
 
 _GAP     = 1.0   # metres between rooms in same row
+_ADJACENCY_ROW_GAP = 0.75
 _ZONE_GAP = 2.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
 _STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
@@ -140,9 +141,9 @@ def _place_rooms(
     groups: dict[str, list[RoomSpec]] = {
         "public_cluster": [],
         "circulation": [],
-        "service": [],
-        "private": [],
         "public": [],
+        "private": [],
+        "service": [],
         "other": [],
     }
     for room in specs:
@@ -165,7 +166,7 @@ def _place_rooms(
             for target_type in rules.adjacency_for(room.room_type)
         )
         if result:
-            current_z += previous_zone_max_d + (_GAP if has_adjacent_anchor else _ZONE_GAP)
+            current_z += previous_zone_max_d + (_ADJACENCY_ROW_GAP if has_adjacent_anchor else _ZONE_GAP)
 
         current_x = x_offset
         zone_max_d = 0.0
@@ -180,7 +181,7 @@ def _place_rooms(
                 None,
             )
             if anchor is not None:
-                current_x = max(x_offset, round(anchor["position"]["x"] - room.w / 2, 2))
+                current_x = max(current_x, x_offset, round(anchor["position"]["x"] - room.w / 2, 2))
 
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)

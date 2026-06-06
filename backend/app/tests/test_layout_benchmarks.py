@@ -42,6 +42,10 @@ def _room_types(layout: dict, *, floor_level: int | None = None) -> list[str]:
     return [room["roomType"] for room in rooms]
 
 
+def _architectural_rooms(layout: dict) -> list[dict]:
+    return [room for room in layout["rooms"] if room["objectType"] in {"room", "stair"}]
+
+
 def _find_room(layout: dict, room_type: str) -> dict:
     return next(room for room in layout["rooms"] if room["roomType"] == room_type)
 
@@ -56,6 +60,31 @@ def _edge_gap(a: dict, b: dict) -> float:
         abs(a["position"]["z"] - b["position"]["z"]) - (a["size"]["d"] + b["size"]["d"]) / 2,
     )
     return round(x_gap + z_gap, 2)
+
+
+def _overlap_in_xz(a: dict, b: dict) -> bool:
+    if a["floorLevel"] != b["floorLevel"]:
+        return False
+    ax1 = a["position"]["x"] - a["size"]["w"] / 2
+    ax2 = a["position"]["x"] + a["size"]["w"] / 2
+    az1 = a["position"]["z"] - a["size"]["d"] / 2
+    az2 = a["position"]["z"] + a["size"]["d"] / 2
+    bx1 = b["position"]["x"] - b["size"]["w"] / 2
+    bx2 = b["position"]["x"] + b["size"]["w"] / 2
+    bz1 = b["position"]["z"] - b["size"]["d"] / 2
+    bz2 = b["position"]["z"] + b["size"]["d"] / 2
+    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+
+
+BENCHMARK_PROMPTS = [
+    "1 bedroom studio apartment with open plan kitchen living and bathroom",
+    "2 bedroom apartment with living room, kitchen, dining and bathroom",
+    "2 floor house with living room, kitchen, bathroom and 3 bedrooms upstairs",
+    "small office with reception, meeting room, open workspace and storage",
+    "small clinic with waiting room, reception, 2 consultation rooms and bathroom",
+    "classroom layout with 2 classrooms, corridor and bathroom",
+    "retail store layout with display area, storage and checkout",
+]
 
 
 @pytest.mark.parametrize(
@@ -205,3 +234,42 @@ def test_benchmark_records_applied_building_template(prompt: str, expected_templ
     layout = _generate(prompt)
 
     assert layout["metadata"]["template"] == expected_template
+
+
+@pytest.mark.parametrize("prompt", BENCHMARK_PROMPTS)
+def test_benchmark_layouts_have_no_room_overlaps(prompt: str):
+    layout = _generate(prompt)
+    rooms = _architectural_rooms(layout)
+
+    for index, room in enumerate(rooms):
+        for other in rooms[index + 1:]:
+            assert not _overlap_in_xz(room, other), f"{room['label']} overlaps {other['label']}"
+
+
+@pytest.mark.parametrize("prompt", BENCHMARK_PROMPTS)
+def test_benchmark_layouts_meet_quality_floor_and_report_pattern_source(prompt: str):
+    layout = _generate(prompt)
+
+    assert layout["insights"]["score"] >= 70
+    assert layout["metadata"]["patternDataSource"] == "fallback-defaults"
+    assert layout["metadata"]["appliedPatternCount"] == 0
+    assert "suggestions" in layout["insights"]
+
+
+@pytest.mark.parametrize(
+    ("prompt", "room_type", "target_type"),
+    [
+        ("small office with reception, meeting room, open workspace and storage", "reception", "workspace"),
+        ("small clinic with waiting room, reception, consultation room and bathroom", "waiting_room", "consultation_room"),
+        ("retail store layout with display area, storage and checkout", "retail_display", "checkout"),
+        ("classroom layout with classroom, corridor and bathroom", "hallway", "classroom"),
+    ],
+)
+def test_benchmark_key_non_residential_adjacencies_are_close(
+    prompt: str,
+    room_type: str,
+    target_type: str,
+):
+    layout = _generate(prompt)
+
+    assert _edge_gap(_find_room(layout, room_type), _find_room(layout, target_type)) <= 1.0
