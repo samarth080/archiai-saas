@@ -125,6 +125,7 @@ def _place_rooms(
         "kitchen": 2,
         "dining_room": 3,
         "hallway": 4,
+        "bathroom": 5,
     }
 
     def placement_group(room: RoomSpec) -> str:
@@ -136,8 +137,8 @@ def _place_rooms(
     groups: dict[str, list[RoomSpec]] = {
         "public_cluster": [],
         "circulation": [],
-        "private": [],
         "service": [],
+        "private": [],
         "public": [],
         "other": [],
     }
@@ -148,18 +149,40 @@ def _place_rooms(
         rooms.sort(key=lambda room: (placement_priority.get(room.room_type, 50), room.label))
 
     result: list[dict] = []
+    placed_by_type: dict[str, list[dict]] = {}
     current_z = 0.0
+    previous_zone_max_d = 0.0
 
     for zone_rooms in groups.values():
         if not zone_rooms:
             continue
+        has_adjacent_anchor = any(
+            target_type in placed_by_type
+            for room in zone_rooms
+            for target_type in rules.adjacency_for(room.room_type)
+        )
+        if result:
+            current_z += previous_zone_max_d + (_GAP if has_adjacent_anchor else _ZONE_GAP)
+
         current_x = x_offset
         zone_max_d = 0.0
         for room in zone_rooms:
+            anchor = next(
+                (
+                    candidate
+                    for target_type in rules.adjacency_for(room.room_type)
+                    for candidate in placed_by_type.get(target_type, [])
+                    if candidate["position"]["z"] + candidate["size"]["d"] / 2 <= current_z + 0.001
+                ),
+                None,
+            )
+            if anchor is not None:
+                current_x = max(x_offset, round(anchor["position"]["x"] - room.w / 2, 2))
+
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)
             pos_z = round(current_z + room.d / 2, 2)
-            result.append({
+            placed_room = {
                 "id":       str(uuid.uuid4()),
                 "label":    room.label,
                 "roomType": room.room_type,
@@ -170,10 +193,12 @@ def _place_rooms(
                 "position": {"x": pos_x, "y": pos_y, "z": pos_z},
                 "size":     {"w": room.w, "h": room.h, "d": room.d},
                 "color":    ROOM_COLORS.get(room.room_type, "#94a3b8"),
-            })
+            }
+            result.append(placed_room)
+            placed_by_type.setdefault(room.room_type, []).append(placed_room)
             current_x += room.w + _GAP
             zone_max_d = max(zone_max_d, room.d)
-        current_z += zone_max_d + _ZONE_GAP
+        previous_zone_max_d = zone_max_d
 
     return result
 

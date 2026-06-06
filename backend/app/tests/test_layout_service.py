@@ -238,6 +238,31 @@ def test_private_bedroom_row_is_separated_from_kitchen_cluster():
     assert bedroom_edge - kitchen_edge >= 2.0
 
 
+def test_bathroom_row_aligns_near_bedroom_when_adjacency_rules_request_it():
+    specs = [
+        RoomSpec(label="Living Room", room_type="living_room", w=5.0, h=3.0, d=5.0),
+        RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bathroom", room_type="bathroom", w=3.0, h=3.0, d=3.0),
+        RoomSpec(label="Bedroom", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+    ]
+    layout = generate_layout(specs)
+    rooms = {room["roomType"]: room for room in layout["rooms"]}
+    bathroom = rooms["bathroom"]
+    bedroom = rooms["bedroom"]
+    x_gap = max(
+        0.0,
+        abs(bathroom["position"]["x"] - bedroom["position"]["x"])
+        - (bathroom["size"]["w"] + bedroom["size"]["w"]) / 2,
+    )
+    z_gap = max(
+        0.0,
+        abs(bathroom["position"]["z"] - bedroom["position"]["z"])
+        - (bathroom["size"]["d"] + bedroom["size"]["d"]) / 2,
+    )
+
+    assert round(x_gap + z_gap, 2) <= 1.0
+
+
 def test_stairs_are_marked_as_circulation():
     layout = generate_layout(_make_specs(), total_floors=2)
     stairs = [room for room in layout["rooms"] if room["roomType"] == "stairs"]
