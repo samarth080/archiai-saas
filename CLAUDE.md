@@ -415,7 +415,7 @@ Deferred beyond Sprint 12:
 - Advanced PDF styling/report templates
 - Cloud file storage for exports
 
-### Sprint 13 — Smarter Layouts, Pattern Learning, and Better Canvas ⏳ In Progress
+### Sprint 13 — Smarter Layouts, Pattern Learning, and Better Canvas ✅ Complete
 
 - [x] Task 1: Sprint 13 plan and tracker
 - [x] Task 2: Pattern audit and validation
@@ -428,7 +428,7 @@ Deferred beyond Sprint 12:
 - [x] Task 9: Quality feedback and insights
 - [x] Task 10: Benchmark suite
 - [x] Task 11: Pattern data workflow documentation
-- [ ] Task 12: Final checks and sprint completion
+- [x] Task 12: Final checks and sprint completion
 
 - [x] Sprint 13 implementation plan created at `docs/superpowers/plans/2026-06-07-sprint13-smarter-layouts-pattern-canvas.md`
 - [x] Pattern data validation keeps low-quality scraped data from influencing generation
@@ -436,6 +436,7 @@ Deferred beyond Sprint 12:
 - [x] Pattern-weighted generation improves room sizes, zones, adjacency, and layout metadata without paid AI APIs
 - [x] Canvas visualization improves readability while preserving editing, save, export, and share behavior
 - [x] Non-AI pattern data workflow documented at `docs/PATTERN_DATA_WORKFLOW.md`
+- [x] Backend tests, frontend typecheck, production build, and frontend tests pass
 
 Deferred beyond Sprint 13:
 - Paid AI API integration
