@@ -42,17 +42,20 @@ def _label_room_type(room_type: str) -> str:
     return room_type.replace("_", " ").title()
 
 
-def _overlap_in_xz(a: dict, b: dict) -> bool:
+def _room_bounds(room: dict) -> tuple[float, float, float, float]:
+    return (
+        room["position"]["x"] - room["size"]["w"] / 2,
+        room["position"]["x"] + room["size"]["w"] / 2,
+        room["position"]["z"] - room["size"]["d"] / 2,
+        room["position"]["z"] + room["size"]["d"] / 2,
+    )
+
+
+def _rooms_overlap(a: dict, b: dict) -> bool:
     if a.get("floorLevel") != b.get("floorLevel"):
         return False
-    ax1 = a["position"]["x"] - a["size"]["w"] / 2
-    ax2 = a["position"]["x"] + a["size"]["w"] / 2
-    az1 = a["position"]["z"] - a["size"]["d"] / 2
-    az2 = a["position"]["z"] + a["size"]["d"] / 2
-    bx1 = b["position"]["x"] - b["size"]["w"] / 2
-    bx2 = b["position"]["x"] + b["size"]["w"] / 2
-    bz1 = b["position"]["z"] - b["size"]["d"] / 2
-    bz2 = b["position"]["z"] + b["size"]["d"] / 2
+    ax1, ax2, az1, az2 = _room_bounds(a)
+    bx1, bx2, bz1, bz2 = _room_bounds(b)
     return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
 
 
@@ -69,6 +72,10 @@ def _outside_footprint(room: dict, footprint: dict) -> bool:
         or room["position"]["z"] - room["size"]["d"] / 2 < min_z
         or room["position"]["z"] + room["size"]["d"] / 2 > max_z
     )
+
+
+def _near_any(source_rooms: list[dict], target_rooms: list[dict], max_gap: float = 1.0) -> bool:
+    return any(_edge_gap(source, target) <= max_gap for source in source_rooms for target in target_rooms)
 
 
 def score_layout_quality(
@@ -104,6 +111,19 @@ def score_layout_quality(
     else:
         applied_rules.append("pattern-data:fallback-defaults")
 
+    bounds = layout.get("building", {}).get("bounds")
+    if bounds:
+        outside = []
+        for room in architectural_rooms:
+            min_x, max_x, min_z, max_z = _room_bounds(room)
+            if min_x < bounds["minX"] or max_x > bounds["maxX"] or min_z < bounds["minZ"] or max_z > bounds["maxZ"]:
+                outside.append(room.get("label", room.get("roomType", "room")))
+        if outside:
+            score -= min(20, len(outside) * 5)
+            warnings.append(f"Rooms outside building bounds: {', '.join(outside)}")
+        else:
+            reasons.append("Rooms stay inside computed building bounds")
+
     schema_valid = (
         layout.get("version") == "1.0"
         and isinstance(layout.get("floors"), list)
@@ -132,7 +152,7 @@ def score_layout_quality(
     overlap_issues: list[str] = []
     for index, room in enumerate(overlap_checked_rooms):
         for other in overlap_checked_rooms[index + 1:]:
-            if _overlap_in_xz(room, other):
+            if _rooms_overlap(room, other):
                 room_label = room.get("label", room.get("roomType"))
                 other_label = other.get("label", other.get("roomType"))
                 overlap_issues.append(f"{room_label} overlaps {other_label}")
@@ -149,7 +169,7 @@ def score_layout_quality(
     }
     overflow_rooms = [
         room.get("label", room.get("roomType", "unknown"))
-        for room in rooms
+        for room in overlap_checked_rooms
         if room.get("floorLevel") in footprints and _outside_footprint(room, footprints[room.get("floorLevel")])
     ]
     if overflow_rooms:
@@ -225,6 +245,47 @@ def score_layout_quality(
         suggestions.append("Separate rooms that should not sit directly beside each other")
     else:
         reasons.append("No avoid-adjacency violations detected")
+
+    entries = rooms_by_type.get("entry", [])
+    private_entry_violations = []
+    for private_type in ("bedroom", "master_bedroom", "consultation_room", "office", "storage", "utility"):
+        if entries and private_type in rooms_by_type and _near_any(entries, rooms_by_type[private_type]):
+            private_entry_violations.append(private_type)
+    if private_entry_violations:
+        score -= min(25, len(private_entry_violations) * 8)
+        warnings.append(f"Private/service rooms too close to entry: {', '.join(private_entry_violations)}")
+    elif entries:
+        reasons.append("Private and service rooms are buffered from the entry")
+
+    if building_type == "clinic":
+        clinic_flow_issues = []
+        if entries and rooms_by_type.get("reception") and not _near_any(entries, rooms_by_type["reception"]):
+            clinic_flow_issues.append("entry near reception")
+        if rooms_by_type.get("reception") and rooms_by_type.get("waiting_room") and not _near_any(rooms_by_type["reception"], rooms_by_type["waiting_room"]):
+            clinic_flow_issues.append("reception near waiting")
+        if rooms_by_type.get("waiting_room") and rooms_by_type.get("consultation_room") and not _near_any(rooms_by_type["waiting_room"], rooms_by_type["consultation_room"]):
+            clinic_flow_issues.append("waiting near consultation")
+        bathroom_access = (
+            rooms_by_type.get("bathroom")
+            and (
+                _near_any(rooms_by_type.get("waiting_room", []), rooms_by_type["bathroom"], max_gap=2.0)
+                or _near_any(rooms_by_type.get("hallway", []), rooms_by_type["bathroom"], max_gap=2.0)
+            )
+        )
+        if rooms_by_type.get("bathroom") and not bathroom_access:
+            clinic_flow_issues.append("bathroom accessible from waiting/circulation")
+        if clinic_flow_issues:
+            score -= min(25, len(clinic_flow_issues) * 6)
+            warnings.append(f"Clinic flow issues: {', '.join(clinic_flow_issues)}")
+        else:
+            reasons.append("Clinic public-to-private flow is clear")
+
+    if building_type == "restaurant" and entries and rooms_by_type.get("kitchen"):
+        if _near_any(entries, rooms_by_type["kitchen"], max_gap=1.0):
+            score -= 15
+            warnings.append("Restaurant kitchen is too close to the public entry")
+        else:
+            reasons.append("Restaurant kitchen is buffered from the public entry")
 
     total_floors = metadata.get("totalFloors", 1)
     stairs_by_floor = {

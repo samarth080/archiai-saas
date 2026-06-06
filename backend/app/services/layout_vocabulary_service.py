@@ -4,6 +4,7 @@ import re
 BUILDING_TYPE_ALIASES: dict[str, tuple[str, ...]] = {
     "studio": ("studio apartment", "studio flat", "studio"),
     "clinic": ("clinic", "clinics", "medical practice", "healthcare practice"),
+    "restaurant": ("restaurant", "restaurants", "cafe", "cafes", "diner", "diners", "food court"),
     "classroom": ("classroom", "classrooms", "school room", "teaching room"),
     "retail": ("retail", "shop", "shops", "store", "stores"),
     "apartment": (

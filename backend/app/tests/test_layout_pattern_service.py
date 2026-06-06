@@ -17,8 +17,8 @@ def test_fallback_rules_are_available_without_database_patterns():
     assert rules.pattern_data_used is False
     assert rules.room_size_range("bedroom") == (10.0, 16.0)
     assert rules.zone_for("kitchen") == "service"
-    assert rules.adjacency_for("kitchen") == ("living_room", "dining_room")
-    assert rules.avoid_adjacency_for("kitchen") == ("bedroom",)
+    assert rules.adjacency_for("kitchen") == ("living_room", "dining_room", "storage")
+    assert rules.avoid_adjacency_for("kitchen") == ("bedroom", "bathroom")
     assert rules.layout_patterns == ("public_private_split",)
 
 

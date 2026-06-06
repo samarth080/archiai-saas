@@ -9,17 +9,17 @@ from app.services.layout_vocabulary_service import normalize_building_type, norm
 
 DEFAULT_ROOM_RULES: dict[str, dict] = {
     "living_room": {"area": (16.0, 30.0), "zone": "public", "adjacent_to": ("entry", "kitchen", "dining_room")},
-    "kitchen": {"area": (8.0, 18.0), "zone": "service", "adjacent_to": ("living_room", "dining_room"), "avoid": ("bedroom",)},
+    "kitchen": {"area": (8.0, 24.0), "zone": "service", "adjacent_to": ("living_room", "dining_room", "storage"), "avoid": ("bedroom", "bathroom")},
     "dining_room": {"area": (8.0, 18.0), "zone": "public", "adjacent_to": ("living_room", "kitchen")},
     "master_bedroom": {"area": (14.0, 24.0), "zone": "private", "adjacent_to": ("bathroom",), "avoid": ("kitchen", "garage")},
     "bedroom": {"area": (10.0, 16.0), "zone": "private", "adjacent_to": ("bathroom", "hallway"), "avoid": ("kitchen", "garage")},
-    "bathroom": {"area": (4.0, 8.0), "zone": "service", "adjacent_to": ("bedroom", "hallway"), "avoid": ("kitchen",)},
+    "bathroom": {"area": (4.0, 8.0), "zone": "service", "adjacent_to": ("bedroom", "hallway", "waiting_room", "dining_room"), "avoid": ("kitchen",)},
     "study": {"area": (7.0, 14.0), "zone": "private", "adjacent_to": ("hallway",)},
     "office": {"area": (7.0, 14.0), "zone": "private", "adjacent_to": ("hallway",)},
     "workspace": {"area": (18.0, 60.0), "zone": "public", "adjacent_to": ("reception", "meeting_room")},
-    "meeting_room": {"area": (10.0, 24.0), "zone": "private", "adjacent_to": ("workspace",)},
+    "meeting_room": {"area": (10.0, 24.0), "zone": "semi_private", "adjacent_to": ("workspace", "reception")},
     "reception": {"area": (8.0, 18.0), "zone": "public", "adjacent_to": ("entry", "waiting_room", "workspace")},
-    "waiting_room": {"area": (10.0, 24.0), "zone": "public", "adjacent_to": ("entry", "reception")},
+    "waiting_room": {"area": (10.0, 24.0), "zone": "public", "adjacent_to": ("reception", "consultation_room", "bathroom")},
     "consultation_room": {"area": (9.0, 16.0), "zone": "private", "adjacent_to": ("waiting_room", "hallway")},
     "classroom": {"area": (30.0, 65.0), "zone": "public", "adjacent_to": ("hallway",)},
     "retail_display": {"area": (20.0, 80.0), "zone": "public", "adjacent_to": ("entry", "checkout")},
@@ -40,6 +40,7 @@ DEFAULT_LAYOUT_PATTERNS = {
     "clinic": ("waiting_consultation_split",),
     "classroom": ("corridor_connected_learning",),
     "retail": ("public_display_rear_support",),
+    "restaurant": ("public_dining_rear_service",),
 }
 
 SUPPORTED_PATTERN_CONFIDENCES = {"high", "medium", "seed"}
