@@ -1,5 +1,6 @@
 import { type RefObject } from 'react'
 import { OrbitControls, Grid } from '@react-three/drei'
+import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
 
 interface OrbitHandle {
@@ -21,6 +22,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       ? floors
       : floors.filter((floor) => floor.level === selectedFloor)
   const isPlanView = viewMode !== '3d'
+  const slabHeight = isPlanView ? 0.04 : 0.16
 
   return (
     <>
@@ -30,24 +32,27 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       {visibleFloors.map((floor) => {
         const footprint = floor.footprint
         if (!footprint || !footprint.w || !footprint.d) return null
+        const centerX = footprint.x + footprint.w / 2
+        const centerZ = footprint.z + footprint.d / 2
+        const slabY = floor.elevation - slabHeight / 2
+        const edgeGeometry = new THREE.BoxGeometry(footprint.w, slabHeight, footprint.d)
         return (
-          <mesh
-            key={floor.id}
-            position={[
-              footprint.x + footprint.w / 2,
-              floor.elevation + 0.015,
-              footprint.z + footprint.d / 2,
-            ]}
-            raycast={() => null}
-          >
-            <boxGeometry args={[footprint.w, 0.03, footprint.d]} />
-            <meshStandardMaterial
-              color={isPlanView ? '#ffffff' : '#e2e8f0'}
-              transparent
-              opacity={isPlanView ? 0.9 : 0.42}
-              roughness={0.9}
-            />
-          </mesh>
+          <group key={floor.id} position={[centerX, slabY, centerZ]}>
+            <mesh raycast={() => null}>
+              <boxGeometry args={[footprint.w, slabHeight, footprint.d]} />
+              <meshStandardMaterial
+                color={isPlanView ? '#f8fafc' : '#cbd5e1'}
+                transparent
+                opacity={isPlanView ? 0.96 : 0.86}
+                roughness={0.88}
+                metalness={0.02}
+              />
+            </mesh>
+            <lineSegments raycast={() => null}>
+              <edgesGeometry args={[edgeGeometry]} />
+              <lineBasicMaterial color={floor.level === 0 ? '#334155' : '#64748b'} />
+            </lineSegments>
+          </group>
         )
       })}
 
