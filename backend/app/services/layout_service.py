@@ -563,16 +563,6 @@ def _architectural_markers(
             size={"w": wall_t, "h": wall_h, "d": d},
         ),
         _make_marker(
-            label="Entry Door",
-            room_type="door",
-            object_type="door",
-            floor_id=floor_id,
-            floor_level=floor_level,
-            elevation=elevation,
-            position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.7},
-            size={"w": 1.0, "h": 2.2, "d": 0.12},
-        ),
-        _make_marker(
             label="Exterior Window",
             room_type="window",
             object_type="window",
@@ -583,6 +573,19 @@ def _architectural_markers(
             size={"w": 1.4, "h": 1.0, "d": 0.12},
         ),
     ]
+    if floor_level == 0:
+        markers.append(
+            _make_marker(
+                label="Entry Door",
+                room_type="door",
+                object_type="door",
+                floor_id=floor_id,
+                floor_level=floor_level,
+                elevation=elevation,
+                position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.7},
+                size={"w": 1.0, "h": 2.2, "d": 0.12},
+            )
+        )
     return markers
 
 
