@@ -44,6 +44,7 @@ function draftStatusLabel(status: DraftStatus, lastDraftSavedAt: string | null) 
 export function EditorToolbar() {
   const [objectType, setObjectType] = useState<CanvasObjectType>('room')
   const selectedId = useCanvasStore((s) => s.selectedId)
+  const rooms = useCanvasStore((s) => s.rooms)
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const viewMode = useCanvasStore((s) => s.viewMode)
@@ -57,8 +58,20 @@ export function EditorToolbar() {
   const setViewMode = useCanvasStore((s) => s.setViewMode)
   const setSnapToGrid = useCanvasStore((s) => s.setSnapToGrid)
   const addObject = useCanvasStore((s) => s.addObject)
+  const updateRoom = useCanvasStore((s) => s.updateRoom)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
   const deleteRoom = useCanvasStore((s) => s.deleteRoom)
+  const selectedObject = rooms.find((room) => room.id === selectedId) ?? null
+
+  const rotateSelected = (degrees: number) => {
+    if (!selectedObject) return
+    const nextY = ((selectedObject.rotation.y + degrees) % 360 + 360) % 360
+    updateRoom(
+      selectedObject.id,
+      { rotation: { ...selectedObject.rotation, y: nextY } },
+      { action: 'object.rotated', previousValue: selectedObject.rotation }
+    )
+  }
 
   const statusClasses = {
     saved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -160,6 +173,32 @@ export function EditorToolbar() {
       >
         Duplicate
       </button>
+      <div className="flex items-center gap-1 rounded border border-gray-200 px-1 py-1">
+        <button
+          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!selectedObject}
+          onClick={() => rotateSelected(-15)}
+          title="Rotate selected object left"
+        >
+          Rotate -15 deg
+        </button>
+        <button
+          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!selectedObject}
+          onClick={() => rotateSelected(15)}
+          title="Rotate selected object right"
+        >
+          Rotate +15 deg
+        </button>
+        <button
+          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!selectedObject}
+          onClick={() => rotateSelected(90)}
+          title="Rotate selected object by 90 degrees"
+        >
+          90 deg
+        </button>
+      </div>
       <button
         className="h-8 rounded border border-red-200 px-3 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!selectedId}

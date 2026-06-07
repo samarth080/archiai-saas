@@ -36,6 +36,15 @@ export function Inspector() {
     return null
   }
 
+  const rotateY = (degrees: number) => {
+    const nextY = ((room.rotation.y + degrees) % 360 + 360) % 360
+    updateRoom(
+      room.id,
+      { rotation: { ...room.rotation, y: nextY } },
+      { action: 'object.rotated', previousValue: room.rotation }
+    )
+  }
+
   return (
     <div className="w-56 bg-white border-l border-gray-200 p-4 flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col gap-2">
@@ -203,10 +212,13 @@ export function Inspector() {
 
       {/* Rotation */}
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rotation</h3>
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rotation</h3>
+          <p className="mt-1 text-[11px] text-gray-400">Use Y to turn walls, doors, windows, and rooms on the floor plan.</p>
+        </div>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">X</span>
+          <span className="text-xs text-gray-500">Rotate X</span>
           <input
             type="number"
             aria-label="Rotation X"
@@ -226,7 +238,7 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Y</span>
+          <span className="text-xs text-gray-500">Rotate Y</span>
           <input
             type="number"
             aria-label="Rotation Y"
@@ -245,8 +257,32 @@ export function Inspector() {
           />
         </label>
 
+        <div className="grid grid-cols-3 gap-1" aria-label="Quick rotate Y controls">
+          <button
+            type="button"
+            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => rotateY(-15)}
+          >
+            -15 deg
+          </button>
+          <button
+            type="button"
+            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => rotateY(15)}
+          >
+            +15 deg
+          </button>
+          <button
+            type="button"
+            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => rotateY(90)}
+          >
+            90 deg
+          </button>
+        </div>
+
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Z</span>
+          <span className="text-xs text-gray-500">Rotate Z</span>
           <input
             type="number"
             aria-label="Rotation Z"

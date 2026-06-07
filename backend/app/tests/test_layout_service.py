@@ -159,6 +159,49 @@ def test_multi_floor_split_places_public_rooms_on_ground_and_bedrooms_upstairs()
     assert {"Master Bedroom", "Bedroom 2", "Bedroom 3", "Stairs"}.issubset(first_labels)
 
 
+def test_multi_floor_layout_uses_shared_floor_footprint():
+    specs = [
+        RoomSpec(label="Living Room", room_type="living_room", w=5.0, h=3.0, d=5.0),
+        RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 1", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 2", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 3", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 4", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bathroom", room_type="bathroom", w=3.0, h=3.0, d=3.0),
+    ]
+    layout = generate_layout(specs, building_type="apartment", total_floors=2)
+
+    assert layout["floors"][0]["footprint"] == layout["floors"][1]["footprint"]
+    assert layout["building"]["footprint"] == layout["floors"][0]["footprint"]
+
+
+def test_multi_floor_upper_rooms_wrap_instead_of_forming_one_long_strip():
+    specs = [
+        RoomSpec(label="Living Room", room_type="living_room", w=5.0, h=3.0, d=5.0),
+        RoomSpec(label="Kitchen", room_type="kitchen", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 1", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 2", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 3", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 4", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 5", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bedroom 6", room_type="bedroom", w=4.0, h=3.0, d=4.0),
+        RoomSpec(label="Bathroom", room_type="bathroom", w=3.0, h=3.0, d=3.0),
+    ]
+    layout = generate_layout(specs, building_type="apartment", total_floors=2)
+    upper_rooms = [
+        room
+        for room in layout["floors"][1]["rooms"]
+        if room["objectType"] == "room"
+    ]
+    upper_row_starts = {
+        round(room["position"]["z"] - room["size"]["d"] / 2, 2)
+        for room in upper_rooms
+    }
+
+    assert len(upper_row_starts) > 1
+    assert layout["floors"][1]["footprint"]["w"] <= 20.0
+
+
 def test_pattern_room_size_range_clamps_generated_dimensions():
     specs = [RoomSpec(label="Bedroom", room_type="bedroom", w=6.0, h=3.0, d=6.0)]
     rules = LayoutPatternRules(

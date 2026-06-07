@@ -31,12 +31,18 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   const isPlanView = viewMode !== '3d'
   const materialOpacity =
     room.objectType === 'window'
-      ? 0.7
+      ? 0.52
       : room.objectType === 'door'
-        ? 0.9
-        : isPlanView && room.objectType === 'room'
-          ? 0.58
-          : 1
+        ? 0.66
+        : room.objectType === 'wall'
+          ? 0.42
+          : isSelected
+            ? 0.82
+            : isPlanView && room.objectType === 'room'
+              ? 0.5
+              : room.objectType === 'room' || room.objectType === 'stair'
+                ? 0.68
+                : 0.76
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
@@ -148,6 +154,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
         emissiveIntensity={isSelected ? 0.35 : 0}
         transparent={materialOpacity < 1}
         opacity={materialOpacity}
+        depthWrite={materialOpacity > 0.75}
         roughness={0.82}
         metalness={0.02}
       />

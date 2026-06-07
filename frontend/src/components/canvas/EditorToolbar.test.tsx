@@ -6,11 +6,12 @@ import { useCanvasStore } from '../../store/canvasStore'
 
 beforeEach(() => {
   useCanvasStore.setState({
+    ...useCanvasStore.getInitialState(),
     draftStatus: 'idle',
     draftError: null,
     lastDraftSavedAt: null,
     viewMode: '3d',
-  })
+  }, true)
 })
 
 describe('EditorToolbar draft indicator', () => {
@@ -66,5 +67,15 @@ describe('EditorToolbar draft indicator', () => {
     })
 
     expect(useCanvasStore.getState().viewMode).toBe('top')
+  })
+
+  it('rotates the selected object from the toolbar', () => {
+    useCanvasStore.getState().selectRoom('room-1')
+
+    render(<EditorToolbar />)
+    fireEvent.click(screen.getByText('Rotate +15 deg'))
+
+    const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'room-1')
+    expect(room?.rotation.y).toBe(15)
   })
 })
