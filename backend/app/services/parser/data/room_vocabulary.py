@@ -1,0 +1,33 @@
+ROOM_TERMS: dict[str, tuple[str, ...]] = {
+    "living_room": ("living_room",),
+    "open_plan_living": ("open_plan_living",),
+    "kitchen": ("kitchen", "kitchenette"),
+    "dining_room": ("dining_room", "dining"),
+    "master_bedroom": ("master_bedroom",),
+    "bedroom": ("bedroom", "bedrooms", "guest_room"),
+    "kids_room": ("kids_room",),
+    "bathroom": ("bathroom", "bathrooms"),
+    "ensuite": ("ensuite",),
+    "office": ("office",),
+    "workspace": ("workspace", "work_area"),
+    "meeting_room": ("meeting_room", "conference_room"),
+    "reception": ("reception", "front_desk"),
+    "waiting_room": ("waiting_room",),
+    "consultation_room": ("consultation_room", "exam_room"),
+    "classroom": ("classroom",),
+    "retail_display": ("retail_display",),
+    "checkout": ("checkout",),
+    "storage": ("storage", "stock_room"),
+    "laundry": ("laundry",),
+    "mudroom": ("mudroom",),
+    "foyer": ("foyer", "entry", "entrance", "lobby"),
+    "hallway": ("hallway", "corridor", "passage"),
+    "garage": ("garage", "parking"),
+    "balcony": ("balcony",),
+    "terrace": ("terrace", "porch"),
+    "bar": ("bar",),
+    "changing_room": ("changing_room",),
+}
+
+
+COMPOUND_LINK_WORDS = ("with", "and", "plus", "including", "attached")
