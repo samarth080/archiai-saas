@@ -288,6 +288,7 @@ def _place_rooms(
     floor_level: int = 0,
     elevation: float = 0.0,
     x_offset: float = 0.0,
+    max_row_width: float | None = None,
 ) -> list[dict]:
     ordered_groups = _ordered_group_names(template)
     groups: dict[str, list[RoomSpec]] = {group: [] for group in ordered_groups}
@@ -329,6 +330,15 @@ def _place_rooms(
             )
             if anchor is not None:
                 current_x = max(current_x, x_offset, round(anchor["position"]["x"] - room.w / 2, 2))
+
+            if (
+                max_row_width is not None
+                and current_x > x_offset
+                and current_x + room.w > x_offset + max_row_width
+            ):
+                current_z += zone_max_d + _ADJACENCY_ROW_GAP
+                current_x = x_offset
+                zone_max_d = 0.0
 
             pos_x = round(current_x + room.w / 2, 2)
             pos_y = round(elevation + room.h / 2, 2)
@@ -432,6 +442,34 @@ def _footprint_for_rooms(rooms: list[dict], margin: float = 0.5) -> dict:
         "w": round(max_x - min_x, 2),
         "d": round(max_z - min_z, 2),
     }
+
+
+def _shared_footprint(footprints: list[dict]) -> dict:
+    usable = [footprint for footprint in footprints if footprint.get("w") and footprint.get("d")]
+    if not usable:
+        return {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    min_x = min(footprint["x"] for footprint in usable)
+    min_z = min(footprint["z"] for footprint in usable)
+    max_x = max(footprint["x"] + footprint["w"] for footprint in usable)
+    max_z = max(footprint["z"] + footprint["d"] for footprint in usable)
+    return {
+        "x": round(min_x, 2),
+        "z": round(min_z, 2),
+        "w": round(max_x - min_x, 2),
+        "d": round(max_z - min_z, 2),
+    }
+
+
+def _max_row_width_for_layout(room_specs: list[RoomSpec], total_floors: int, building_type: str) -> float | None:
+    if total_floors <= 1:
+        return None
+
+    total_area = sum(room.w * room.d for room in room_specs)
+    base_width = sqrt(total_area) * 1.7 if total_area else 14.0
+    if building_type in {"apartment", "house", "studio"}:
+        return round(min(max(base_width, 12.0), 15.5), 2)
+    return round(min(max(base_width, 16.0), 22.0), 2)
 
 
 def _make_marker(
@@ -631,6 +669,9 @@ def _build_layout_candidate(
     x_offset: float,
 ) -> dict:
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
+    max_row_width = _max_row_width_for_layout(room_specs, total_floors, building_type)
+    pending_floors: list[dict] = []
+    floor_footprints: list[dict] = []
     floors: list[dict] = []
     flat_rooms: list[dict] = []
 
@@ -646,26 +687,46 @@ def _build_layout_candidate(
             floor_level=level,
             elevation=elevation,
             x_offset=x_offset,
+            max_row_width=max_row_width,
         )
         rooms = _repair_rooms(rooms, building_type=building_type)
         if total_floors > 1:
             rooms.insert(0, _add_stairs(floor_id, level, elevation))
         footprint = _footprint_for_rooms(rooms)
+        pending_floors.append(
+            {
+                "id": floor_id,
+                "name": _floor_name(level),
+                "level": level,
+                "elevation": elevation,
+                "footprint": footprint,
+                "rooms": rooms,
+            }
+        )
+        floor_footprints.append(footprint)
+
+    building_footprint = _shared_footprint(floor_footprints) if total_floors > 1 else (
+        floor_footprints[0] if floor_footprints else {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+    )
+
+    for pending_floor in pending_floors:
+        footprint = building_footprint if total_floors > 1 else pending_floor["footprint"]
+        rooms = list(pending_floor["rooms"])
         rooms.extend(
             _architectural_markers(
                 rooms,
-                floor_id=floor_id,
-                floor_level=level,
-                elevation=elevation,
+                floor_id=pending_floor["id"],
+                floor_level=pending_floor["level"],
+                elevation=pending_floor["elevation"],
                 footprint=footprint,
             )
         )
 
         floor = {
-            "id": floor_id,
-            "name": _floor_name(level),
-            "level": level,
-            "elevation": elevation,
+            "id": pending_floor["id"],
+            "name": pending_floor["name"],
+            "level": pending_floor["level"],
+            "elevation": pending_floor["elevation"],
             "footprint": footprint,
             "rooms": rooms,
         }
@@ -697,7 +758,7 @@ def _build_layout_candidate(
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
-            "footprint": _footprint_for_rooms(flat_rooms),
+            "footprint": building_footprint,
             "bounds": bounds,
         },
         "floors": floors,
