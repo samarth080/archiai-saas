@@ -41,7 +41,6 @@ _ADJACENCY_ROW_GAP = 0.35
 _ZONE_GAP = 1.0  # metres between zone rows
 _FLOOR_HEIGHT = 3.2
 _STAIRS_SIZE = {"w": 2.0, "h": _FLOOR_HEIGHT, "d": 3.0}
-_STAIRS_POSITION = {"x": 1.0, "z": 1.5}
 
 BUILDING_FLOW_PRIORITY: dict[str, dict[str, int]] = {
     "clinic": {
@@ -383,12 +382,33 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
         by_floor.setdefault(room.get("floorLevel", 0), []).append(room)
 
     for floor_rooms in by_floor.values():
-        floor_rooms.sort(key=lambda room: (room["position"]["z"], room["position"]["x"], room["label"]))
-        for i, room in enumerate(floor_rooms):
-            for previous in floor_rooms[:i]:
-                if _rooms_overlap(previous, room):
-                    previous_bottom = previous["position"]["z"] + previous["size"]["d"] / 2
-                    room["position"]["z"] = round(previous_bottom + _GAP + room["size"]["d"] / 2, 2)
+        # Iterative overlap resolution — run until stable (max 10 passes)
+        for _ in range(10):
+            changed = False
+            floor_rooms.sort(key=lambda room: (room["position"]["z"], room["position"]["x"], room["label"]))
+            for i, room in enumerate(floor_rooms):
+                for previous in floor_rooms[:i]:
+                    if not _rooms_overlap(previous, room):
+                        continue
+                    # Determine cheapest push direction
+                    prev_x1, prev_x2, prev_z1, prev_z2 = _room_bounds(previous)
+                    cur_x1, cur_x2, cur_z1, cur_z2 = _room_bounds(room)
+                    overlap_z = min(prev_z2, cur_z2) - max(prev_z1, cur_z1)
+                    overlap_x = min(prev_x2, cur_x2) - max(prev_x1, cur_x1)
+                    if overlap_z <= overlap_x:
+                        # push in Z (cheaper)
+                        room["position"]["z"] = round(
+                            prev_z2 + _GAP + room["size"]["d"] / 2, 2
+                        )
+                    else:
+                        # push in X
+                        room["position"]["x"] = round(
+                            prev_x2 + _GAP + room["size"]["w"] / 2, 2
+                        )
+                    changed = True
+                    break  # re-sort and retry after each move
+            if not changed:
+                break
 
         entry = next((room for room in floor_rooms if room.get("roomType") == "entry"), None)
         if entry is None:
@@ -415,7 +435,11 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
     return repaired
 
 
-def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
+def _add_stairs(floor_id: str, floor_level: int, elevation: float, x_offset: float = 0.0) -> dict:
+    stair_w = _STAIRS_SIZE["w"]
+    stair_d = _STAIRS_SIZE["d"]
+    # Place stairs in the reserved left strip (before x_offset), centred in it
+    x_pos = max(stair_w / 2, (x_offset - _GAP) / 2) if x_offset > stair_w else stair_w / 2
     return {
         "id": str(uuid.uuid4()),
         "label": "Stairs",
@@ -425,9 +449,9 @@ def _add_stairs(floor_id: str, floor_level: int, elevation: float) -> dict:
         "floorLevel": floor_level,
         "zone": "circulation",
         "position": {
-            "x": _STAIRS_POSITION["x"],
+            "x": round(x_pos, 2),
             "y": round(elevation + _STAIRS_SIZE["h"] / 2, 2),
-            "z": _STAIRS_POSITION["z"],
+            "z": round(stair_d / 2 + 0.3, 2),
         },
         "size": _STAIRS_SIZE.copy(),
         "color": ROOM_COLORS["stairs"],
@@ -595,6 +619,75 @@ def _architectural_markers(
     return markers
 
 
+def _generate_partition_walls(
+    rooms: list[dict],
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+) -> list[dict]:
+    """
+    Generate thin partition wall meshes between every pair of adjacent rooms
+    on the same floor.  Two rooms are considered adjacent when the gap between
+    their nearest edges is <= _GAP (i.e. they were placed side-by-side).
+    """
+    wall_h = 2.8
+    wall_t = 0.15
+    adjacency_threshold = _GAP + 0.05  # small tolerance
+    room_only = [r for r in rooms if r.get("objectType") == "room"]
+    walls: list[dict] = []
+
+    checked: set[tuple[str, str]] = set()
+    for i, a in enumerate(room_only):
+        ax1, ax2, az1, az2 = _room_bounds(a)
+        for b in room_only[i + 1:]:
+            pair = tuple(sorted([a["id"], b["id"]]))
+            if pair in checked:
+                continue
+            checked.add(pair)
+            bx1, bx2, bz1, bz2 = _room_bounds(b)
+
+            x_gap = max(0.0, max(ax1, bx1) - min(ax2, bx2))
+            z_gap = max(0.0, max(az1, bz1) - min(az2, bz2))
+
+            # Adjacent along Z axis (rooms side-by-side in X direction)
+            if z_gap <= adjacency_threshold and x_gap < 0.05:
+                # shared X boundary
+                wall_x = (min(ax2, bx2) + max(ax1, bx1)) / 2
+                overlap_z1 = max(az1, bz1)
+                overlap_z2 = min(az2, bz2)
+                if overlap_z2 > overlap_z1:
+                    walls.append(_make_marker(
+                        label="Partition Wall",
+                        room_type="wall",
+                        object_type="wall",
+                        floor_id=floor_id,
+                        floor_level=floor_level,
+                        elevation=elevation,
+                        position={"x": wall_x, "y": wall_h / 2, "z": (overlap_z1 + overlap_z2) / 2},
+                        size={"w": wall_t, "h": wall_h, "d": round(overlap_z2 - overlap_z1, 2)},
+                    ))
+
+            # Adjacent along X axis (rooms side-by-side in Z direction)
+            elif x_gap <= adjacency_threshold and z_gap < 0.05:
+                # shared Z boundary
+                wall_z = (min(az2, bz2) + max(az1, bz1)) / 2
+                overlap_x1 = max(ax1, bx1)
+                overlap_x2 = min(ax2, bx2)
+                if overlap_x2 > overlap_x1:
+                    walls.append(_make_marker(
+                        label="Partition Wall",
+                        room_type="wall",
+                        object_type="wall",
+                        floor_id=floor_id,
+                        floor_level=floor_level,
+                        elevation=elevation,
+                        position={"x": (overlap_x1 + overlap_x2) / 2, "y": wall_h / 2, "z": wall_z},
+                        size={"w": round(overlap_x2 - overlap_x1, 2), "h": wall_h, "d": wall_t},
+                    ))
+    return walls
+
+
 def _sort_by_adjacency(
     rooms: list[RoomSpec],
     must_pairs: set[frozenset],
@@ -736,7 +829,7 @@ def _build_layout_candidate(
         )
         rooms = _repair_rooms(rooms, building_type=building_type)
         if total_floors > 1:
-            rooms.insert(0, _add_stairs(floor_id, level, elevation))
+            rooms.insert(0, _add_stairs(floor_id, level, elevation, x_offset=x_offset))
         footprint = _footprint_for_rooms(rooms)
         pending_floors.append(
             {
@@ -764,6 +857,14 @@ def _build_layout_candidate(
                 floor_level=pending_floor["level"],
                 elevation=pending_floor["elevation"],
                 footprint=footprint,
+            )
+        )
+        rooms.extend(
+            _generate_partition_walls(
+                rooms,
+                floor_id=pending_floor["id"],
+                floor_level=pending_floor["level"],
+                elevation=pending_floor["elevation"],
             )
         )
 

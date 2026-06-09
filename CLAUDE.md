@@ -446,7 +446,7 @@ Deferred beyond Sprint 13:
 - Advanced spatial optimization
 - Public scraper/source-management workflow for normal users
 
-### Sprint 14 — Advanced Deterministic Prompt Parser ⏳ In Progress
+### Sprint 14 — Advanced Deterministic Prompt Parser ✅ Complete
 
 - [x] Stage 1: Normaliser and synonym expansion
 - [x] Stage 2: Building type inference with BHK support
@@ -472,6 +472,26 @@ Deferred beyond current Sprint 14 partial scope:
 - Full CAD/BIM reasoning
 - Complex structural validation
 - Automatic self-learning from user edits
+
+### Sprint 15 — Layout Quality, Visual Improvements & Overlap Fix ✅ Complete
+
+- [x] Multi-pass iterative overlap repair in `_repair_rooms` (resolves X and Z direction overlaps; up to 10 passes until stable)
+- [x] Stair placement made relative to `x_offset` — no longer hardcoded at (1.0, 1.5)
+- [x] Partition wall generation: `_generate_partition_walls` creates thin wall meshes between every adjacent room pair on a floor
+- [x] Quality scorer: `dining_room` added to expected apartment/house rooms — pure 3BHK no longer trivially scores 100/100
+- [x] Quality scorer: building-type completeness check with per-type expected room sets
+- [x] Quality scorer: adjacency density check penalizes layouts with very low satisfaction rates
+- [x] Scene.tsx: floor slabs thicker (0.45m in 3D vs 0.16m), distinct per-floor color palette, ceiling plane between stories in multi-floor 3D view
+- [x] RoomMesh.tsx: edge outlines rendered on all room/stair objects (not just selected) so adjacent rooms have visible separation; wall/partition opacity increased to 0.62
+- [x] 17 new Sprint 15 tests covering overlap repair, no-overlap guarantee for 5-bed 2-story layout, partition wall presence, quality penalties
+- [x] 394 backend tests passing, zero regressions; frontend typecheck clean
+
+Deferred beyond Sprint 15:
+- True internal wall topology (shared-wall detection, door openings in walls)
+- Floor plan 2D rendering mode with dimension labels
+- Room labeling on floor plan (room names at centroid in plan view)
+- Refine improvements (prompt understanding, adjacency-aware refinement)
+- Per-room activity log API
 
 ---
 
