@@ -826,6 +826,7 @@ def generate_layout(
     total_area_sqm: float | None = None,
     adjacency_constraints: list[AdjacencyConstraint] | None = None,
     zone_assignments: dict[str, str] | None = None,
+    vastu_requested: bool = False,
 ) -> dict:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
@@ -860,4 +861,27 @@ def generate_layout(
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
+
+    if vastu_requested:
+        from app.services.parser.vastu import check_vastu_compliance
+        bounds = best.get("building", {}).get("bounds", {})
+        placed = best.get("rooms", [])
+        vastu_result = check_vastu_compliance(placed, bounds)
+        best["metadata"]["vastu"] = {
+            "is_requested": vastu_result.is_requested,
+            "compliance_score": vastu_result.compliance_score,
+            "brahmasthan_clear": vastu_result.brahmasthan_clear,
+            "violations": [
+                {
+                    "room_type": v.room_type,
+                    "current_direction": v.current_direction,
+                    "recommended_direction": v.recommended_direction,
+                    "severity": v.severity,
+                    "message": v.message,
+                }
+                for v in vastu_result.violations
+            ],
+            "suggestions": vastu_result.suggestions,
+        }
+
     return best

@@ -83,6 +83,7 @@ async def generate(
         total_area_sqm=total_area_sqm,
         adjacency_constraints=parsed.adjacency_constraints,
         zone_assignments=parsed.zone_assignments,
+        vastu_requested=parsed.vastu_requested,
     )
     if request.project_id:
         design, version = await save_generated_design(

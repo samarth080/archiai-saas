@@ -328,6 +328,12 @@ def parse_prompt(prompt: str) -> "ParsedRequirements":
     explicit_floors = extract_total_floors(prompt)
     total_floors = explicit_floors if explicit_floors > 1 else building.total_floors
 
+    # Optional Vastu stage — only when user explicitly requests it
+    from app.services.parser.vastu import add_vastu_special_rooms, is_vastu_requested
+    vastu_req = is_vastu_requested(prompt)
+    if vastu_req:
+        rooms = add_vastu_special_rooms(rooms, prompt)
+
     return ParsedRequirements(
         building_type=building.building_type,
         style_hints=building.style_hints,
@@ -338,6 +344,7 @@ def parse_prompt(prompt: str) -> "ParsedRequirements":
         zone_assignments=constraints.zone_assignments,
         raw_prompt=prompt,
         confidence=_compute_confidence(explicit_count, inferred_count),
+        vastu_requested=vastu_req,
     )
 
 
