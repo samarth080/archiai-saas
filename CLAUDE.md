@@ -452,7 +452,7 @@ Deferred beyond Sprint 13:
 - [x] Stage 2: Building type inference with BHK support
 - [x] Stage 3: Compound room extraction
 - [x] Stage 4: Merge and deduplication
-- [ ] Stage 5: Relational constraint extraction
+- [x] Stage 5: Relational constraint extraction
 - [ ] Stage 6: Size and proportion resolver
 - [ ] Stage 7: Wire parser stages into `prompt_service.py`
 - [ ] Stage 8: Update `layout_service.py` for parser-aware adjacency and floor distribution
@@ -460,8 +460,8 @@ Deferred beyond Sprint 13:
 - [ ] Stage 10: Full parser/layout regression suite and final Sprint 14 completion update
 
 - [x] Parser work is on feature branch `sprint-14/advanced-keyword-parser`
-- [x] Stages 1-4 are committed as separate workflow units
-- [x] Focused parser tests pass through Stage 4 (`23 passed`)
+- [x] Stages 1-5 are committed as separate workflow units
+- [x] Focused parser tests pass through Stage 5 (`52 passed`)
 - [ ] Advanced parser is not wired into production generation yet
 - [ ] Existing prompt/layout generation remains on the previous Sprint 13 path until Stage 7 wiring is complete
 
