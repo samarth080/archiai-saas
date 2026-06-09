@@ -29,7 +29,7 @@ from app.services.design_service import (
 )
 from app.services.layout_service import generate_layout
 from app.services.layout_pattern_service import get_layout_pattern_rules
-from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_area_sqm, extract_total_floors
+from app.services.prompt_service import extract_total_area_sqm, parse_prompt, parsed_to_room_specs
 from app.services.refinement_service import apply_refinement, parse_refinement
 from app.services.workspace_service import require_project_read_access
 from app.utils.activity import log_activity
@@ -61,27 +61,28 @@ async def generate(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenerateResponse:
-    room_specs = extract_rooms(request.prompt)
+    parsed = parse_prompt(request.prompt)
+    room_specs = parsed_to_room_specs(parsed)
     if not room_specs:
         raise HTTPException(
             status_code=422,
             detail="No rooms detected. Try: '2 bedroom apartment with kitchen'",
         )
-    building_type = detect_building_type(request.prompt)
-    total_floors = extract_total_floors(request.prompt)
     total_area_sqm = extract_total_area_sqm(request.prompt)
     pattern_rules = await get_layout_pattern_rules(
         db,
-        building_type,
+        parsed.building_type,
         {room.room_type for room in room_specs},
     )
     layout = generate_layout(
         room_specs,
         prompt=request.prompt,
-        building_type=building_type,
-        total_floors=total_floors,
+        building_type=parsed.building_type,
+        total_floors=parsed.total_floors,
         pattern_rules=pattern_rules,
         total_area_sqm=total_area_sqm,
+        adjacency_constraints=parsed.adjacency_constraints,
+        zone_assignments=parsed.zone_assignments,
     )
     if request.project_id:
         design, version = await save_generated_design(

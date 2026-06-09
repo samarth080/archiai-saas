@@ -5,6 +5,7 @@ from app.services.building_template_service import BuildingTemplate, apply_templ
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
+from app.services.parser.constraint_extractor import AdjacencyConstraint
 
 ROOM_COLORS: dict[str, str] = {
     "living_room":    "#818cf8",
@@ -289,6 +290,7 @@ def _place_rooms(
     elevation: float = 0.0,
     x_offset: float = 0.0,
     max_row_width: float | None = None,
+    must_adjacency_pairs: set[frozenset] | None = None,
 ) -> list[dict]:
     ordered_groups = _ordered_group_names(template)
     groups: dict[str, list[RoomSpec]] = {group: [] for group in ordered_groups}
@@ -298,6 +300,10 @@ def _place_rooms(
 
     for rooms in groups.values():
         rooms.sort(key=lambda room: _flow_priority(building_type, room))
+
+    if must_adjacency_pairs:
+        for key in list(groups):
+            groups[key] = _sort_by_adjacency(groups[key], must_adjacency_pairs)
 
     result: list[dict] = []
     placed_by_type: dict[str, list[dict]] = {}
@@ -589,7 +595,28 @@ def _architectural_markers(
     return markers
 
 
-def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[list[RoomSpec]]:
+def _sort_by_adjacency(
+    rooms: list[RoomSpec],
+    must_pairs: set[frozenset],
+) -> list[RoomSpec]:
+    """Reorder rooms so MUST-adjacent pairs are placed consecutively."""
+    ordered: list[RoomSpec] = []
+    remaining = list(rooms)
+    while remaining:
+        room = remaining.pop(0)
+        ordered.append(room)
+        for i, other in enumerate(remaining):
+            if frozenset({room.room_type, other.room_type}) in must_pairs:
+                ordered.append(remaining.pop(i))
+                break
+    return ordered
+
+
+def _assign_rooms_to_floors(
+    specs: list[RoomSpec],
+    total_floors: int,
+    zone_assignments: dict[str, str] | None = None,
+) -> list[list[RoomSpec]]:
     floors: list[list[RoomSpec]] = [[] for _ in range(total_floors)]
     if total_floors <= 1:
         floors[0].extend(specs)
@@ -607,7 +634,19 @@ def _assign_rooms_to_floors(specs: list[RoomSpec], total_floors: int) -> list[li
         floors[level].append(room)
         next_upper += 1
 
+    explicit_zones = zone_assignments or {}
+
     for room in specs:
+        # Explicit zone assignment from Stage 5 constraints takes first priority
+        zone_pref = explicit_zones.get(room.room_type)
+        if zone_pref == "ground":
+            floors[0].append(room)
+            continue
+        if zone_pref == "upper":
+            add_to_next_upper(room)
+            continue
+
+        # Default floor distribution rules
         if room.room_type in {"living_room", "kitchen", "dining_room", "hallway", "garage"}:
             floors[0].append(room)
             continue
@@ -670,8 +709,10 @@ def _build_layout_candidate(
     total_area_sqm: float | None,
     template: BuildingTemplate,
     x_offset: float,
+    zone_assignments: dict[str, str] | None = None,
+    must_adjacency_pairs: set[frozenset] | None = None,
 ) -> dict:
-    floor_specs = _assign_rooms_to_floors(room_specs, total_floors)
+    floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments)
     max_row_width = _max_row_width_for_layout(room_specs, total_floors, building_type)
     pending_floors: list[dict] = []
     floor_footprints: list[dict] = []
@@ -691,6 +732,7 @@ def _build_layout_candidate(
             elevation=elevation,
             x_offset=x_offset,
             max_row_width=max_row_width,
+            must_adjacency_pairs=must_adjacency_pairs,
         )
         rooms = _repair_rooms(rooms, building_type=building_type)
         if total_floors > 1:
@@ -782,6 +824,8 @@ def generate_layout(
     total_floors: int = 1,
     pattern_rules: LayoutPatternRules | None = None,
     total_area_sqm: float | None = None,
+    adjacency_constraints: list[AdjacencyConstraint] | None = None,
+    zone_assignments: dict[str, str] | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
@@ -791,6 +835,13 @@ def generate_layout(
         {room.room_type for room in room_specs},
     )
     room_specs = _size_room_specs(room_specs, pattern_rules, total_area_sqm)
+
+    must_pairs: set[frozenset] = {
+        frozenset({c.room_a, c.room_b})
+        for c in (adjacency_constraints or [])
+        if c.strength == "MUST"
+    }
+
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
     candidates = [
         _build_layout_candidate(
@@ -802,6 +853,8 @@ def generate_layout(
             total_area_sqm=total_area_sqm,
             template=template,
             x_offset=base_offset + offset,
+            zone_assignments=zone_assignments,
+            must_adjacency_pairs=must_pairs or None,
         )
         for offset in (0.0, 0.5, 1.0)
     ]
