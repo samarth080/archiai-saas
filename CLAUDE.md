@@ -453,17 +453,18 @@ Deferred beyond Sprint 13:
 - [x] Stage 3: Compound room extraction
 - [x] Stage 4: Merge and deduplication
 - [x] Stage 5: Relational constraint extraction
-- [ ] Stage 6: Size and proportion resolver
-- [ ] Stage 7: Wire parser stages into `prompt_service.py`
-- [ ] Stage 8: Update `layout_service.py` for parser-aware adjacency and floor distribution
-- [ ] Stage 9: Optional Vastu compliance module and integration
-- [ ] Stage 10: Full parser/layout regression suite and final Sprint 14 completion update
+- [x] Stage 6: Size and proportion resolver
+- [x] Stage 7: Wire parser stages into `prompt_service.py`
+- [x] Stage 8: Update `layout_service.py` for parser-aware adjacency and floor distribution
+- [x] Stage 9: Optional Vastu compliance module and integration
+- [x] Stage 10: Full parser/layout regression suite and final Sprint 14 completion update
 
 - [x] Parser work is on feature branch `sprint-14/advanced-keyword-parser`
-- [x] Stages 1-5 are committed as separate workflow units
-- [x] Focused parser tests pass through Stage 5 (`52 passed`)
-- [ ] Advanced parser is not wired into production generation yet
-- [ ] Existing prompt/layout generation remains on the previous Sprint 13 path until Stage 7 wiring is complete
+- [x] All 10 stages committed as separate workflow units
+- [x] Full parser + regression suite passes (`377 passed`)
+- [x] Advanced parser (`parse_prompt`) is wired into production generation via `designs/router.py`
+- [x] Vastu compliance is opt-in (triggered by "vastu"/"vaastu" keywords only)
+- [x] All existing tests continue to pass — zero regressions
 
 Deferred beyond current Sprint 14 partial scope:
 - Paid AI API integration
