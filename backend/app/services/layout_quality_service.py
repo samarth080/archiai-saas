@@ -69,16 +69,18 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
         return False
     ax1, ax2, az1, az2 = _room_bounds(a)
     bx1, bx2, bz1, bz2 = _room_bounds(b)
-    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+    _eps = 0.02
+    return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
 
 def _outside_footprint(room: dict, footprint: dict) -> bool:
     if not footprint:
         return False
-    min_x = footprint["x"]
-    max_x = footprint["x"] + footprint["w"]
-    min_z = footprint["z"]
-    max_z = footprint["z"] + footprint["d"]
+    _fp_eps = 0.02
+    min_x = footprint["x"] - _fp_eps
+    max_x = footprint["x"] + footprint["w"] + _fp_eps
+    min_z = footprint["z"] - _fp_eps
+    max_z = footprint["z"] + footprint["d"] + _fp_eps
     return (
         room["position"]["x"] - room["size"]["w"] / 2 < min_x
         or room["position"]["x"] + room["size"]["w"] / 2 > max_x
@@ -229,6 +231,7 @@ def score_layout_quality(
     adjacency_issues: set[str] = set()
     avoid_issues: set[str] = set()
     checked_pairs: set[tuple[str, str]] = set()
+    avoid_checked_pairs: set[tuple[str, str]] = set()
     for room_type in room_types:
         rule = rules.rule_for(room_type)
         for target_type in rule.adjacent_to:
@@ -240,9 +243,10 @@ def score_layout_quality(
                 adjacency_issues.add(f"{_label_room_type(room_type)} near {_label_room_type(target_type)}")
         for target_type in rule.avoid_adjacent_to:
             pair = tuple(sorted((room_type, target_type)))
-            if target_type not in rooms_by_type:
+            if target_type not in rooms_by_type or pair in avoid_checked_pairs:
                 continue
             if any(_edge_gap(a, b) <= 1.0 for a in rooms_by_type[room_type] for b in rooms_by_type[target_type]):
+                avoid_checked_pairs.add(pair)
                 avoid_issues.add(f"{_label_room_type(room_type)} next to {_label_room_type(target_type)}")
 
     if adjacency_issues:

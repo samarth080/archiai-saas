@@ -216,7 +216,9 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
         return False
     ax1, ax2, az1, az2 = _room_bounds(a)
     bx1, bx2, bz1, bz2 = _room_bounds(b)
-    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+    # 5mm tolerance: shared walls (ax2 ≈ bx1) must not count as overlaps
+    _eps = 0.02
+    return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
 
 def _flow_priority(building_type: str, room: RoomSpec) -> tuple[int, str]:
@@ -435,11 +437,18 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
     return repaired
 
 
-def _add_stairs(floor_id: str, floor_level: int, elevation: float, x_offset: float = 0.0) -> dict:
+def _add_stairs(
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    x_offset: float = 0.0,
+    x_pos: float | None = None,
+) -> dict:
     stair_w = _STAIRS_SIZE["w"]
     stair_d = _STAIRS_SIZE["d"]
-    # Place stairs in the reserved left strip (before x_offset), centred in it
-    x_pos = max(stair_w / 2, (x_offset - _GAP) / 2) if x_offset > stair_w else stair_w / 2
+    if x_pos is None:
+        # Place stairs in the reserved left strip (before x_offset), centred in it
+        x_pos = max(stair_w / 2, (x_offset - _GAP) / 2) if x_offset > stair_w else stair_w / 2
     return {
         "id": str(uuid.uuid4()),
         "label": "Stairs",
@@ -688,6 +697,215 @@ def _generate_partition_walls(
     return walls
 
 
+# ── Zone classification for tiled layout ─────────────────────────────────────
+
+_TILED_FRONT_TYPES: frozenset[str] = frozenset({
+    "entry", "living_room", "open_plan_living", "dining_room", "kitchen",
+    "foyer", "reception", "waiting_room", "retail_display", "checkout",
+    "dining_area", "bar",
+})
+_TILED_CORRIDOR_TYPES: frozenset[str] = frozenset({"hallway", "corridor"})
+_TILED_PRIVATE_TYPES: frozenset[str] = frozenset({
+    "bedroom", "master_bedroom", "kids_room", "office", "study", "workspace",
+    "meeting_room", "consultation_room", "pooja_room", "meditation_room",
+})
+_TILED_SERVICE_TYPES: frozenset[str] = frozenset({
+    "bathroom", "storage", "utility", "laundry", "garage", "staircase",
+})
+
+# Building types that use the tiled floor-plan algorithm
+_TILED_BUILDING_TYPES: frozenset[str] = frozenset({
+    "apartment", "studio", "house", "two_storey_home",
+    "bungalow", "villa", "townhouse",
+})
+
+_MIN_BUILDING_WIDTH = 7.0   # metres
+_MAX_BUILDING_WIDTH = 22.0  # metres
+_CORRIDOR_DEPTH = 1.5       # metres — corridor/hallway row height
+
+
+def _tiled_room_obj(
+    spec: RoomSpec,
+    x: float,
+    z: float,
+    w: float,
+    d: float,
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    rules: LayoutPatternRules,
+) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "label": spec.label,
+        "roomType": spec.room_type,
+        "objectType": "room",
+        "floorId": floor_id,
+        "floorLevel": floor_level,
+        "zone": rules.zone_for(spec.room_type),
+        "position": {"x": round(x + w / 2, 2), "y": round(elevation + spec.h / 2, 2), "z": round(z + d / 2, 2)},
+        "size": {"w": round(w, 2), "h": spec.h, "d": round(d, 2)},
+        "color": ROOM_COLORS.get(spec.room_type, "#94a3b8"),
+    }
+
+
+def _fill_row(
+    specs: list[RoomSpec],
+    row_z: float,
+    row_depth: float,
+    building_width: float,
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    rules: LayoutPatternRules,
+) -> list[dict]:
+    """Scale rooms proportionally to fill `building_width` exactly, touching walls."""
+    if not specs:
+        return []
+    total_raw_w = sum(s.w for s in specs)
+    if total_raw_w <= 0:
+        return []
+    result = []
+    current_x = 0.0
+    for i, spec in enumerate(specs):
+        # Last room gets remaining width to absorb rounding
+        if i == len(specs) - 1:
+            w = building_width - current_x
+        else:
+            w = round(spec.w / total_raw_w * building_width, 2)
+        w = max(w, 1.5)  # never below 1.5m wide
+        result.append(_tiled_room_obj(spec, current_x, row_z, w, row_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_x += w
+    return result
+
+
+_STAIR_STRIP_W = _STAIRS_SIZE["w"] + 0.2  # metres reserved at building right edge for stairs
+
+
+def _tile_rooms(
+    specs: list[RoomSpec],
+    rules: LayoutPatternRules,
+    building_type: str,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    target_width: float | None = None,
+    stair_reserve: float = 0.0,
+) -> tuple[list[dict], dict]:
+    """
+    Tile rooms into a pre-defined rectangular footprint.
+    Rooms share walls (zero gap between them), grouped into front/corridor/back
+    zone rows that together fill the building rectangle.
+
+    stair_reserve: width (m) reserved on the right edge for stairs.  Rooms fill
+    building_width - stair_reserve; the footprint still covers the full width.
+
+    Returns (placed_rooms, footprint_dict).
+    """
+    # Classify into zone groups
+    front: list[RoomSpec] = []
+    corridor: list[RoomSpec] = []
+    private: list[RoomSpec] = []
+    service: list[RoomSpec] = []
+    other: list[RoomSpec] = []
+
+    for spec in specs:
+        rt = spec.room_type
+        if rt in _TILED_FRONT_TYPES:
+            front.append(spec)
+        elif rt in _TILED_CORRIDOR_TYPES:
+            corridor.append(spec)
+        elif rt in _TILED_PRIVATE_TYPES:
+            private.append(spec)
+        elif rt in _TILED_SERVICE_TYPES:
+            service.append(spec)
+        else:
+            other.append(spec)
+
+    # If no front rooms, put all rooms in one row
+    if not front and not private:
+        front = list(specs)
+        private = []
+        service = []
+        corridor = []
+
+    # Compute building width from total area if not provided
+    total_area = sum(s.w * s.d for s in specs)
+    if not total_area:
+        return [], {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    if target_width is not None:
+        building_width = target_width
+    else:
+        aspect = 1.6  # width:depth target ratio
+        building_width = round(sqrt(total_area * aspect), 1)
+        building_width = max(_MIN_BUILDING_WIDTH, min(building_width, _MAX_BUILDING_WIDTH))
+
+    # Rooms fill fill_width; stair_reserve carves a right-edge strip for stairs
+    fill_width = max(building_width - stair_reserve, 5.0)
+
+    # Compute zone row depths from weighted average room depth, constrained to
+    # realistic min/max (a row must be deep enough to be usable)
+    def zone_depth(zone_specs: list[RoomSpec], min_d: float = 2.5, max_d: float = 7.0) -> float:
+        if not zone_specs:
+            return 0.0
+        avg = sum(s.d for s in zone_specs) / len(zone_specs)
+        return round(max(min_d, min(avg, max_d)), 2)
+
+    front_depth = zone_depth(front, min_d=3.0, max_d=6.5) if front else 0.0
+    private_depth = zone_depth(private + service, min_d=2.5, max_d=6.5) if private or service else 0.0
+    has_implicit_corridor = bool(front) and bool(private) and not corridor
+    corridor_depth = _CORRIDOR_DEPTH if has_implicit_corridor else (zone_depth(corridor, 1.2, 2.0) if corridor else 0.0)
+    other_depth = zone_depth(other) if other else 0.0
+
+    # Interleave service rooms with private rooms so bathrooms sit beside bedrooms
+    def interleave_service(priv: list[RoomSpec], svc: list[RoomSpec]) -> list[RoomSpec]:
+        if not svc:
+            return priv
+        merged: list[RoomSpec] = []
+        svc_iter = iter(svc)
+        for i, room in enumerate(priv):
+            merged.append(room)
+            # attach one service room after every other private room
+            if (i + 1) % 2 == 0:
+                try:
+                    merged.append(next(svc_iter))
+                except StopIteration:
+                    pass
+        merged.extend(svc_iter)  # any remaining service rooms
+        return merged
+
+    back_row = interleave_service(private, service)
+
+    # Build rows: front → corridor → back → other
+    placed: list[dict] = []
+    current_z = 0.0
+
+    if front:
+        placed.extend(_fill_row(front, current_z, front_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += front_depth
+
+    if has_implicit_corridor or corridor:
+        # Implicit corridor: render as a hallway-coloured strip
+        hallway_spec = corridor[0] if corridor else RoomSpec("Hallway", "hallway", fill_width, 3.0, _CORRIDOR_DEPTH)
+        placed.extend(_fill_row([hallway_spec], current_z, corridor_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += corridor_depth
+
+    if back_row:
+        placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += private_depth
+
+    if other:
+        placed.extend(_fill_row(other, current_z, other_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += other_depth
+
+    building_depth = current_z
+    footprint = {"x": 0.0, "z": 0.0, "w": round(building_width, 2), "d": round(building_depth, 2)}
+    return placed, footprint
+
+
 def _sort_by_adjacency(
     rooms: list[RoomSpec],
     must_pairs: set[frozenset],
@@ -771,6 +989,23 @@ def _assign_rooms_to_floors(
 
         add_to_next_upper(room)
 
+    # Every floor with bedrooms should also have its own bathroom
+    bathroom_template = next((room for room in specs if room.room_type == "bathroom"), None)
+    if bathroom_template:
+        for level in upper_levels:
+            has_bedroom = any(room.room_type in {"bedroom", "master_bedroom"} for room in floors[level])
+            has_bathroom = any(room.room_type == "bathroom" for room in floors[level])
+            if has_bedroom and not has_bathroom:
+                floors[level].append(
+                    RoomSpec(
+                        label="Bathroom",
+                        room_type="bathroom",
+                        w=bathroom_template.w,
+                        h=bathroom_template.h,
+                        d=bathroom_template.d,
+                    )
+                )
+
     return floors
 
 
@@ -805,7 +1040,20 @@ def _build_layout_candidate(
     zone_assignments: dict[str, str] | None = None,
     must_adjacency_pairs: set[frozenset] | None = None,
 ) -> dict:
+    use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments)
+
+    # For tiled layouts pre-compute a shared target width from the widest floor
+    # so all storeys have the same footprint width.
+    tiled_target_width: float | None = None
+    tiled_stair_reserve = _STAIR_STRIP_W if (use_tiler and total_floors > 1) else 0.0
+    if use_tiler:
+        per_floor_areas = [sum(s.w * s.d for s in specs) for specs in floor_specs if specs]
+        if per_floor_areas:
+            max_area = max(per_floor_areas)
+            computed = round(sqrt(max_area * 1.6), 1)
+            tiled_target_width = max(_MIN_BUILDING_WIDTH, min(computed, _MAX_BUILDING_WIDTH))
+
     max_row_width = _max_row_width_for_layout(room_specs, total_floors, building_type)
     pending_floors: list[dict] = []
     floor_footprints: list[dict] = []
@@ -815,22 +1063,45 @@ def _build_layout_candidate(
     for level, specs in enumerate(floor_specs):
         floor_id = f"floor_{level}"
         elevation = round(level * _FLOOR_HEIGHT, 2)
-        rooms = _place_rooms(
-            specs,
-            pattern_rules,
-            template,
-            building_type,
-            floor_id=floor_id,
-            floor_level=level,
-            elevation=elevation,
-            x_offset=x_offset,
-            max_row_width=max_row_width,
-            must_adjacency_pairs=must_adjacency_pairs,
-        )
-        rooms = _repair_rooms(rooms, building_type=building_type)
+
+        if use_tiler:
+            rooms, tiled_footprint = _tile_rooms(
+                specs,
+                pattern_rules,
+                building_type,
+                floor_id,
+                level,
+                elevation,
+                target_width=tiled_target_width,
+                stair_reserve=tiled_stair_reserve,
+            )
+        else:
+            rooms = _place_rooms(
+                specs,
+                pattern_rules,
+                template,
+                building_type,
+                floor_id=floor_id,
+                floor_level=level,
+                elevation=elevation,
+                x_offset=x_offset,
+                max_row_width=max_row_width,
+                must_adjacency_pairs=must_adjacency_pairs,
+            )
+            rooms = _repair_rooms(rooms, building_type=building_type)
+
         if total_floors > 1:
-            rooms.insert(0, _add_stairs(floor_id, level, elevation, x_offset=x_offset))
-        footprint = _footprint_for_rooms(rooms)
+            if use_tiler and tiled_target_width is not None:
+                stair_x = round(tiled_target_width - _STAIR_STRIP_W / 2, 2)
+                rooms.insert(0, _add_stairs(floor_id, level, elevation, x_pos=stair_x))
+            else:
+                rooms.insert(0, _add_stairs(floor_id, level, elevation, x_offset=x_offset))
+
+        footprint = (
+            {"x": 0.0, "z": 0.0, "w": tiled_footprint["w"], "d": tiled_footprint["d"]}
+            if use_tiler and rooms
+            else _footprint_for_rooms(rooms)
+        )
         pending_floors.append(
             {
                 "id": floor_id,
@@ -945,6 +1216,9 @@ def generate_layout(
     }
 
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
+    # Tiled building types produce a single deterministic layout; row-based types
+    # try three x-offset variants and pick the highest-scoring one.
+    offsets = (0.0,) if building_type in _TILED_BUILDING_TYPES else (0.0, 0.5, 1.0)
     candidates = [
         _build_layout_candidate(
             room_specs=room_specs,
@@ -958,7 +1232,7 @@ def generate_layout(
             zone_assignments=zone_assignments,
             must_adjacency_pairs=must_pairs or None,
         )
-        for offset in (0.0, 0.5, 1.0)
+        for offset in offsets
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
