@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import sqrt
 
 from app.services.layout_vocabulary_service import (
@@ -197,4 +197,171 @@ def extract_rooms(prompt: str) -> list[RoomSpec]:
 
             break  # Skip remaining keywords for this room type
 
+    return specs
+
+
+# ── Advanced parser pipeline (Stages 1-6) ─────────────────────────────────────
+
+from app.services.parser.building_inference import infer_building  # noqa: E402
+from app.services.parser.constraint_extractor import (  # noqa: E402
+    AdjacencyConstraint,
+    extract_constraints,
+)
+from app.services.parser.merger import merge_rooms  # noqa: E402
+from app.services.parser.room_extractor import extract_explicit_rooms  # noqa: E402
+from app.services.parser.size_resolver import resolve_size  # noqa: E402
+
+
+@dataclass
+class RoomRequirement:
+    room_type: str
+    count: int
+    area_m2: float
+    width: float
+    depth: float
+    floor_preference: str = "any"   # "ground" | "upper" | "any"
+    zone: str = "other"
+    size_key: str = "medium"
+    is_compound: bool = False
+    source: str = "explicit"        # "explicit" | "inferred" | "bhk" | "style"
+
+
+@dataclass
+class ParsedRequirements:
+    building_type: str
+    style_hints: dict
+    total_floors: int
+    rooms: list[RoomRequirement]
+    adjacency_constraints: list[AdjacencyConstraint]
+    exclusions: list[str]
+    zone_assignments: dict[str, str]
+    raw_prompt: str
+    confidence: float = 1.0
+    vastu_requested: bool = False
+
+
+_PUBLIC_ROOM_TYPES: frozenset[str] = frozenset({
+    "living_room", "open_plan_living", "kitchen", "dining_room", "foyer",
+    "reception", "waiting_room", "retail_display", "checkout", "dining_area",
+    "bar", "sales_floor", "classroom",
+})
+_PRIVATE_ROOM_TYPES: frozenset[str] = frozenset({
+    "master_bedroom", "bedroom", "kids_room", "ensuite", "office",
+    "consultation_room", "workspace", "meeting_room", "pooja_room",
+    "meditation_room",
+})
+_SERVICE_ROOM_TYPES: frozenset[str] = frozenset({
+    "bathroom", "laundry", "storage", "garage", "mudroom",
+    "utility", "staircase", "hallway",
+})
+
+
+def _zone_for(room_type: str) -> str:
+    if room_type in _PUBLIC_ROOM_TYPES:
+        return "public"
+    if room_type in _PRIVATE_ROOM_TYPES:
+        return "private"
+    if room_type in _SERVICE_ROOM_TYPES:
+        return "service"
+    return "other"
+
+
+def _floor_pref_for(room_type: str, zone_assignments: dict[str, str]) -> str:
+    mapping = {"ground": "ground", "upper": "upper", "basement": "basement"}
+    return mapping.get(zone_assignments.get(room_type, ""), "any")
+
+
+def _compute_confidence(explicit_count: int, inferred_count: int) -> float:
+    total = explicit_count + inferred_count
+    if total == 0:
+        return 0.5
+    return round(min(1.0, explicit_count / total + 0.3), 2)
+
+
+def parse_prompt(prompt: str) -> "ParsedRequirements":
+    """Run all 6 parser stages and return structured requirements."""
+    # Stage 2 — building type + template rooms
+    building = infer_building(prompt)
+
+    # Stage 3 — explicit rooms from the prompt text
+    explicit = extract_explicit_rooms(prompt)
+
+    # Stage 4 — merge inferred template with explicit rooms
+    merged = merge_rooms(
+        building.inferred_rooms,
+        explicit,
+        style_hints=building.style_hints,
+        exclusions=[],
+    )
+
+    present_types: set[str] = {room.room_type for room in merged}
+
+    # Stage 5 — relational constraints (adjacency, exclusions, zones)
+    constraints = extract_constraints(prompt, present_room_types=present_types)
+
+    # Apply exclusions before sizing
+    merged = [r for r in merged if r.room_type not in constraints.exclusions]
+
+    # Stage 6 — resolve real-world dimensions for each room
+    rooms: list[RoomRequirement] = []
+    for m in merged:
+        dims = resolve_size(m.room_type, m.size_key, 1.0, None)
+        rooms.append(
+            RoomRequirement(
+                room_type=m.room_type,
+                count=m.count,
+                area_m2=dims["area_m2"],
+                width=dims["width"],
+                depth=dims["depth"],
+                floor_preference=_floor_pref_for(m.room_type, constraints.zone_assignments),
+                zone=_zone_for(m.room_type),
+                size_key=m.size_key,
+                is_compound=m.is_compound,
+                source=m.source,
+            )
+        )
+
+    explicit_count = sum(r.count for r in rooms if r.source == "explicit")
+    inferred_count = sum(r.count for r in rooms if r.source in ("inferred", "bhk"))
+
+    # Floor count: explicit "N floors/storeys" wins; fall back to building template
+    explicit_floors = extract_total_floors(prompt)
+    total_floors = explicit_floors if explicit_floors > 1 else building.total_floors
+
+    # Optional Vastu stage — only when user explicitly requests it
+    from app.services.parser.vastu import add_vastu_special_rooms, is_vastu_requested
+    vastu_req = is_vastu_requested(prompt)
+    if vastu_req:
+        rooms = add_vastu_special_rooms(rooms, prompt)
+
+    return ParsedRequirements(
+        building_type=building.building_type,
+        style_hints=building.style_hints,
+        total_floors=total_floors,
+        rooms=rooms,
+        adjacency_constraints=constraints.adjacency,
+        exclusions=constraints.exclusions,
+        zone_assignments=constraints.zone_assignments,
+        raw_prompt=prompt,
+        confidence=_compute_confidence(explicit_count, inferred_count),
+        vastu_requested=vastu_req,
+    )
+
+
+def parsed_to_room_specs(parsed: "ParsedRequirements") -> list[RoomSpec]:
+    """Convert ParsedRequirements into list[RoomSpec] for layout_service."""
+    specs: list[RoomSpec] = []
+    for room in parsed.rooms:
+        label_base = room.room_type.replace("_", " ").title()
+        for i in range(room.count):
+            label = f"{label_base} {i + 1}" if room.count > 1 else label_base
+            specs.append(
+                RoomSpec(
+                    label=label,
+                    room_type=room.room_type,
+                    w=room.width,
+                    h=3.0,
+                    d=room.depth,
+                )
+            )
     return specs

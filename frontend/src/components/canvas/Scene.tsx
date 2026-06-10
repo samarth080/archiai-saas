@@ -22,7 +22,16 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       ? floors
       : floors.filter((floor) => floor.level === selectedFloor)
   const isPlanView = viewMode !== '3d'
-  const slabHeight = isPlanView ? 0.04 : 0.16
+  // Floor slab: thin in plan view, thicker in 3D so multi-floor separation is visible
+  const slabHeight = isPlanView ? 0.06 : 0.45
+  const isMultiFloor = floors.length > 1
+
+  // Distinct floor slab colours so stacked floors are visually separable
+  const floorSlabColor = (level: number) => {
+    if (isPlanView) return '#f1f5f9'
+    const palette = ['#c8d3df', '#b8c9d8', '#a8bac8', '#98aab8']
+    return palette[level % palette.length]
+  }
 
   return (
     <>
@@ -37,21 +46,41 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         const slabY = floor.elevation - slabHeight / 2
         const edgeGeometry = new THREE.BoxGeometry(footprint.w, slabHeight, footprint.d)
         return (
-          <group key={floor.id} position={[centerX, slabY, centerZ]}>
-            <mesh raycast={() => null}>
-              <boxGeometry args={[footprint.w, slabHeight, footprint.d]} />
-              <meshStandardMaterial
-                color={isPlanView ? '#f8fafc' : '#cbd5e1'}
-                transparent
-                opacity={isPlanView ? 0.96 : 0.86}
-                roughness={0.88}
-                metalness={0.02}
-              />
-            </mesh>
-            <lineSegments raycast={() => null}>
-              <edgesGeometry args={[edgeGeometry]} />
-              <lineBasicMaterial color={floor.level === 0 ? '#334155' : '#64748b'} />
-            </lineSegments>
+          <group key={floor.id}>
+            {/* Floor slab */}
+            <group position={[centerX, slabY, centerZ]}>
+              <mesh raycast={() => null}>
+                <boxGeometry args={[footprint.w, slabHeight, footprint.d]} />
+                <meshStandardMaterial
+                  color={floorSlabColor(floor.level)}
+                  transparent
+                  opacity={isPlanView ? 0.97 : 0.92}
+                  roughness={0.82}
+                  metalness={0.04}
+                />
+              </mesh>
+              <lineSegments raycast={() => null}>
+                <edgesGeometry args={[edgeGeometry]} />
+                <lineBasicMaterial color={floor.level === 0 ? '#334155' : '#64748b'} />
+              </lineSegments>
+            </group>
+
+            {/* Ceiling plane between floors (only in 3D multi-floor mode) */}
+            {!isPlanView && isMultiFloor && floor.level > 0 && (
+              <mesh
+                position={[centerX, floor.elevation - 0.01, centerZ]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                raycast={() => null}
+              >
+                <planeGeometry args={[footprint.w, footprint.d]} />
+                <meshStandardMaterial
+                  color="#94a3b8"
+                  transparent
+                  opacity={0.18}
+                  side={2}
+                />
+              </mesh>
+            )}
           </group>
         )
       })}

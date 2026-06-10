@@ -2,6 +2,19 @@ from dataclasses import asdict, dataclass
 
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 
+# Minimum room sets expected per building type — absence of these rooms is penalised
+_BUILDING_EXPECTED_ROOMS: dict[str, set[str]] = {
+    "apartment":       {"living_room", "kitchen", "bathroom", "dining_room"},
+    "studio":          {"kitchen", "bathroom"},
+    "house":           {"living_room", "kitchen", "bathroom", "bedroom", "dining_room"},
+    "two_storey_home": {"living_room", "kitchen", "bathroom", "bedroom", "dining_room"},
+    "office":          {"workspace", "bathroom"},
+    "clinic":          {"reception", "waiting_room", "bathroom"},
+    "restaurant":      {"dining_room", "kitchen", "bathroom"},
+    "retail":          {"retail_display", "checkout"},
+    "school":          {"classroom", "bathroom"},
+}
+
 
 @dataclass(frozen=True)
 class LayoutQualityScore:
@@ -56,16 +69,18 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
         return False
     ax1, ax2, az1, az2 = _room_bounds(a)
     bx1, bx2, bz1, bz2 = _room_bounds(b)
-    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+    _eps = 0.02
+    return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
 
 def _outside_footprint(room: dict, footprint: dict) -> bool:
     if not footprint:
         return False
-    min_x = footprint["x"]
-    max_x = footprint["x"] + footprint["w"]
-    min_z = footprint["z"]
-    max_z = footprint["z"] + footprint["d"]
+    _fp_eps = 0.02
+    min_x = footprint["x"] - _fp_eps
+    max_x = footprint["x"] + footprint["w"] + _fp_eps
+    min_z = footprint["z"] - _fp_eps
+    max_z = footprint["z"] + footprint["d"] + _fp_eps
     return (
         room["position"]["x"] - room["size"]["w"] / 2 < min_x
         or room["position"]["x"] + room["size"]["w"] / 2 > max_x
@@ -216,6 +231,7 @@ def score_layout_quality(
     adjacency_issues: set[str] = set()
     avoid_issues: set[str] = set()
     checked_pairs: set[tuple[str, str]] = set()
+    avoid_checked_pairs: set[tuple[str, str]] = set()
     for room_type in room_types:
         rule = rules.rule_for(room_type)
         for target_type in rule.adjacent_to:
@@ -227,9 +243,10 @@ def score_layout_quality(
                 adjacency_issues.add(f"{_label_room_type(room_type)} near {_label_room_type(target_type)}")
         for target_type in rule.avoid_adjacent_to:
             pair = tuple(sorted((room_type, target_type)))
-            if target_type not in rooms_by_type:
+            if target_type not in rooms_by_type or pair in avoid_checked_pairs:
                 continue
             if any(_edge_gap(a, b) <= 1.0 for a in rooms_by_type[room_type] for b in rooms_by_type[target_type]):
+                avoid_checked_pairs.add(pair)
                 avoid_issues.add(f"{_label_room_type(room_type)} next to {_label_room_type(target_type)}")
 
     if adjacency_issues:
@@ -306,6 +323,30 @@ def score_layout_quality(
         score -= 5
         warnings.append("Building template metadata is missing")
         suggestions.append("Regenerate the layout so a building template can be applied")
+
+    # Building-type completeness: penalise missing rooms expected for this building category
+    expected = _BUILDING_EXPECTED_ROOMS.get(building_type, set())
+    missing_expected = sorted(expected - room_types)
+    if missing_expected:
+        penalty = min(25, len(missing_expected) * 8)
+        score -= penalty
+        readable = ", ".join(_label_room_type(rt) for rt in missing_expected)
+        warnings.append(f"Layout missing expected {building_type} rooms: {readable}")
+        suggestions.append(f"Add {readable} to complete a typical {building_type} layout")
+    elif expected:
+        reasons.append(f"All expected {building_type} rooms are present")
+
+    # Adjacency density: penalise when there are very few satisfied adjacency rules
+    # This prevents layouts with only 1-2 rooms from scoring perfectly on adjacency
+    total_adjacency_pairs = len(checked_pairs)
+    unsatisfied = len(adjacency_issues)
+    if total_adjacency_pairs > 0:
+        satisfaction_rate = (total_adjacency_pairs - unsatisfied) / total_adjacency_pairs
+        if satisfaction_rate < 0.5 and total_adjacency_pairs >= 3:
+            score -= 5
+            warnings.append(
+                f"Low adjacency satisfaction: {int(satisfaction_rate * 100)}% of preferred pairs met"
+            )
 
     return LayoutQualityScore(
         score=max(0, min(100, score)),

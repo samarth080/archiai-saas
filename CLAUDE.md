@@ -446,24 +446,25 @@ Deferred beyond Sprint 13:
 - Advanced spatial optimization
 - Public scraper/source-management workflow for normal users
 
-### Sprint 14 — Advanced Deterministic Prompt Parser ⏳ In Progress
+### Sprint 14 — Advanced Deterministic Prompt Parser ✅ Complete
 
 - [x] Stage 1: Normaliser and synonym expansion
 - [x] Stage 2: Building type inference with BHK support
 - [x] Stage 3: Compound room extraction
 - [x] Stage 4: Merge and deduplication
-- [ ] Stage 5: Relational constraint extraction
-- [ ] Stage 6: Size and proportion resolver
-- [ ] Stage 7: Wire parser stages into `prompt_service.py`
-- [ ] Stage 8: Update `layout_service.py` for parser-aware adjacency and floor distribution
-- [ ] Stage 9: Optional Vastu compliance module and integration
-- [ ] Stage 10: Full parser/layout regression suite and final Sprint 14 completion update
+- [x] Stage 5: Relational constraint extraction
+- [x] Stage 6: Size and proportion resolver
+- [x] Stage 7: Wire parser stages into `prompt_service.py`
+- [x] Stage 8: Update `layout_service.py` for parser-aware adjacency and floor distribution
+- [x] Stage 9: Optional Vastu compliance module and integration
+- [x] Stage 10: Full parser/layout regression suite and final Sprint 14 completion update
 
 - [x] Parser work is on feature branch `sprint-14/advanced-keyword-parser`
-- [x] Stages 1-4 are committed as separate workflow units
-- [x] Focused parser tests pass through Stage 4 (`23 passed`)
-- [ ] Advanced parser is not wired into production generation yet
-- [ ] Existing prompt/layout generation remains on the previous Sprint 13 path until Stage 7 wiring is complete
+- [x] All 10 stages committed as separate workflow units
+- [x] Full parser + regression suite passes (`377 passed`)
+- [x] Advanced parser (`parse_prompt`) is wired into production generation via `designs/router.py`
+- [x] Vastu compliance is opt-in (triggered by "vastu"/"vaastu" keywords only)
+- [x] All existing tests continue to pass — zero regressions
 
 Deferred beyond current Sprint 14 partial scope:
 - Paid AI API integration
@@ -471,6 +472,47 @@ Deferred beyond current Sprint 14 partial scope:
 - Full CAD/BIM reasoning
 - Complex structural validation
 - Automatic self-learning from user edits
+
+### Sprint 15 — Layout Quality, Visual Improvements & Overlap Fix ✅ Complete
+
+- [x] Multi-pass iterative overlap repair in `_repair_rooms` (resolves X and Z direction overlaps; up to 10 passes until stable)
+- [x] Stair placement made relative to `x_offset` — no longer hardcoded at (1.0, 1.5)
+- [x] Partition wall generation: `_generate_partition_walls` creates thin wall meshes between every adjacent room pair on a floor
+- [x] Quality scorer: `dining_room` added to expected apartment/house rooms — pure 3BHK no longer trivially scores 100/100
+- [x] Quality scorer: building-type completeness check with per-type expected room sets
+- [x] Quality scorer: adjacency density check penalizes layouts with very low satisfaction rates
+- [x] Scene.tsx: floor slabs thicker (0.45m in 3D vs 0.16m), distinct per-floor color palette, ceiling plane between stories in multi-floor 3D view
+- [x] RoomMesh.tsx: edge outlines rendered on all room/stair objects (not just selected) so adjacent rooms have visible separation; wall/partition opacity increased to 0.62
+- [x] 17 new Sprint 15 tests covering overlap repair, no-overlap guarantee for 5-bed 2-story layout, partition wall presence, quality penalties
+- [x] 394 backend tests passing, zero regressions; frontend typecheck clean
+
+Deferred beyond Sprint 15:
+- True internal wall topology (shared-wall detection, door openings in walls)
+- Floor plan 2D rendering mode with dimension labels
+- Room labeling on floor plan (room names at centroid in plan view)
+- Refine improvements (prompt understanding, adjacency-aware refinement)
+- Per-room activity log API
+
+### Sprint 15 Phase 2 — Tiled Floor-Plan Algorithm ✅ Complete
+
+- [x] `_tile_rooms` zones rooms into front/corridor/back rows; each row scales to fill the exact building width so rooms share walls (zero gaps), replacing the old row-based algorithm that left "floating box" gaps
+- [x] `_fill_row` scales room widths proportionally to fill `building_width` exactly
+- [x] Residential building types (`apartment`, `house`, `studio`, `two_storey_home`, `bungalow`, `villa`, `townhouse`) route through `_tile_rooms`; commercial types continue using `_place_rooms`
+- [x] Multi-floor tiled layouts pre-compute a shared `target_width` from the widest floor so all storeys align on the same building width
+- [x] Stairs reserve a 2.2m strip on the building's right edge, using the shared `target_width` so stair position is consistent across all floors even when some floors have no other rooms
+- [x] `_assign_rooms_to_floors`: every floor with bedrooms now also gets its own bathroom
+- [x] `generate_layout` produces a single candidate for tiled types instead of 3 variants
+- [x] `_outside_footprint` and overlap checks gain a 2cm epsilon to absorb float drift at shared walls without masking real overlaps
+- [x] Quality scorer no longer double-counts symmetric avoid-adjacency violations (e.g. kitchen/bathroom)
+- [x] New tiled-layout regression suite (`test_sprint15_tiled_layout.py`) plus updated benchmark/unit test expectations
+- [x] 409 backend tests passing, zero regressions
+
+Deferred beyond Sprint 15 Phase 2:
+- True internal wall topology (shared-wall detection, door openings in walls)
+- Floor plan 2D rendering mode with dimension labels
+- Room labeling on floor plan (room names at centroid in plan view)
+- Refine improvements (prompt understanding, adjacency-aware refinement)
+- Per-room activity log API
 
 ---
 

@@ -31,17 +31,17 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   const isPlanView = viewMode !== '3d'
   const materialOpacity =
     room.objectType === 'window'
-      ? 0.52
+      ? 0.48
       : room.objectType === 'door'
-        ? 0.66
+        ? 0.72
         : room.objectType === 'wall'
-          ? 0.42
+          ? 0.62    // partition walls more visible
           : isSelected
-            ? 0.82
+            ? 0.88
             : isPlanView && room.objectType === 'room'
-              ? 0.5
+              ? 0.62
               : room.objectType === 'room' || room.objectType === 'stair'
-                ? 0.68
+                ? 0.74
                 : 0.76
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -158,10 +158,14 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
         roughness={0.82}
         metalness={0.02}
       />
-      {isSelected && (
+      {/* Always show edges on rooms so adjacent rooms have visible separation */}
+      {(room.objectType === 'room' || room.objectType === 'stair') && (
         <lineSegments>
           <edgesGeometry args={[new THREE.BoxGeometry(room.size.w, room.size.h, room.size.d)]} />
-          <lineBasicMaterial color="#111827" linewidth={2} />
+          <lineBasicMaterial
+            color={isSelected ? '#312e81' : '#475569'}
+            linewidth={isSelected ? 2 : 1}
+          />
         </lineSegments>
       )}
     </mesh>
