@@ -493,6 +493,27 @@ Deferred beyond Sprint 15:
 - Refine improvements (prompt understanding, adjacency-aware refinement)
 - Per-room activity log API
 
+### Sprint 15 Phase 2 — Tiled Floor-Plan Algorithm ✅ Complete
+
+- [x] `_tile_rooms` zones rooms into front/corridor/back rows; each row scales to fill the exact building width so rooms share walls (zero gaps), replacing the old row-based algorithm that left "floating box" gaps
+- [x] `_fill_row` scales room widths proportionally to fill `building_width` exactly
+- [x] Residential building types (`apartment`, `house`, `studio`, `two_storey_home`, `bungalow`, `villa`, `townhouse`) route through `_tile_rooms`; commercial types continue using `_place_rooms`
+- [x] Multi-floor tiled layouts pre-compute a shared `target_width` from the widest floor so all storeys align on the same building width
+- [x] Stairs reserve a 2.2m strip on the building's right edge, using the shared `target_width` so stair position is consistent across all floors even when some floors have no other rooms
+- [x] `_assign_rooms_to_floors`: every floor with bedrooms now also gets its own bathroom
+- [x] `generate_layout` produces a single candidate for tiled types instead of 3 variants
+- [x] `_outside_footprint` and overlap checks gain a 2cm epsilon to absorb float drift at shared walls without masking real overlaps
+- [x] Quality scorer no longer double-counts symmetric avoid-adjacency violations (e.g. kitchen/bathroom)
+- [x] New tiled-layout regression suite (`test_sprint15_tiled_layout.py`) plus updated benchmark/unit test expectations
+- [x] 409 backend tests passing, zero regressions
+
+Deferred beyond Sprint 15 Phase 2:
+- True internal wall topology (shared-wall detection, door openings in walls)
+- Floor plan 2D rendering mode with dimension labels
+- Room labeling on floor plan (room names at centroid in plan view)
+- Refine improvements (prompt understanding, adjacency-aware refinement)
+- Per-room activity log API
+
 ---
 
 ## Development Rules
