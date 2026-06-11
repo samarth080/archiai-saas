@@ -514,6 +514,24 @@ Deferred beyond Sprint 15 Phase 2:
 - Refine improvements (prompt understanding, adjacency-aware refinement)
 - Per-room activity log API
 
+### Sprint 16 — Unified Space-Filling Layouts & Adjacency Reasoning 📋 Planned (not started)
+
+> Full spec: [`docs/superpowers/specs/2026-06-11-sprint16-unified-space-filling-layouts.md`](docs/superpowers/specs/2026-06-11-sprint16-unified-space-filling-layouts.md)
+> Branch: `sprint-16/unified-space-filling-layouts` (off `main`). Approved scope: **Phases 1–3**. Priority: **accurate room reasoning**.
+
+**Why:** `layout_service.py` has two placement engines. Residential types use the good space-filling tiler (`_tile_rooms`, zero gaps). Everything else (office, clinic, retail, restaurant, school, classroom, and mixed-vocab prompts that resolve to a commercial `building_type`) uses the old row-band engine (`_place_rooms`), whose footprint is the bounding box of mismatched-width zone rows — this is the source of the large "blank space" inside the boundary walls. The tiler also ignores the parser's adjacency constraints and uses one uniform depth per row, distorting proportions.
+
+- [ ] **Phase 1 — Unify on the tiler (kills blank space):** extend `_TILED_FRONT/PRIVATE/SERVICE_TYPES` to cover commercial room types (`classroom`, etc.); expand `_TILED_BUILDING_TYPES` to include `office`, `clinic`, `retail`, `restaurant`, `school`, `classroom` so every type tiles with zero gaps; keep `_place_rooms`/`_repair_rooms` as a fallback only (not on the default path).
+- [ ] **Phase 2 — Real adjacency reasoning (priority):** thread the parser's MUST/SHOULD `AdjacencyConstraint`s into `_tile_rooms` (currently only MUST reaches `_place_rooms`); reorder rooms within each zone row so constrained pairs share a wall (generalize `_sort_by_adjacency`, weight MUST > SHOULD); add cross-row X anchoring so a room MUST-adjacent to one in the next row overlaps its X-span; make `interleave_service` attach a bathroom/ensuite to the bedroom it is constrained to.
+- [ ] **Phase 3 — Per-room depth & aspect clamping (priority):** clamp width:depth to ~[0.6, 2.6] so no room becomes a wide thin strip; allow a localized 2-row sub-split inside a zone band so small service rooms don't stretch to full row depth; verify post-tile area stays within each room's `typical_area_sqm_min/max`, capping and letting neighbors absorb slack.
+- [ ] **Tests:** new `test_sprint16_unified_layouts.py` (commercial prompts tile to ≥80% footprint utilization; kitchen↔dining, master↔ensuite, reception↔waiting share walls; aspect clamp holds; multi-floor commercial keeps shared width + aligned stairs); update `test_layout_service.py` / `test_layout_benchmarks.py` where they encode row-band semantics for commercial types; full backend suite green; `npx tsc --noEmit` clean.
+
+Deferred beyond Sprint 16:
+- Phase 4: quality-scorer space-utilization metric + parser-tied adjacency-satisfaction score (so the generator self-selects good layouts)
+- Phase 5: 2D floor-plan view mode, door openings punched into partition walls, persistent room-type color legend
+- True internal wall topology (shared-wall dedup, openings)
+- Paid AI / model-based generation, CAD/BIM, structural validation
+
 ---
 
 ## Development Rules
