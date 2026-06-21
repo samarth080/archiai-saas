@@ -4,6 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore, Room } from '../../store/canvasStore'
+import { DimensionAnnotations } from './DimensionAnnotations'
 
 interface OrbitHandle {
   enabled: boolean
@@ -25,9 +26,11 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   const selectedId = useCanvasStore((s) => s.selectedId)
   const selectRoom = useCanvasStore((s) => s.selectRoom)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
+  const showDimensions = useCanvasStore((s) => s.showDimensions)
 
   const isSelected = selectedId === room.id
   const isBoundaryMarker = room.objectType === 'wall' || room.objectType === 'door' || room.objectType === 'window'
+  const isDimensionable = room.objectType === 'room' || room.objectType === 'stair'
   const isPlanView = viewMode !== '3d'
   const materialOpacity =
     room.objectType === 'window'
@@ -188,10 +191,16 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     </Html>
   ) : null
 
+  const dimensions =
+    isDimensionable && (isSelected || showDimensions) ? (
+      <DimensionAnnotations room={room} emphasized={isSelected} />
+    ) : null
+
   return (
     <>
       {mesh}
       {label}
+      {dimensions}
     </>
   )
 }
