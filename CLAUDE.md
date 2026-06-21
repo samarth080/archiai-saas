@@ -538,9 +538,10 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
-### Sprint 17+ — 10× Roadmap 📋 Planned (not started)
+### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phase 1 underway)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
+> Current branch: `sprint-17/dimensions-on-canvas` (off `main`).
 
 A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
 
@@ -551,6 +552,19 @@ A longer-horizon plan to move from "concept layout MVP" to a standout product, r
 - **Pillar E — Interop & hardening:** SVG/DXF/glTF export, production frontend build (currently Docker serves the Vite dev server), refresh-token auth hardening.
 
 Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimensions + UI shell) → Phase 2 (BSP planning engine + circulation) → Phase 3 (Scrapling + priors) → Phase 4 (optioneering + export) → Phase 5 (optional ML + IFC, later).
+
+**Phase 1 progress (dimensions + UI shell):**
+- [x] `showDimensions` toggle added to `canvasStore` (default off)
+- [x] `DimensionAnnotations.tsx` — width/depth dimension lines with end ticks, labelled in metres, rendered just outside a room's footprint; selected room renders them bold plus a centered area badge (`W × D m · area m²`); other rooms get the same lines in a faint style when the global toggle is on
+- [x] Wired into `RoomMesh.tsx`, updates live during drag
+- [x] `MetricsHud.tsx` — live room count, total area, and footprint-utilization % for the active floor, mirrored opposite `EditorToolbar`
+- [x] "Dimensions" checkbox added to `EditorToolbar` next to the existing Snap toggle
+- [x] Frontend tests for the new toggle (store + toolbar); full frontend suite green, `npx tsc --noEmit` clean
+- [ ] Hover-triggered dimensions on non-selected rooms (deferred — click/select only for now)
+- [ ] Rotation-aware dimension lines (current lines assume axis-aligned rooms)
+- [ ] `sq ft` unit toggle on the area badge
+
+Not yet started: Phase 0 (`DesignParams`), Phase 2 (BSP planning engine), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC).
 
 ---
 
