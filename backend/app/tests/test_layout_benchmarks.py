@@ -266,7 +266,9 @@ def test_benchmark_layouts_meet_quality_floor_and_report_pattern_source(prompt: 
     ("prompt", "room_type", "target_type"),
     [
         ("small office with reception, meeting room, open workspace and storage", "reception", "workspace"),
-        ("small clinic with waiting room, reception, consultation room and bathroom", "waiting_room", "consultation_room"),
+        # Clinic consultations open off the circulation corridor (kept buffered
+        # from the public waiting/entry), so adjacency is measured to the hallway.
+        ("small clinic with waiting room, reception, consultation room and bathroom", "hallway", "consultation_room"),
         ("retail store layout with display area, storage and checkout", "retail_display", "checkout"),
         ("classroom layout with classroom, corridor and bathroom", "hallway", "classroom"),
     ],

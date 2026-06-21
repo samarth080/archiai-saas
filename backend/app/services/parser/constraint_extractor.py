@@ -57,22 +57,44 @@ IMPLICIT_ADJACENCY: list[tuple[str, str]] = [
 
 # ── adjacency patterns ────────────────────────────────────────────────────────
 
+# Direct-contact / flow verbs imply a hard (MUST) adjacency: the two rooms share
+# a wall or open into each other.  Includes directional phrases ("behind", "in
+# front of", "opposite") which in a layout brief always mean the rooms touch.
 _MUST_VERBS = (
-    r"next to|beside|adjacent to|adjoining|connected to|attached to|next door to"
+    r"next to|beside|adjacent to|adjoining|adjoins|connected to|connects to|"
+    r"attached to|next door to|opens into|opens onto|opens to|leads into|"
+    r"leads to|leads onto|just behind|directly behind|right behind|behind|"
+    r"in front of|infront of|directly in front of|opposite|across from|facing|"
+    r"backs onto|backs on to"
 )
-_SHOULD_VERBS = r"near|close to|by the|near the"
+_SHOULD_VERBS = r"near|close to|by the|near the|close by|beside the|nearby"
+
+# Optional filler between a room and the verb, e.g. "the office IS JUST behind …",
+# "kitchen SITS next to …", "reception LOCATED beside …".
+_OPT_LINK = r"(?:\s+(?:is|are|sits?|sit|located|positioned|placed|set))?(?:\s+(?:just|directly|right))?"
 
 _ADJACENCY_PATTERNS: list[tuple[re.Pattern, str]] = [
+    # forward: "<A> [is/sits] [just] <verb> [the] <B>"
     (
         re.compile(
-            rf"(?P<a>{_ROOM_PAT})s?\s+(?:{_MUST_VERBS})\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
+            rf"(?P<a>{_ROOM_PAT})s?{_OPT_LINK}\s+(?:{_MUST_VERBS})\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
+            re.IGNORECASE,
+        ),
+        "MUST",
+    ),
+    # reversed: "<verb> [the] <A> [is/sits/lies] [the] <B>"  e.g. "next to the
+    # office is the washroom" → office MUST-adjacent washroom
+    (
+        re.compile(
+            rf"(?:{_MUST_VERBS})\s+(?:the\s+)?(?P<a>{_ROOM_PAT})s?\s+"
+            rf"(?:is|are|sits?|lies?|goes?|comes?)\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
             re.IGNORECASE,
         ),
         "MUST",
     ),
     (
         re.compile(
-            rf"(?P<a>{_ROOM_PAT})s?\s+(?:{_SHOULD_VERBS})\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
+            rf"(?P<a>{_ROOM_PAT})s?{_OPT_LINK}\s+(?:{_SHOULD_VERBS})\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
             re.IGNORECASE,
         ),
         "SHOULD",

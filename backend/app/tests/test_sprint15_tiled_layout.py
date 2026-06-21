@@ -188,11 +188,10 @@ class TestGenerateLayoutTiled:
     def test_house_uses_tiled_layout(self):
         assert "house" in _TILED_BUILDING_TYPES
 
-    def test_office_uses_row_layout(self):
-        """Commercial types should NOT use the tiled algorithm."""
+    def test_commercial_types_use_tiled_layout(self):
+        """Sprint 16: commercial types now tile too, so they fill their footprint."""
         from app.services.layout_service import _TILED_BUILDING_TYPES as _TBT
-        assert "office" not in _TBT
-        assert "clinic" not in _TBT
+        assert {"office", "clinic", "restaurant", "retail", "classroom"}.issubset(_TBT)
 
     def test_tiled_layout_has_no_overlapping_rooms(self):
         specs = _make_specs(

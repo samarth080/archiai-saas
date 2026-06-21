@@ -36,6 +36,9 @@ def _edge_gap(a: dict, b: dict) -> float:
 def _overlaps(a: dict, b: dict) -> bool:
     if a.get("floorLevel") != b.get("floorLevel"):
         return False
+    # Tiled rooms share walls; allow a small epsilon for float drift at the
+    # shared edge (matches the quality scorer and benchmark overlap checks).
+    _eps = 0.02
     ax1 = a["position"]["x"] - a["size"]["w"] / 2
     ax2 = a["position"]["x"] + a["size"]["w"] / 2
     az1 = a["position"]["z"] - a["size"]["d"] / 2
@@ -44,7 +47,7 @@ def _overlaps(a: dict, b: dict) -> bool:
     bx2 = b["position"]["x"] + b["size"]["w"] / 2
     bz1 = b["position"]["z"] - b["size"]["d"] / 2
     bz2 = b["position"]["z"] + b["size"]["d"] / 2
-    return ax1 < bx2 and ax2 > bx1 and az1 < bz2 and az2 > bz1
+    return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
 
 def test_clinic_places_reception_near_entry():
@@ -96,7 +99,9 @@ def test_restaurant_kitchen_is_not_at_public_entrance():
 
 def test_generated_rooms_do_not_overlap():
     layout = _generate("restaurant with entry, reception, dining room, kitchen, bathroom and storage")
-    rooms = [room for room in layout["rooms"] if room["roomType"] != "stairs"]
+    # Check actual rooms only — partition/boundary walls intentionally sit on
+    # shared room edges in the tiled engine, so they are not overlap candidates.
+    rooms = [room for room in layout["rooms"] if room["objectType"] == "room"]
 
     for index, room in enumerate(rooms):
         for other in rooms[index + 1:]:

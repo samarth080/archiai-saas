@@ -559,7 +559,12 @@ def _architectural_markers(
     d = footprint["d"]
     wall_h = 2.8
     wall_t = 0.18
-    horizontal_wall_w = max(0.1, w - wall_t * 2)
+    # Boundary walls wrap the floor plate: their inner face sits on the footprint
+    # edge so they never overlap the edge rooms (which fill the plate exactly in
+    # the tiled engine).  Centre-lines are offset outward by half the thickness.
+    off = wall_t / 2
+    horizontal_wall_w = max(0.1, w + wall_t * 2)
+    vertical_wall_d = max(0.1, d + wall_t * 2)
     markers = [
         _make_marker(
             label="Front Wall",
@@ -568,7 +573,7 @@ def _architectural_markers(
             floor_id=floor_id,
             floor_level=floor_level,
             elevation=elevation,
-            position={"x": x + w / 2, "y": wall_h / 2, "z": z},
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z - off},
             size={"w": horizontal_wall_w, "h": wall_h, "d": wall_t},
         ),
         _make_marker(
@@ -578,7 +583,7 @@ def _architectural_markers(
             floor_id=floor_id,
             floor_level=floor_level,
             elevation=elevation,
-            position={"x": x + w / 2, "y": wall_h / 2, "z": z + d},
+            position={"x": x + w / 2, "y": wall_h / 2, "z": z + d + off},
             size={"w": horizontal_wall_w, "h": wall_h, "d": wall_t},
         ),
         _make_marker(
@@ -588,8 +593,8 @@ def _architectural_markers(
             floor_id=floor_id,
             floor_level=floor_level,
             elevation=elevation,
-            position={"x": x, "y": wall_h / 2, "z": z + d / 2},
-            size={"w": wall_t, "h": wall_h, "d": d},
+            position={"x": x - off, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": vertical_wall_d},
         ),
         _make_marker(
             label="Right Wall",
@@ -598,8 +603,8 @@ def _architectural_markers(
             floor_id=floor_id,
             floor_level=floor_level,
             elevation=elevation,
-            position={"x": x + w, "y": wall_h / 2, "z": z + d / 2},
-            size={"w": wall_t, "h": wall_h, "d": d},
+            position={"x": x + w + off, "y": wall_h / 2, "z": z + d / 2},
+            size={"w": wall_t, "h": wall_h, "d": vertical_wall_d},
         ),
         _make_marker(
             label="Exterior Window",
@@ -702,7 +707,7 @@ def _generate_partition_walls(
 _TILED_FRONT_TYPES: frozenset[str] = frozenset({
     "entry", "living_room", "open_plan_living", "dining_room", "kitchen",
     "foyer", "reception", "waiting_room", "retail_display", "checkout",
-    "dining_area", "bar",
+    "dining_area", "bar", "classroom",
 })
 _TILED_CORRIDOR_TYPES: frozenset[str] = frozenset({"hallway", "corridor"})
 _TILED_PRIVATE_TYPES: frozenset[str] = frozenset({
@@ -713,15 +718,46 @@ _TILED_SERVICE_TYPES: frozenset[str] = frozenset({
     "bathroom", "storage", "utility", "laundry", "garage", "staircase",
 })
 
-# Building types that use the tiled floor-plan algorithm
+# Building types that use the tiled floor-plan algorithm.  As of Sprint 16 this
+# is effectively every building type the parser can emit — residential and
+# commercial alike — so layouts always fill their footprint with zero blank
+# bands.  _place_rooms / _repair_rooms remain only as a fallback for any type
+# not listed here.
 _TILED_BUILDING_TYPES: frozenset[str] = frozenset({
-    "apartment", "studio", "house", "two_storey_home",
-    "bungalow", "villa", "townhouse",
+    # residential — note both vocabularies' names (detect_building_type vs the
+    # parser's infer_building_type) are listed so the production parse path tiles
+    # too: e.g. "studio"/"studio_apartment", "house"/"family_home".
+    "apartment", "studio", "studio_apartment", "house", "family_home",
+    "two_storey_home", "bungalow", "villa", "townhouse",
+    # commercial / institutional
+    "office", "clinic", "restaurant", "retail", "classroom", "school", "hotel",
 })
 
 _MIN_BUILDING_WIDTH = 7.0   # metres
 _MAX_BUILDING_WIDTH = 22.0  # metres
 _CORRIDOR_DEPTH = 1.5       # metres — corridor/hallway row height
+
+# Residential layouts insert an implicit privacy corridor between the public
+# (front) and private (back) rows so bedrooms are buffered from living areas.
+# Commercial layouts skip it: reception should flow straight into the work area
+# (e.g. reception→workspace, waiting→consultation share a wall, no dead hallway).
+# Clinics are included too: a clinic has a real circulation corridor off which
+# consultation rooms open, keeping them buffered from the public entry.
+_IMPLICIT_CORRIDOR_BUILDING_TYPES: frozenset[str] = frozenset({
+    "apartment", "studio", "house", "two_storey_home",
+    "bungalow", "villa", "townhouse",
+    "clinic",
+})
+
+
+# Adjacency constraints may reference room types that are placed as a different
+# concrete room (an "ensuite" is realised as a bathroom).  Normalise so pair
+# matching against actual room specs works.
+_PAIR_TYPE_ALIASES: dict[str, str] = {"ensuite": "bathroom"}
+
+
+def _normalise_pair_types(pair: frozenset) -> frozenset:
+    return frozenset(_PAIR_TYPE_ALIASES.get(t, t) for t in pair)
 
 
 def _tiled_room_obj(
@@ -761,22 +797,53 @@ def _fill_row(
     elevation: float,
     rules: LayoutPatternRules,
 ) -> list[dict]:
-    """Scale rooms proportionally to fill `building_width` exactly, touching walls."""
+    """
+    Partition `building_width` among the row's rooms so they share walls and fill
+    it exactly.  Width is allocated proportional to each room's TARGET AREA (not
+    its pre-sized width): since the row depth is uniform, area-proportional widths
+    keep each room's final area close to its intended size — a large room (e.g. an
+    open workspace) gets a correspondingly wide column instead of being squeezed.
+
+    A minimum width (and aspect floor relative to the row depth) is guaranteed; any
+    width borrowed to honour it is taken from the widest room so the row still fills
+    exactly without producing wafer-thin strips.
+    """
     if not specs:
         return []
-    total_raw_w = sum(s.w for s in specs)
-    if total_raw_w <= 0:
+    n = len(specs)
+    areas = [max(s.w * s.d, 0.1) for s in specs]
+    total_area = sum(areas)
+    if total_area <= 0:
         return []
+
+    widths = [area / total_area * building_width for area in areas]
+
+    # Minimum usable width: never thinner than 1.5m, and not a thin strip against
+    # the row depth, but never more than an equal share (so it stays solvable).
+    min_w = min(max(1.5, 0.6 * row_depth), building_width / n)
+    for i in range(n):
+        if widths[i] < min_w:
+            deficit = min_w - widths[i]
+            widths[i] = min_w
+            donor = max(range(n), key=lambda k: widths[k])
+            if donor != i:
+                widths[donor] = max(min_w, widths[donor] - deficit)
+    # Renormalise so the row fills building_width exactly after clamping.
+    scale = building_width / sum(widths)
+    widths = [w * scale for w in widths]
+
     result = []
     current_x = 0.0
-    for i, spec in enumerate(specs):
-        # Last room gets remaining width to absorb rounding
-        if i == len(specs) - 1:
+    for i, (spec, w) in enumerate(zip(specs, widths)):
+        # Last room absorbs any residual rounding so the row ends flush.
+        if i == n - 1:
             w = building_width - current_x
-        else:
-            w = round(spec.w / total_raw_w * building_width, 2)
-        w = max(w, 1.5)  # never below 1.5m wide
-        result.append(_tiled_room_obj(spec, current_x, row_z, w, row_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        result.append(
+            _tiled_room_obj(
+                spec, current_x, row_z, w, row_depth,
+                floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+            )
+        )
         current_x += w
     return result
 
@@ -793,6 +860,8 @@ def _tile_rooms(
     elevation: float,
     target_width: float | None = None,
     stair_reserve: float = 0.0,
+    must_pairs: set[frozenset] | None = None,
+    should_pairs: set[frozenset] | None = None,
 ) -> tuple[list[dict], dict]:
     """
     Tile rooms into a pre-defined rectangular footprint.
@@ -802,8 +871,17 @@ def _tile_rooms(
     stair_reserve: width (m) reserved on the right edge for stairs.  Rooms fill
     building_width - stair_reserve; the footprint still covers the full width.
 
+    must_pairs / should_pairs: room-type adjacency constraints from the parser.
+    Linked rooms are ordered to share a wall within their zone row (Sprint 16).
+
     Returns (placed_rooms, footprint_dict).
     """
+    must_pairs = must_pairs or set()
+    # SHOULD links also drive interleaving; normalise "ensuite" → "bathroom"
+    # since the placed service room is a bathroom, not a distinct ensuite room.
+    should_pairs = {_normalise_pair_types(pair) for pair in (should_pairs or set())}
+    must_pairs = {_normalise_pair_types(pair) for pair in must_pairs}
+
     # Classify into zone groups
     front: list[RoomSpec] = []
     corridor: list[RoomSpec] = []
@@ -831,6 +909,12 @@ def _tile_rooms(
         service = []
         corridor = []
 
+    # Order each zone row by building flow priority, then pull adjacency-linked
+    # pairs together so constrained rooms share a wall.
+    front = _order_zone_rooms(front, building_type, must_pairs, should_pairs)
+    private = _order_zone_rooms(private, building_type, must_pairs, should_pairs)
+    other = _order_zone_rooms(other, building_type, must_pairs, should_pairs)
+
     # Compute building width from total area if not provided
     total_area = sum(s.w * s.d for s in specs)
     if not total_area:
@@ -856,25 +940,41 @@ def _tile_rooms(
 
     front_depth = zone_depth(front, min_d=3.0, max_d=6.5) if front else 0.0
     private_depth = zone_depth(private + service, min_d=2.5, max_d=6.5) if private or service else 0.0
-    has_implicit_corridor = bool(front) and bool(private) and not corridor
+    has_implicit_corridor = (
+        building_type in _IMPLICIT_CORRIDOR_BUILDING_TYPES
+        and bool(front)
+        and bool(private)
+        and not corridor
+    )
     corridor_depth = _CORRIDOR_DEPTH if has_implicit_corridor else (zone_depth(corridor, 1.2, 2.0) if corridor else 0.0)
     other_depth = zone_depth(other) if other else 0.0
 
-    # Interleave service rooms with private rooms so bathrooms sit beside bedrooms
+    # Interleave service rooms with private rooms so bathrooms sit beside
+    # bedrooms.  A service room that is adjacency-linked to a private room
+    # (e.g. an ensuite bathroom constrained to a master bedroom) is attached
+    # directly after that private room; the rest fall back to a positional rule.
+    linked_pairs = must_pairs | should_pairs
+
     def interleave_service(priv: list[RoomSpec], svc: list[RoomSpec]) -> list[RoomSpec]:
         if not svc:
             return priv
+        svc_remaining = list(svc)
         merged: list[RoomSpec] = []
-        svc_iter = iter(svc)
         for i, room in enumerate(priv):
             merged.append(room)
-            # attach one service room after every other private room
-            if (i + 1) % 2 == 0:
-                try:
-                    merged.append(next(svc_iter))
-                except StopIteration:
-                    pass
-        merged.extend(svc_iter)  # any remaining service rooms
+            linked_idx = next(
+                (
+                    j
+                    for j, s in enumerate(svc_remaining)
+                    if frozenset({room.room_type, s.room_type}) in linked_pairs
+                ),
+                None,
+            )
+            if linked_idx is not None:
+                merged.append(svc_remaining.pop(linked_idx))
+            elif (i + 1) % 2 == 0 and svc_remaining:
+                merged.append(svc_remaining.pop(0))
+        merged.extend(svc_remaining)  # any remaining service rooms
         return merged
 
     back_row = interleave_service(private, service)
@@ -906,32 +1006,141 @@ def _tile_rooms(
     return placed, footprint
 
 
-def _sort_by_adjacency(
+def _chain_by_adjacency(
     rooms: list[RoomSpec],
     must_pairs: set[frozenset],
+    should_pairs: set[frozenset],
 ) -> list[RoomSpec]:
-    """Reorder rooms so MUST-adjacent pairs are placed consecutively."""
+    """
+    Reorder rooms so adjacency-linked pairs are placed consecutively, preserving
+    the incoming (flow-priority) order as the seed.  MUST links are pulled first,
+    SHOULD links second, so the strongest constraints win the adjacent slot.
+    """
     ordered: list[RoomSpec] = []
     remaining = list(rooms)
     while remaining:
         room = remaining.pop(0)
         ordered.append(room)
-        for i, other in enumerate(remaining):
-            if frozenset({room.room_type, other.room_type}) in must_pairs:
-                ordered.append(remaining.pop(i))
+        partner_idx: int | None = None
+        for pairs in (must_pairs, should_pairs):
+            if not pairs:
+                continue
+            partner_idx = next(
+                (
+                    i
+                    for i, other in enumerate(remaining)
+                    if frozenset({room.room_type, other.room_type}) in pairs
+                ),
+                None,
+            )
+            if partner_idx is not None:
                 break
+        if partner_idx is not None:
+            ordered.append(remaining.pop(partner_idx))
     return ordered
+
+
+def _sort_by_adjacency(
+    rooms: list[RoomSpec],
+    must_pairs: set[frozenset],
+) -> list[RoomSpec]:
+    """Reorder rooms so MUST-adjacent pairs are placed consecutively."""
+    return _chain_by_adjacency(rooms, must_pairs, set())
+
+
+def _order_zone_rooms(
+    rooms: list[RoomSpec],
+    building_type: str,
+    must_pairs: set[frozenset],
+    should_pairs: set[frozenset],
+) -> list[RoomSpec]:
+    """
+    Order a single zone row: primary by building flow priority (so e.g. entry
+    leads, large public rooms sit behind the entry), then pull adjacency-linked
+    pairs together so constrained rooms share a wall.
+    """
+    if not rooms:
+        return rooms
+    ordered = sorted(rooms, key=lambda room: _flow_priority(building_type, room))
+    if must_pairs or should_pairs:
+        ordered = _chain_by_adjacency(ordered, must_pairs, should_pairs)
+    return ordered
+
+
+# Residential building types distribute rooms by privacy (public down, bedrooms
+# up).  Everything else distributes "work" rooms evenly across all floors so no
+# floor is left near-empty while sharing the building's full width.
+_RESIDENTIAL_BUILDING_TYPES: frozenset[str] = frozenset({
+    "apartment", "studio", "studio_apartment", "house", "family_home",
+    "two_storey_home", "bungalow", "villa", "townhouse",
+})
+
+# Public-facing rooms that belong on the ground floor of a multi-storey commercial
+# building (entrance sequence, retail front).
+_GROUND_ANCHORED_TYPES: frozenset[str] = frozenset({
+    "entry", "reception", "waiting_room", "foyer", "lobby",
+    "retail_display", "checkout",
+})
+
+
+def _assign_commercial_floors(
+    specs: list[RoomSpec],
+    total_floors: int,
+    floors: list[list[RoomSpec]],
+    explicit_zones: dict[str, str],
+) -> list[list[RoomSpec]]:
+    """Distribute commercial rooms so every floor is filled: public rooms anchor
+    to the ground floor, work rooms round-robin across all floors, and each
+    occupied floor gets its own bathroom."""
+    bathroom_template = next((room for room in specs if room.room_type == "bathroom"), None)
+    next_floor = 0
+    next_upper = 0
+    upper_levels = list(range(1, total_floors))
+
+    for room in specs:
+        if room.room_type == "bathroom":
+            continue  # placed per-floor at the end
+        zone_pref = explicit_zones.get(room.room_type)
+        if zone_pref == "ground" or room.room_type in _GROUND_ANCHORED_TYPES:
+            floors[0].append(room)
+            continue
+        if zone_pref == "upper" and upper_levels:
+            floors[upper_levels[next_upper % len(upper_levels)]].append(room)
+            next_upper += 1
+            continue
+        # Round-robin over every floor (including ground) for even fill.
+        floors[next_floor % total_floors].append(room)
+        next_floor += 1
+
+    if bathroom_template:
+        for level in range(total_floors):
+            if floors[level] and not any(r.room_type == "bathroom" for r in floors[level]):
+                floors[level].append(
+                    RoomSpec(
+                        label="Bathroom",
+                        room_type="bathroom",
+                        w=bathroom_template.w,
+                        h=bathroom_template.h,
+                        d=bathroom_template.d,
+                    )
+                )
+    return floors
 
 
 def _assign_rooms_to_floors(
     specs: list[RoomSpec],
     total_floors: int,
     zone_assignments: dict[str, str] | None = None,
+    building_type: str = "apartment",
 ) -> list[list[RoomSpec]]:
     floors: list[list[RoomSpec]] = [[] for _ in range(total_floors)]
     if total_floors <= 1:
         floors[0].extend(specs)
         return floors
+
+    explicit_zones = zone_assignments or {}
+    if building_type not in _RESIDENTIAL_BUILDING_TYPES:
+        return _assign_commercial_floors(specs, total_floors, floors, explicit_zones)
 
     upper_levels = list(range(1, total_floors))
     next_upper = 0
@@ -944,8 +1153,6 @@ def _assign_rooms_to_floors(
         level = upper_levels[next_upper % len(upper_levels)]
         floors[level].append(room)
         next_upper += 1
-
-    explicit_zones = zone_assignments or {}
 
     for room in specs:
         # Explicit zone assignment from Stage 5 constraints takes first priority
@@ -1039,9 +1246,10 @@ def _build_layout_candidate(
     x_offset: float,
     zone_assignments: dict[str, str] | None = None,
     must_adjacency_pairs: set[frozenset] | None = None,
+    should_adjacency_pairs: set[frozenset] | None = None,
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
-    floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments)
+    floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
 
     # For tiled layouts pre-compute a shared target width from the widest floor
     # so all storeys have the same footprint width.
@@ -1074,6 +1282,8 @@ def _build_layout_candidate(
                 elevation,
                 target_width=tiled_target_width,
                 stair_reserve=tiled_stair_reserve,
+                must_pairs=must_adjacency_pairs,
+                should_pairs=should_adjacency_pairs,
             )
         else:
             rooms = _place_rooms(
@@ -1214,6 +1424,11 @@ def generate_layout(
         for c in (adjacency_constraints or [])
         if c.strength == "MUST"
     }
+    should_pairs: set[frozenset] = {
+        frozenset({c.room_a, c.room_b})
+        for c in (adjacency_constraints or [])
+        if c.strength == "SHOULD"
+    }
 
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
     # Tiled building types produce a single deterministic layout; row-based types
@@ -1231,6 +1446,7 @@ def generate_layout(
             x_offset=base_offset + offset,
             zone_assignments=zone_assignments,
             must_adjacency_pairs=must_pairs or None,
+            should_adjacency_pairs=should_pairs or None,
         )
         for offset in offsets
     ]
