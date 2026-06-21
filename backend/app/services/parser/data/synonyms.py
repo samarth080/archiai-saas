@@ -41,6 +41,16 @@ SYNONYMS: dict[str, str] = {
     "dining area": "dining_room",
     "open plan": "open_plan_living",
     "open-plan": "open_plan_living",
+    "seating area": "waiting_room",
+    "waiting area": "waiting_room",
+    "seating": "waiting_room",
+    "doctor's office": "consultation_room",
+    "doctors office": "consultation_room",
+    "doctor office": "consultation_room",
+    "doctor's room": "consultation_room",
+    "exam room": "consultation_room",
+    "examination room": "consultation_room",
+    "treatment room": "consultation_room",
 }
 
 
