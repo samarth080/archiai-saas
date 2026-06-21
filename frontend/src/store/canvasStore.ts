@@ -89,6 +89,7 @@ interface CanvasState {
   selectedId: string | null
   snapToGrid: boolean
   gridSize: number
+  showDimensions: boolean
   saveStatus: SaveStatus
   lastSavedAt: string | null
   hasUnsavedChanges: boolean
@@ -103,6 +104,7 @@ interface CanvasState {
   setSelectedFloor: (floor: number | 'all') => void
   setViewMode: (mode: CanvasViewMode) => void
   setSnapToGrid: (enabled: boolean) => void
+  setShowDimensions: (enabled: boolean) => void
   markDirty: () => void
   markDraftSaving: () => void
   markDraftSaved: (timestamp?: string, versionId?: string | null) => void
@@ -314,6 +316,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   selectedId: null,
   snapToGrid: false,
   gridSize: 1,
+  showDimensions: false,
   saveStatus: 'saved',
   lastSavedAt: null,
   ...CLEAN_DRAFT_STATE,
@@ -331,6 +334,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })),
   setViewMode: (mode) => set({ viewMode: mode }),
   setSnapToGrid: (enabled) => set({ snapToGrid: enabled }),
+  setShowDimensions: (enabled) => set({ showDimensions: enabled }),
   markDirty: () =>
     set({
       ...DIRTY_DRAFT_STATE,
