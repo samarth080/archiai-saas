@@ -514,23 +514,43 @@ Deferred beyond Sprint 15 Phase 2:
 - Refine improvements (prompt understanding, adjacency-aware refinement)
 - Per-room activity log API
 
-### Sprint 16 — Unified Space-Filling Layouts & Adjacency Reasoning 📋 Planned (not started)
+### Sprint 16 — Unified Space-Filling Layouts & Adjacency Reasoning ✅ Complete
 
 > Full spec: [`docs/superpowers/specs/2026-06-11-sprint16-unified-space-filling-layouts.md`](docs/superpowers/specs/2026-06-11-sprint16-unified-space-filling-layouts.md)
-> Branch: `sprint-16/unified-space-filling-layouts` (off `main`). Approved scope: **Phases 1–3**. Priority: **accurate room reasoning**.
+> Branch: `sprint-16/unified-space-filling-layouts` (off `main`). Scope: **Phases 1–3**, plus two unplanned parser/NLU fixes (Gaps A & B) found via user testing.
 
-**Why:** `layout_service.py` has two placement engines. Residential types use the good space-filling tiler (`_tile_rooms`, zero gaps). Everything else (office, clinic, retail, restaurant, school, classroom, and mixed-vocab prompts that resolve to a commercial `building_type`) uses the old row-band engine (`_place_rooms`), whose footprint is the bounding box of mismatched-width zone rows — this is the source of the large "blank space" inside the boundary walls. The tiler also ignores the parser's adjacency constraints and uses one uniform depth per row, distorting proportions.
+**Why:** `layout_service.py` had two placement engines. Residential types used the good space-filling tiler (`_tile_rooms`, zero gaps). Everything else (office, clinic, retail, restaurant, school, classroom, and mixed-vocab prompts resolving to a commercial `building_type`) used the old row-band engine (`_place_rooms`), whose footprint was the bounding box of mismatched-width zone rows — the source of large "blank space" inside the boundary walls. The tiler also ignored the parser's adjacency constraints and used one uniform depth per row, distorting proportions.
 
-- [ ] **Phase 1 — Unify on the tiler (kills blank space):** extend `_TILED_FRONT/PRIVATE/SERVICE_TYPES` to cover commercial room types (`classroom`, etc.); expand `_TILED_BUILDING_TYPES` to include `office`, `clinic`, `retail`, `restaurant`, `school`, `classroom` so every type tiles with zero gaps; keep `_place_rooms`/`_repair_rooms` as a fallback only (not on the default path).
-- [ ] **Phase 2 — Real adjacency reasoning (priority):** thread the parser's MUST/SHOULD `AdjacencyConstraint`s into `_tile_rooms` (currently only MUST reaches `_place_rooms`); reorder rooms within each zone row so constrained pairs share a wall (generalize `_sort_by_adjacency`, weight MUST > SHOULD); add cross-row X anchoring so a room MUST-adjacent to one in the next row overlaps its X-span; make `interleave_service` attach a bathroom/ensuite to the bedroom it is constrained to.
-- [ ] **Phase 3 — Per-room depth & aspect clamping (priority):** clamp width:depth to ~[0.6, 2.6] so no room becomes a wide thin strip; allow a localized 2-row sub-split inside a zone band so small service rooms don't stretch to full row depth; verify post-tile area stays within each room's `typical_area_sqm_min/max`, capping and letting neighbors absorb slack.
-- [ ] **Tests:** new `test_sprint16_unified_layouts.py` (commercial prompts tile to ≥80% footprint utilization; kitchen↔dining, master↔ensuite, reception↔waiting share walls; aspect clamp holds; multi-floor commercial keeps shared width + aligned stairs); update `test_layout_service.py` / `test_layout_benchmarks.py` where they encode row-band semantics for commercial types; full backend suite green; `npx tsc --noEmit` clean.
+- [x] **Phase 1 — Unify on the tiler:** `_TILED_BUILDING_TYPES` now covers both the production `detect_building_type` vocabulary (8 types) and the parser's `infer_building_type` vocabulary (13 types) — office, clinic, restaurant, retail, classroom, school, hotel all tile with zero gaps; `_place_rooms`/`_repair_rooms` remain a fallback only.
+- [x] **Phase 2 — Real adjacency reasoning:** `_chain_by_adjacency`/`_order_zone_rooms` thread the parser's MUST/SHOULD `AdjacencyConstraint`s into row ordering inside `_tile_rooms`; `interleave_service` attaches a bathroom/ensuite to the bedroom it's constrained to (with ensuite→bathroom aliasing).
+- [x] **Phase 3 — Proportion realism:** `_fill_row` rewritten to allocate row width proportional to each room's target *area* (not pre-sized width), so large rooms (e.g. open workspace) get proportionate space instead of being squeezed by neighbors — this also fixed the last failing adjacency benchmark.
+- [x] **Geometry fixes:** boundary walls offset outward by half thickness (rooms no longer overlap the walls bounding them); implicit privacy corridor gated to residential types + clinic (clinics have a real circulation corridor); commercial multi-floor distribution (`_assign_commercial_floors`) round-robins rooms evenly across floors and anchors public rooms to the ground floor, fixing near-empty ground floors for types like `school`.
+- [x] **Gap A — missing building templates:** `infer_template_rooms` was silently falling back to the apartment template (bedrooms/kitchen/living room) for any of 6 building types with no template entry — this directly caused the user-reported "clinic generates bedrooms" bug. Added proper templates for `clinic`, `school`, `hotel`, `villa`, `townhouse`, `warehouse`.
+- [x] **Gap B — NL synonyms & relational patterns:** added missing synonyms ("seating area"/"waiting area"→`waiting_room`, "doctor's office"/"exam room"/"treatment room"→`consultation_room`); generalized the adjacency regex to handle directional phrasing (behind, opens into, leads to, opposite, facing, backs onto) and reversed sentence order ("next to X is Y"), with filler-word tolerance.
+- [x] New `test_sprint16_unified_layouts.py` (21 tests: footprint utilization, no-overlap, key adjacencies, relational-language adjacency, multi-floor commercial sharing, clinic/school template correctness, NL synonym resolution); updated `test_layout_architectural_rules.py`, `test_layout_benchmarks.py`, `test_sprint15_tiled_layout.py` for the new tiled-commercial semantics
+- [x] Full backend suite green (430 passed, 0 failed); `npx tsc --noEmit` clean
+
+Known limitation (not fixed, flagged for later): relational phrases with an inserted clause between the two room mentions (e.g. "entry door **which** opens into the reception area") still fail to match the adjacency extractor.
 
 Deferred beyond Sprint 16:
 - Phase 4: quality-scorer space-utilization metric + parser-tied adjacency-satisfaction score (so the generator self-selects good layouts)
 - Phase 5: 2D floor-plan view mode, door openings punched into partition walls, persistent room-type color legend
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
+
+### Sprint 17+ — 10× Roadmap 📋 Planned (not started)
+
+> Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
+
+A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
+
+- **Pillar A — Real planning engine:** replace row/tile packing with a BSP/slicing-tree space partitioner for a true building envelope, plus a real circulation graph, doors on the path, and orientation-aware windows.
+- **Pillar B — Dimensions & interaction:** on-canvas dimension lines + area badges on click/select (not just the Inspector side panel), a metrics HUD, CAD-lite snapping.
+- **Pillar C — Data learning:** swap the scraper's fetcher to Scrapling (handles JS/anti-bot sites like ArchDaily/Dezeen), extract structured project data (not just visible text), aggregate into statistical priors (area distributions, adjacency probabilities) feeding the existing `LayoutPatternRules` pipe.
+- **Pillar D — UI/UX overhaul:** single-screen layout (brief/params, canvas + option gallery, inspector/metrics), muted architectural palette, option gallery for generated candidates, command palette, dimensioned plan-view rendering with door swings.
+- **Pillar E — Interop & hardening:** SVG/DXF/glTF export, production frontend build (currently Docker serves the Vite dev server), refresh-token auth hardening.
+
+Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimensions + UI shell) → Phase 2 (BSP planning engine + circulation) → Phase 3 (Scrapling + priors) → Phase 4 (optioneering + export) → Phase 5 (optional ML + IFC, later).
 
 ---
 
