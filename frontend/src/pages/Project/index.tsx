@@ -7,6 +7,7 @@ import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
+import { MetricsHud } from '../../components/canvas/MetricsHud'
 import {
   DesignDraftResponse,
   fetchDesignDraft,
@@ -631,6 +632,7 @@ export default function ProjectPage() {
             <div className="relative flex-1 h-full">
               <Canvas3D className="h-full" />
               <EditorToolbar />
+              <MetricsHud />
               {!hasSavedLayout && roomCount === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="rounded border border-dashed border-gray-300 bg-white/90 px-4 py-3 text-sm text-gray-500 shadow-sm">
