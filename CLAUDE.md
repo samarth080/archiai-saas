@@ -564,18 +564,25 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 - [ ] Rotation-aware dimension lines (current lines assume axis-aligned rooms)
 - [ ] `sq ft` unit toggle on the area badge
 
-**Phase 0 progress (DesignParams + first parametric lever):**
+**Phase 0 progress (DesignParams + first parametric levers):**
 - [x] `DesignParams` schema (`plotWidthM`, `plotDepthM`, `floors`, `orientation`, `vastu`) added to `GenerateRequest` as a fully optional sibling of `prompt` — omitting it leaves generation byte-for-byte unaffected
 - [x] `plot_width_m` wired end-to-end: overrides the tiled building's program-area-inferred footprint width, clamped to 4-40m (wider than the 7-22m inferred default since a real plot can legitimately fall outside that heuristic's range); holds consistently across multi-floor layouts
 - [x] `floors` and `vastu` DesignParams route through the existing `total_floors`/`vastu_requested` parameters, taking precedence over the prompt when supplied
-- [x] `orientation` and `plot_depth_m` accepted and recorded in `metadata.designParams` now; not yet wired into geometry — orientation needs Pillar A's window-placement work, plot_depth_m needs the BSP partitioner (Phase 2) to apply without distorting room proportions
+- [x] `orientation` (S/N/E/W, default S) wired end-to-end: picks which exterior wall is the entry/road-facing side via `_ORIENTATION_ENTRY_WALL`; windows are placed on the other three exterior walls (previously always exactly one window on one fixed wall, regardless of building shape)
+- [x] `plot_depth_m` still only accepted/recorded in `metadata.designParams`, not yet applied to geometry — needs the BSP partitioner (Phase 2) to constrain depth without distorting room proportions the way a naive clamp would
 - [x] Fixed a pre-existing gap found along the way: `FloorResponse` was silently dropping `footprint` from every API response (the schema never declared the field), which meant the Phase 1 metrics HUD's footprint-utilization stat could never populate for API-loaded layouts; `footprint` is now part of the response schema
-- [x] Collapsible "Plot params" row in the Project prompt bar (plot width + floors, both blank/"auto" by default) sends `designParams` alongside the prompt when filled in
-- [x] Backend tests (plot width override, clamping, multi-floor consistency, API plumbing, no-params regression) + frontend test (params row sends `designParams` on Generate); full backend suite green (437 passed), full frontend suite green (93 passed), both `npx tsc --noEmit` clean
-- [ ] The full `Fn`-pipeline decomposition of `generate_layout` into composable functions over a shared `BuildingModel` (the architectural part of Phase 0) is deferred — the `DesignParams` plumbing was delivered as a safe, additive slice instead of risking the 430+ test layout engine on a large simultaneous rewrite; revisit when Phase 2's BSP partitioner needs the pipeline shape anyway
-- [ ] `plot_width_m` only affects tiled building types (`_TILED_BUILDING_TYPES`) — row-banded fallback types ignore it (in practice this covers nearly everything generated since Sprint 16)
+- [x] Collapsible "Plot params" row in the Project prompt bar — plot width, floors, and an "Entry faces" direction select (all blank/"auto" by default) — sends `designParams` alongside the prompt when filled in
+- [x] Backend + frontend tests cover plot width override/clamping/multi-floor consistency, orientation's effect on entry/window placement, API plumbing, and no-params regression
+- [ ] The full `Fn`-pipeline decomposition of `generate_layout` into composable functions over a shared `BuildingModel` (the architectural part of Phase 0) is deferred — the `DesignParams` plumbing was delivered as a safe, additive slice instead of risking the 440+ test layout engine on a large simultaneous rewrite; revisit when Phase 2's BSP partitioner needs the pipeline shape anyway
+- [ ] `plot_width_m`/`orientation` only affect tiled building types (`_TILED_BUILDING_TYPES`) — row-banded fallback types ignore them (in practice this covers nearly everything generated since Sprint 16)
 
-Not yet started: Phase 2 (BSP planning engine), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC).
+**Phase 2 progress (incremental slice — interior doors, ahead of the full BSP rewrite):**
+- [x] Every partition wall between two adjacent rooms whose shared span is >= 1.2m now gets a door marker centred on it (`_generate_partition_walls`), so generated floor plans are walkable room-to-room instead of solid-walled boxes with only one entry door total
+- [x] Door markers reuse the existing window/door rendering path in `RoomMesh.tsx` — no frontend change needed, the canvas already knew how to draw them
+- [x] Tests cover door placement, span-matching, the 1.2m minimum-span cutoff, and that a multi-room layout ends up with more doors than just the entry
+- [ ] The full BSP/slicing-tree space partitioner, real circulation graph, and door-clearance checks (the rest of Phase 2) are not started — this slice only adds doorways to the walls the existing tiler already draws, it doesn't change how rooms are placed
+
+Not yet started: the rest of Phase 2 (BSP planning engine + circulation graph), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
 
 ---
 
