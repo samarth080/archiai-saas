@@ -538,10 +538,10 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
-### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0, 1 & 2 underway)
+### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0 & 1 complete, Phase 2 core complete)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
-> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + the Phase 2 doors/dimensions fixes, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
+> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + Phase 2, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
 
 A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
 
@@ -577,15 +577,20 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 - [ ] Rotation-aware dimension lines (current lines assume axis-aligned rooms)
 - [ ] `sq ft` unit toggle on the area badge
 
-**Phase 2 progress (incremental slices, ahead of the full BSP rewrite):**
+**Phase 2 progress (BSP space partitioner + real circulation) ✅ Core deliverables complete:**
 - [x] Every partition wall between two adjacent rooms whose shared span is >= 1.2m gets a door marker centred on it (`_generate_partition_walls`), so generated floor plans are walkable room-to-room instead of solid-walled boxes with only one entry door total
 - [x] **Bug fix — wrong adjacency branch:** when one room's footprint was narrower than and fully nested inside another's span on one axis (e.g. an Office nested inside a wider Hallway), both gap measurements read near-zero and the code picked the wrong wall orientation, so Hallway↔room walls/doors were silently never generated at all. Fixed by comparing real overlap magnitude on each axis instead of relying on which gap happened to read near zero.
 - [x] **Bug fix — doors routed wrong:** even with the geometry fixed, every adjacent pair got a direct door unconditionally, so two private/service cells sitting side by side (e.g. Office next to Bathroom) each got a lateral door to each other instead of each opening onto the corridor. `_wants_direct_door` now gates this: the corridor always connects to whatever it touches, open-plan public rooms still connect directly to each other, but two private/service cells only get a direct door when there's no corridor on the floor to route through instead. This was the exact bug visible in the user-reported clinic screenshot (Office<->Bathroom and Bathroom<->Consultation Room doors, but nothing connecting either to the Hallway).
-- [x] Tests cover door placement, span-matching, the 1.2m minimum-span cutoff, the corridor-routing fix specifically (regression test against the exact clinic layout that surfaced the bug), and that open-plan public rooms still connect directly
+- [x] **Real BSP space partitioner:** `_bsp_partition_rect` is a true 2D recursive partition — `_fill_row` (the plain tiler) only ever varies room WIDTH within a band, forcing every room in that band to the SAME depth; BSP can cut a rectangle along either axis (always the currently-longer side, split point chosen by cumulative room area), so a deep bedroom and a shallow bathroom sharing a row can each get the depth their area actually calls for, while still fully tiling the rectangle with zero gaps
+- [x] **Competes, doesn't replace:** tiled building types now generate two full candidates per request (`placement_style` "tile" and "bsp"), both scored by the existing quality scorer, higher score wins — the same `max()` competition the codebase already used for row-offset variants. BSP can never make a layout worse, only take over when it demonstrably produces better proportions. Winning engine recorded in `metadata.placementEngine`.
+- [x] **Real circulation check:** `_floor_unreachable_rooms` builds a per-floor graph from interior doors and walks it from the floor's entry point (the `entry`-typed room on the ground floor, or the room nearest the stairs on upper floors), flagging by label any room not actually reachable — not just "are there doors" but "can you walk from the entry to every room." Penalises the quality score and surfaces as a warning + suggestion.
+- [x] Tests cover door placement, span-matching, the 1.2m minimum-span cutoff, the corridor-routing fix (regression test against the exact clinic layout that surfaced the bug), open-plan rooms still connecting directly, BSP's zero-gap/zero-overlap tiling guarantee, BSP producing genuinely variable depths under heterogeneous room areas, candidate competition never scoring below either engine alone, and reachability correctly flagging a deliberately disconnected room
+- [x] **Bug fix — dropped metadata fields:** found a second instance of the dropped-field bug from Phase 0 (`FloorResponse.footprint`) — `GenerateMetadata` never declared `candidateCount`, so it was silently stripped from every API response by the response model the whole time. Fixed alongside adding `placementEngine`.
 - [x] `layout_service.py` given a module docstring + section banners (comments only, zero logic change) documenting the two-engine history, since that's exactly the kind of file where a bug like the corridor-nesting one hides
-- [ ] The full BSP/slicing-tree space partitioner, real circulation graph, and door-clearance checks (the rest of Phase 2) are not started — these slices only add doorways to walls the existing tiler already draws, they don't change how rooms are placed
+- [ ] Door-clearance checks (a clearance rectangle in front of each door, flagged if another room/object overlaps it) are not implemented — the roadmap's stretch goal for this phase, lower priority than the partitioner and circulation work above
+- [ ] BSP is currently only used for the back/private+service row; the front row (open-plan living/kitchen/dining) deliberately still uses uniform-depth `_fill_row` since a benchmark test asserts those rooms share an exact Z position — revisit if BSP's depth-variance benefit is wanted there too
 
-Not yet started: the rest of Phase 2 (BSP planning engine + circulation graph), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
+Not yet started: Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
 
 ---
 
