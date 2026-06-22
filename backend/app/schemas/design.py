@@ -100,6 +100,8 @@ class GenerateMetadata(BaseModel):
     template: str | None = None
     templateStrategy: str | None = None
     designParams: dict[str, Any] | None = None
+    placementEngine: str | None = None
+    candidateCount: int | None = None
 
 
 class BuildingResponse(BaseModel):

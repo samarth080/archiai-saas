@@ -1019,6 +1019,89 @@ def _fill_row(
     return result
 
 
+# ── BSP space partitioner — Sprint 17 Phase 2 ────────────────────────────────
+# _fill_row (above) only ever varies room WIDTH within a band; every room in
+# the band is forced to the same DEPTH (the band's average), which distorts
+# proportions when rooms genuinely need different depths (e.g. a deep bedroom
+# next to a shallow bathroom). _bsp_partition_rect generalises this to a true
+# 2D recursive space partition: it always fully tiles its input rectangle
+# (same zero-gap guarantee as _fill_row) but can cut along either axis, so
+# rooms can end up with different depths as well as different widths. It
+# competes with the plain tiler as an alternate candidate (see generate_layout
+# / _build_layout_candidate's placement_style) rather than replacing it, since
+# uniform-depth front rows (open-plan living/kitchen/dining) are deliberately
+# left alone — _fill_row still handles those.
+
+_BSP_MIN_DIM = 1.5  # metres — never cut a rectangle down to less than this
+
+
+def _balanced_split_index(areas: list[float]) -> int:
+    """Index i (1 <= i < len(areas)) where sum(areas[:i]) is closest to half the total."""
+    total = sum(areas)
+    target = total / 2
+    best_idx, best_diff = 1, abs(areas[0] - target)
+    running = areas[0]
+    for i in range(2, len(areas)):
+        running += areas[i - 1]
+        diff = abs(running - target)
+        if diff < best_diff:
+            best_idx, best_diff = i, diff
+    return best_idx
+
+
+def _bsp_partition_rect(
+    specs: list[RoomSpec],
+    x0: float,
+    z0: float,
+    w: float,
+    d: float,
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    rules: LayoutPatternRules,
+) -> list[dict]:
+    """Recursively partition the (w x d) rectangle at (x0, z0) among specs, in order."""
+    if not specs:
+        return []
+    if len(specs) == 1:
+        return [
+            _tiled_room_obj(
+                specs[0], x0, z0, w, d,
+                floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+            )
+        ]
+
+    areas = [max(s.w * s.d, 0.1) for s in specs]
+    total_area = sum(areas)
+    split_idx = _balanced_split_index(areas)
+    left_specs, right_specs = specs[:split_idx], specs[split_idx:]
+    left_ratio = sum(areas[:split_idx]) / total_area if total_area > 0 else 0.5
+
+    # Cut whichever axis is currently longer, so pieces stay roughly square
+    # instead of degenerating into slivers as the recursion goes deeper.
+    if w >= d:
+        left_w = max(_BSP_MIN_DIM, min(w - _BSP_MIN_DIM, w * left_ratio))
+        right_w = w - left_w
+        return _bsp_partition_rect(
+            left_specs, x0, z0, left_w, d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        ) + _bsp_partition_rect(
+            right_specs, x0 + left_w, z0, right_w, d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        )
+    else:
+        left_d = max(_BSP_MIN_DIM, min(d - _BSP_MIN_DIM, d * left_ratio))
+        right_d = d - left_d
+        return _bsp_partition_rect(
+            left_specs, x0, z0, w, left_d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        ) + _bsp_partition_rect(
+            right_specs, x0, z0 + left_d, w, right_d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        )
+
+
 _STAIR_STRIP_W = _STAIRS_SIZE["w"] + 0.2  # metres reserved at building right edge for stairs
 
 
@@ -1033,6 +1116,7 @@ def _tile_rooms(
     stair_reserve: float = 0.0,
     must_pairs: set[frozenset] | None = None,
     should_pairs: set[frozenset] | None = None,
+    use_bsp_back: bool = False,
 ) -> tuple[list[dict], dict]:
     """
     Tile rooms into a pre-defined rectangular footprint.
@@ -1165,7 +1249,10 @@ def _tile_rooms(
         current_z += corridor_depth
 
     if back_row:
-        placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        if use_bsp_back:
+            placed.extend(_bsp_partition_rect(back_row, 0.0, current_z, fill_width, private_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        else:
+            placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
         current_z += private_depth
 
     if other:
@@ -1426,6 +1513,7 @@ def _build_layout_candidate(
     should_adjacency_pairs: set[frozenset] | None = None,
     plot_width_m: float | None = None,
     orientation: str | None = None,
+    placement_style: str = "tile",
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
@@ -1467,6 +1555,7 @@ def _build_layout_candidate(
                 stair_reserve=tiled_stair_reserve,
                 must_pairs=must_adjacency_pairs,
                 should_pairs=should_adjacency_pairs,
+                use_bsp_back=(placement_style == "bsp"),
             )
         else:
             rooms = _place_rooms(
@@ -1566,6 +1655,7 @@ def _build_layout_candidate(
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,
             "candidateCount": 1,
+            "placementEngine": placement_style if use_tiler else "row",
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
@@ -1619,9 +1709,15 @@ def generate_layout(
     }
 
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
-    # Tiled building types produce a single deterministic layout; row-based types
-    # try three x-offset variants and pick the highest-scoring one.
-    offsets = (0.0,) if building_type in _TILED_BUILDING_TYPES else (0.0, 0.5, 1.0)
+    # Tiled building types compete two placement engines for the back/private
+    # row — the plain tiler (uniform depth) vs. a real BSP space partition
+    # (rooms can take different depths, not just different widths) — and keep
+    # whichever scores higher. Row-based fallback types instead try three
+    # x-offset variants of the single legacy engine.
+    use_tiler_type = building_type in _TILED_BUILDING_TYPES
+    variants = (
+        [(0.0, "tile"), (0.0, "bsp")] if use_tiler_type else [(o, "tile") for o in (0.0, 0.5, 1.0)]
+    )
     candidates = [
         _build_layout_candidate(
             room_specs=room_specs,
@@ -1637,8 +1733,9 @@ def generate_layout(
             should_adjacency_pairs=should_pairs or None,
             plot_width_m=plot_width_m,
             orientation=orientation,
+            placement_style=style,
         )
-        for offset in offsets
+        for offset, style in variants
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
