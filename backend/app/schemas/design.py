@@ -8,15 +8,17 @@ class DesignParams(BaseModel):
     """
     Explicit parametric overrides for layout generation, alongside the prompt.
     All fields are optional; when omitted the engine falls back to its existing
-    prompt-inferred behaviour. Only plot_width_m and floors currently affect
-    generated geometry — orientation and vastu are recorded today and will
-    shape window placement / Vastu compliance checks in a later phase.
+    prompt-inferred behaviour. plot_width_m, floors, orientation, and vastu all
+    affect generated geometry; plot_depth_m is recorded but not yet applied — it
+    needs the BSP partitioner (Phase 2) to constrain depth without distorting
+    room proportions the way a naive clamp would.
     """
 
     plot_width_m: float | None = Field(default=None, alias="plotWidthM", gt=0)
     plot_depth_m: float | None = Field(default=None, alias="plotDepthM", gt=0)
     floors: int | None = Field(default=None, ge=1, le=6)
     orientation: str | None = None
+    """Road-facing / entry side: one of N, S, E, W. Defaults to S (front wall) when omitted."""
     vastu: bool | None = None
 
     model_config = {"populate_by_name": True}

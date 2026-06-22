@@ -86,6 +86,7 @@ async def generate(
         zone_assignments=parsed.zone_assignments,
         vastu_requested=bool(design_params and design_params.vastu) or parsed.vastu_requested,
         plot_width_m=design_params.plot_width_m if design_params else None,
+        orientation=design_params.orientation if design_params else None,
     )
     if request.project_id:
         design, version = await save_generated_design(

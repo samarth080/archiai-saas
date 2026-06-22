@@ -542,6 +542,11 @@ def _make_marker(
     }
 
 
+_ORIENTATION_ENTRY_WALL: dict[str, str] = {
+    "S": "front", "N": "rear", "E": "right", "W": "left",
+}
+
+
 def _architectural_markers(
     rooms: list[dict],
     *,
@@ -549,6 +554,7 @@ def _architectural_markers(
     floor_level: int,
     elevation: float,
     footprint: dict,
+    orientation: str | None = None,
 ) -> list[dict]:
     if not rooms or not footprint["w"] or not footprint["d"]:
         return []
@@ -606,18 +612,55 @@ def _architectural_markers(
             position={"x": x + w + off, "y": wall_h / 2, "z": z + d / 2},
             size={"w": wall_t, "h": wall_h, "d": vertical_wall_d},
         ),
-        _make_marker(
-            label="Exterior Window",
-            room_type="window",
-            object_type="window",
-            floor_id=floor_id,
-            floor_level=floor_level,
-            elevation=elevation,
-            position={"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + 0.7},
-            size={"w": 1.4, "h": 1.0, "d": 0.12},
-        ),
     ]
+
+    # The entry/road-facing wall is chosen from DesignParams.orientation when
+    # given (S/N/E/W); it defaults to the front wall, matching prior behaviour.
+    # Windows go on the other three exterior walls for cross-floor daylight,
+    # one per wall, sized to that wall's span.
+    entry_wall = _ORIENTATION_ENTRY_WALL.get((orientation or "S").upper(), "front")
+    exterior_offset = 0.7  # metres beyond the wall face — keeps the marker clear of the wall mesh
+    window_specs = {
+        "front": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z - exterior_offset},
+        "rear": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + exterior_offset},
+        "left": {"x": x - exterior_offset, "y": 1.7, "z": z + d - min(2.0, d / 2)},
+        "right": {"x": x + w + exterior_offset, "y": 1.7, "z": z + d - min(2.0, d / 2)},
+    }
+    window_sizes = {
+        "front": {"w": 1.4, "h": 1.0, "d": 0.12},
+        "rear": {"w": 1.4, "h": 1.0, "d": 0.12},
+        "left": {"w": 0.12, "h": 1.0, "d": 1.4},
+        "right": {"w": 0.12, "h": 1.0, "d": 1.4},
+    }
+    for wall_side, position in window_specs.items():
+        if wall_side == entry_wall:
+            continue
+        markers.append(
+            _make_marker(
+                label="Exterior Window",
+                room_type="window",
+                object_type="window",
+                floor_id=floor_id,
+                floor_level=floor_level,
+                elevation=elevation,
+                position=position,
+                size=window_sizes[wall_side],
+            )
+        )
+
     if floor_level == 0:
+        entry_positions = {
+            "front": {"x": x + min(2.0, w / 2), "y": 1.1, "z": z - exterior_offset},
+            "rear": {"x": x + min(2.0, w / 2), "y": 1.1, "z": z + d + exterior_offset},
+            "left": {"x": x - exterior_offset, "y": 1.1, "z": z + min(2.0, d / 2)},
+            "right": {"x": x + w + exterior_offset, "y": 1.1, "z": z + min(2.0, d / 2)},
+        }
+        entry_sizes = {
+            "front": {"w": 1.0, "h": 2.2, "d": 0.12},
+            "rear": {"w": 1.0, "h": 2.2, "d": 0.12},
+            "left": {"w": 0.12, "h": 2.2, "d": 1.0},
+            "right": {"w": 0.12, "h": 2.2, "d": 1.0},
+        }
         markers.append(
             _make_marker(
                 label="Entry Door",
@@ -626,8 +669,8 @@ def _architectural_markers(
                 floor_id=floor_id,
                 floor_level=floor_level,
                 elevation=elevation,
-                position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.7},
-                size={"w": 1.0, "h": 2.2, "d": 0.12},
+                position=entry_positions[entry_wall],
+                size=entry_sizes[entry_wall],
             )
         )
     return markers
@@ -1289,6 +1332,7 @@ def _build_layout_candidate(
     must_adjacency_pairs: set[frozenset] | None = None,
     should_adjacency_pairs: set[frozenset] | None = None,
     plot_width_m: float | None = None,
+    orientation: str | None = None,
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
@@ -1384,6 +1428,7 @@ def _build_layout_candidate(
                 floor_level=pending_floor["level"],
                 elevation=pending_floor["elevation"],
                 footprint=footprint,
+                orientation=orientation,
             )
         )
         rooms.extend(
@@ -1456,6 +1501,7 @@ def generate_layout(
     zone_assignments: dict[str, str] | None = None,
     vastu_requested: bool = False,
     plot_width_m: float | None = None,
+    orientation: str | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
@@ -1495,14 +1541,20 @@ def generate_layout(
             must_adjacency_pairs=must_pairs or None,
             should_adjacency_pairs=should_pairs or None,
             plot_width_m=plot_width_m,
+            orientation=orientation,
         )
         for offset in offsets
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
 
+    design_params_echo: dict = {}
     if plot_width_m is not None:
-        best["metadata"]["designParams"] = {"plotWidthM": plot_width_m}
+        design_params_echo["plotWidthM"] = plot_width_m
+    if orientation is not None:
+        design_params_echo["orientation"] = orientation.upper()
+    if design_params_echo:
+        best["metadata"]["designParams"] = design_params_echo
 
     if vastu_requested:
         from app.services.parser.vastu import check_vastu_compliance
