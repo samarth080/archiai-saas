@@ -191,8 +191,13 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     </Html>
   ) : null
 
+  // The "show all" toggle only renders in plan/top view: in a 3D perspective
+  // camera, dimension lines for every room overlap and become unreadable
+  // (each line sits a fixed offset outside its own room, which collides with
+  // neighbouring rooms' lines in a tightly tiled plan). The selected room's
+  // own dimensions are still shown in any view mode, since that's one room.
   const dimensions =
-    isDimensionable && (isSelected || showDimensions) ? (
+    isDimensionable && (isSelected || (showDimensions && isPlanView)) ? (
       <DimensionAnnotations room={room} emphasized={isSelected} />
     ) : null
 
