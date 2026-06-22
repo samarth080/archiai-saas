@@ -538,10 +538,10 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
-### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phase 1 underway)
+### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0 & 1 underway)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
-> Current branch: `sprint-17/dimensions-on-canvas` (off `main`).
+> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
 
 A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
 
@@ -564,7 +564,18 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 - [ ] Rotation-aware dimension lines (current lines assume axis-aligned rooms)
 - [ ] `sq ft` unit toggle on the area badge
 
-Not yet started: Phase 0 (`DesignParams`), Phase 2 (BSP planning engine), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC).
+**Phase 0 progress (DesignParams + first parametric lever):**
+- [x] `DesignParams` schema (`plotWidthM`, `plotDepthM`, `floors`, `orientation`, `vastu`) added to `GenerateRequest` as a fully optional sibling of `prompt` — omitting it leaves generation byte-for-byte unaffected
+- [x] `plot_width_m` wired end-to-end: overrides the tiled building's program-area-inferred footprint width, clamped to 4-40m (wider than the 7-22m inferred default since a real plot can legitimately fall outside that heuristic's range); holds consistently across multi-floor layouts
+- [x] `floors` and `vastu` DesignParams route through the existing `total_floors`/`vastu_requested` parameters, taking precedence over the prompt when supplied
+- [x] `orientation` and `plot_depth_m` accepted and recorded in `metadata.designParams` now; not yet wired into geometry — orientation needs Pillar A's window-placement work, plot_depth_m needs the BSP partitioner (Phase 2) to apply without distorting room proportions
+- [x] Fixed a pre-existing gap found along the way: `FloorResponse` was silently dropping `footprint` from every API response (the schema never declared the field), which meant the Phase 1 metrics HUD's footprint-utilization stat could never populate for API-loaded layouts; `footprint` is now part of the response schema
+- [x] Collapsible "Plot params" row in the Project prompt bar (plot width + floors, both blank/"auto" by default) sends `designParams` alongside the prompt when filled in
+- [x] Backend tests (plot width override, clamping, multi-floor consistency, API plumbing, no-params regression) + frontend test (params row sends `designParams` on Generate); full backend suite green (437 passed), full frontend suite green (93 passed), both `npx tsc --noEmit` clean
+- [ ] The full `Fn`-pipeline decomposition of `generate_layout` into composable functions over a shared `BuildingModel` (the architectural part of Phase 0) is deferred — the `DesignParams` plumbing was delivered as a safe, additive slice instead of risking the 430+ test layout engine on a large simultaneous rewrite; revisit when Phase 2's BSP partitioner needs the pipeline shape anyway
+- [ ] `plot_width_m` only affects tiled building types (`_TILED_BUILDING_TYPES`) — row-banded fallback types ignore it (in practice this covers nearly everything generated since Sprint 16)
+
+Not yet started: Phase 2 (BSP planning engine), Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC).
 
 ---
 
