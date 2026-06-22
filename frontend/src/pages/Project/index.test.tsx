@@ -188,7 +188,7 @@ describe('ProjectPage refine flow', () => {
     expect(refineButton).toBeDisabled()
   })
 
-  it('sends designParams when plot width / floors are filled in', async () => {
+  it('sends designParams when plot width / floors / orientation are filled in', async () => {
     const generated = {
       version: '1.0',
       designId: 'd1',
@@ -206,6 +206,7 @@ describe('ProjectPage refine flow', () => {
     await user.click(await screen.findByRole('button', { name: 'Plot params' }))
     await user.type(screen.getByLabelText(/Plot width/), '10')
     await user.type(screen.getByLabelText(/Floors/), '2')
+    await user.selectOptions(screen.getByLabelText('Entry faces'), 'N')
     await user.type(screen.getByLabelText('Layout prompt'), 'studio apartment')
     await user.click(screen.getByRole('button', { name: 'Generate' }))
 
@@ -213,7 +214,7 @@ describe('ProjectPage refine flow', () => {
       expect(api.post).toHaveBeenCalledWith('/api/design/generate', {
         prompt: 'studio apartment',
         projectId: 'p1',
-        designParams: { plotWidthM: 10, floors: 2 },
+        designParams: { plotWidthM: 10, floors: 2, orientation: 'N' },
       }),
     )
   })
