@@ -188,6 +188,36 @@ describe('ProjectPage refine flow', () => {
     expect(refineButton).toBeDisabled()
   })
 
+  it('sends designParams when plot width / floors are filled in', async () => {
+    const generated = {
+      version: '1.0',
+      designId: 'd1',
+      designVersionId: 'v1',
+      metadata: { prompt: 'studio', building_type: 'apartment', room_count: 1 },
+      building: { floorHeight: 3.2 },
+      floors: [{ id: 'floor_0', name: 'Ground', level: 0, elevation: 0, rooms: [] }],
+      rooms: [],
+    }
+    vi.mocked(api.post).mockResolvedValue({ data: generated })
+
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Plot params' }))
+    await user.type(screen.getByLabelText(/Plot width/), '10')
+    await user.type(screen.getByLabelText(/Floors/), '2')
+    await user.type(screen.getByLabelText('Layout prompt'), 'studio apartment')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/api/design/generate', {
+        prompt: 'studio apartment',
+        projectId: 'p1',
+        designParams: { plotWidthM: 10, floors: 2 },
+      }),
+    )
+  })
+
   it('posts to /api/design/refine when Refine mode is active', async () => {
     const designFixture = {
       version: '1.0',
