@@ -164,6 +164,7 @@ export default function ProjectPage() {
   const [showParams, setShowParams] = useState(false)
   const [plotWidthM, setPlotWidthM] = useState('')
   const [floorsOverride, setFloorsOverride] = useState('')
+  const [orientation, setOrientation] = useState<'' | 'N' | 'S' | 'E' | 'W'>('')
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
@@ -209,8 +210,12 @@ export default function ProjectPage() {
         const designParams = {
           plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
           floors: floorsOverride.trim() ? Number(floorsOverride) : undefined,
+          orientation: orientation || undefined,
         }
-        const hasParams = designParams.plotWidthM !== undefined || designParams.floors !== undefined
+        const hasParams =
+          designParams.plotWidthM !== undefined ||
+          designParams.floors !== undefined ||
+          designParams.orientation !== undefined
         const result = await generateLayout(prompt, id, hasParams ? designParams : undefined)
         loadLayout(result)
         setDraftToRecover(null)
@@ -740,6 +745,20 @@ export default function ProjectPage() {
                     value={floorsOverride}
                     onChange={(e) => setFloorsOverride(e.target.value)}
                   />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Entry faces
+                  <select
+                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={orientation}
+                    onChange={(e) => setOrientation(e.target.value as typeof orientation)}
+                  >
+                    <option value="">auto</option>
+                    <option value="S">South</option>
+                    <option value="N">North</option>
+                    <option value="E">East</option>
+                    <option value="W">West</option>
+                  </select>
                 </label>
                 <span className="text-gray-400 pb-1">Leave blank to infer from the prompt</span>
               </div>

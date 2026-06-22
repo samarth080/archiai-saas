@@ -42,6 +42,7 @@ export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> 
 export interface DesignParams {
   plotWidthM?: number
   floors?: number
+  orientation?: 'N' | 'S' | 'E' | 'W'
 }
 
 export async function generateLayout(
