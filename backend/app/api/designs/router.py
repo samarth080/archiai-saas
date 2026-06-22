@@ -74,16 +74,18 @@ async def generate(
         parsed.building_type,
         {room.room_type for room in room_specs},
     )
+    design_params = request.design_params
     layout = generate_layout(
         room_specs,
         prompt=request.prompt,
         building_type=parsed.building_type,
-        total_floors=parsed.total_floors,
+        total_floors=(design_params.floors if design_params and design_params.floors else parsed.total_floors),
         pattern_rules=pattern_rules,
         total_area_sqm=total_area_sqm,
         adjacency_constraints=parsed.adjacency_constraints,
         zone_assignments=parsed.zone_assignments,
-        vastu_requested=parsed.vastu_requested,
+        vastu_requested=bool(design_params and design_params.vastu) or parsed.vastu_requested,
+        plot_width_m=design_params.plot_width_m if design_params else None,
     )
     if request.project_id:
         design, version = await save_generated_design(

@@ -737,6 +737,12 @@ _MIN_BUILDING_WIDTH = 7.0   # metres
 _MAX_BUILDING_WIDTH = 22.0  # metres
 _CORRIDOR_DEPTH = 1.5       # metres — corridor/hallway row height
 
+# Wider bounds for an explicit user-supplied plot width (DesignParams), since a
+# real plot can legitimately be narrower or wider than what the program-area
+# heuristic would infer.
+_PLOT_WIDTH_MIN = 4.0   # metres
+_PLOT_WIDTH_MAX = 40.0  # metres
+
 # Residential layouts insert an implicit privacy corridor between the public
 # (front) and private (back) rows so bedrooms are buffered from living areas.
 # Commercial layouts skip it: reception should flow straight into the work area
@@ -1247,20 +1253,25 @@ def _build_layout_candidate(
     zone_assignments: dict[str, str] | None = None,
     must_adjacency_pairs: set[frozenset] | None = None,
     should_adjacency_pairs: set[frozenset] | None = None,
+    plot_width_m: float | None = None,
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
 
     # For tiled layouts pre-compute a shared target width from the widest floor
-    # so all storeys have the same footprint width.
+    # so all storeys have the same footprint width. An explicit plot_width_m
+    # (from DesignParams) overrides the program-area heuristic.
     tiled_target_width: float | None = None
     tiled_stair_reserve = _STAIR_STRIP_W if (use_tiler and total_floors > 1) else 0.0
     if use_tiler:
-        per_floor_areas = [sum(s.w * s.d for s in specs) for specs in floor_specs if specs]
-        if per_floor_areas:
-            max_area = max(per_floor_areas)
-            computed = round(sqrt(max_area * 1.6), 1)
-            tiled_target_width = max(_MIN_BUILDING_WIDTH, min(computed, _MAX_BUILDING_WIDTH))
+        if plot_width_m is not None:
+            tiled_target_width = max(_PLOT_WIDTH_MIN, min(round(plot_width_m, 1), _PLOT_WIDTH_MAX))
+        else:
+            per_floor_areas = [sum(s.w * s.d for s in specs) for specs in floor_specs if specs]
+            if per_floor_areas:
+                max_area = max(per_floor_areas)
+                computed = round(sqrt(max_area * 1.6), 1)
+                tiled_target_width = max(_MIN_BUILDING_WIDTH, min(computed, _MAX_BUILDING_WIDTH))
 
     max_row_width = _max_row_width_for_layout(room_specs, total_floors, building_type)
     pending_floors: list[dict] = []
@@ -1409,6 +1420,7 @@ def generate_layout(
     adjacency_constraints: list[AdjacencyConstraint] | None = None,
     zone_assignments: dict[str, str] | None = None,
     vastu_requested: bool = False,
+    plot_width_m: float | None = None,
 ) -> dict:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
@@ -1447,11 +1459,15 @@ def generate_layout(
             zone_assignments=zone_assignments,
             must_adjacency_pairs=must_pairs or None,
             should_adjacency_pairs=should_pairs or None,
+            plot_width_m=plot_width_m,
         )
         for offset in offsets
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
+
+    if plot_width_m is not None:
+        best["metadata"]["designParams"] = {"plotWidthM": plot_width_m}
 
     if vastu_requested:
         from app.services.parser.vastu import check_vastu_compliance
