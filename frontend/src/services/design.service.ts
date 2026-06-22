@@ -39,8 +39,21 @@ export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> 
   metadata: Record<string, unknown>
 }
 
-export async function generateLayout(prompt: string, projectId?: string): Promise<GenerateResponse> {
-  const { data } = await api.post<GenerateResponse>('/api/design/generate', { prompt, projectId })
+export interface DesignParams {
+  plotWidthM?: number
+  floors?: number
+}
+
+export async function generateLayout(
+  prompt: string,
+  projectId?: string,
+  designParams?: DesignParams,
+): Promise<GenerateResponse> {
+  const { data } = await api.post<GenerateResponse>('/api/design/generate', {
+    prompt,
+    projectId,
+    designParams,
+  })
   return data
 }
 

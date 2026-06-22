@@ -161,6 +161,9 @@ export default function ProjectPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [prompt, setPrompt] = useState('')
+  const [showParams, setShowParams] = useState(false)
+  const [plotWidthM, setPlotWidthM] = useState('')
+  const [floorsOverride, setFloorsOverride] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
@@ -203,7 +206,12 @@ export default function ProjectPage() {
         setRefinementSummary(result.refinementSummary)
         setPrompt('')
       } else {
-        const result = await generateLayout(prompt, id)
+        const designParams = {
+          plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
+          floors: floorsOverride.trim() ? Number(floorsOverride) : undefined,
+        }
+        const hasParams = designParams.plotWidthM !== undefined || designParams.floors !== undefined
+        const result = await generateLayout(prompt, id, hasParams ? designParams : undefined)
         loadLayout(result)
         setDraftToRecover(null)
         setRecoveredDraftAvailable(false)
@@ -695,7 +703,47 @@ export default function ProjectPage() {
               >
                 Refine
               </button>
+              {mode === 'generate' && (
+                <button
+                  type="button"
+                  className="px-3 py-1 bg-white text-gray-500 hover:text-gray-700 border-l border-gray-300"
+                  onClick={() => setShowParams((value) => !value)}
+                  aria-expanded={showParams}
+                >
+                  {showParams ? 'Hide params' : 'Plot params'}
+                </button>
+              )}
             </div>
+            {mode === 'generate' && showParams && (
+              <div className="flex gap-3 items-end text-xs text-gray-600">
+                <label className="flex flex-col gap-1">
+                  Plot width (m)
+                  <input
+                    type="number"
+                    min={4}
+                    max={40}
+                    step={0.5}
+                    placeholder="auto"
+                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={plotWidthM}
+                    onChange={(e) => setPlotWidthM(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Floors
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    placeholder="auto"
+                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={floorsOverride}
+                    onChange={(e) => setFloorsOverride(e.target.value)}
+                  />
+                </label>
+                <span className="text-gray-400 pb-1">Leave blank to infer from the prompt</span>
+              </div>
+            )}
             <div className="flex gap-2 items-end">
               <textarea
                 aria-label="Layout prompt"
