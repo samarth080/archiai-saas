@@ -1,3 +1,32 @@
+"""
+Deterministic floor-plan generation, no paid AI APIs.
+
+generate_layout() is the public entrypoint: given parsed RoomSpecs and a
+building type, it produces 1+ candidate layouts and returns the
+highest-scoring one as plain-dict JSON (see _build_layout_candidate).
+
+This file carries two placement engines from different points in the
+project's history — know which one a building type actually uses before
+changing either:
+
+- THE TILER (_tile_rooms and friends, below the "Zone classification for
+  tiled layout" banner) is the current primary engine. It partitions rooms
+  into front/corridor/private/service rows and scales each row to fill the
+  building's width exactly (zero gaps). _TILED_BUILDING_TYPES lists every
+  building type that routes through it — as of Sprint 16 that's effectively
+  everything the parser can emit.
+- THE LEGACY ROW-BAND ENGINE (_place_rooms / _repair_rooms) predates the
+  tiler and is kept only as a fallback for any building type NOT in
+  _TILED_BUILDING_TYPES. It places rooms in flow-ordered rows without
+  guaranteeing zero gaps, which is exactly the "blank space" problem the
+  tiler was built to fix (see the Sprint 16 entry in docs/SPRINT_HISTORY.md).
+
+Both engines share the same post-processing: _architectural_markers adds
+boundary walls/windows/the entry door, and _generate_partition_walls adds
+interior walls plus door openings between rooms (gated by _wants_direct_door
+so private/service cells route through a corridor instead of opening
+directly into their lateral neighbour — see Sprint 17 Phase 2).
+"""
 import uuid
 from math import sqrt
 
@@ -35,6 +64,8 @@ ROOM_COLORS: dict[str, str] = {
     "door":           "#a16207",
     "window":         "#38bdf8",
 }
+
+# ── Layout-engine constants ─────────────────────────────────────────────────
 
 _GAP = 0.6  # metres between rooms in same row
 _ADJACENCY_ROW_GAP = 0.35
@@ -117,6 +148,8 @@ ENTRY_PRIVATE_AVOID_TYPES = {
 }
 
 
+# ── Small generic helpers ────────────────────────────────────────────────────
+
 def _floor_name(level: int) -> str:
     names = {
         0: "Ground Floor",
@@ -126,6 +159,8 @@ def _floor_name(level: int) -> str:
     }
     return names.get(level, f"Floor {level}")
 
+
+# ── Room sizing ──────────────────────────────────────────────────────────────
 
 def _room_area(specs: list[RoomSpec]) -> float:
     return round(sum(room.w * room.d for room in specs), 2)
@@ -188,6 +223,8 @@ def _size_room_specs(
     return sized
 
 
+# ── Geometry helpers (shared by both placement engines) ─────────────────────
+
 def _edge_gap(a: dict, b: dict) -> float:
     if a.get("floorLevel") != b.get("floorLevel"):
         return float("inf")
@@ -220,6 +257,10 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
     _eps = 0.02
     return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
+
+# ── LEGACY row-band placement engine ─────────────────────────────────────────
+# Fallback only for building types NOT in _TILED_BUILDING_TYPES (see below).
+# Predates the tiler; does not guarantee a zero-gap footprint.
 
 def _flow_priority(building_type: str, room: RoomSpec) -> tuple[int, str]:
     priority = BUILDING_FLOW_PRIORITY.get(building_type, BUILDING_FLOW_PRIORITY["apartment"])
@@ -437,6 +478,8 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
     return repaired
 
 
+# ── Footprint & stairs helpers (shared by both placement engines) ───────────
+
 def _add_stairs(
     floor_id: str,
     floor_level: int,
@@ -510,6 +553,8 @@ def _max_row_width_for_layout(room_specs: list[RoomSpec], total_floors: int, bui
         return round(min(max(base_width, 12.0), 15.5), 2)
     return round(min(max(base_width, 16.0), 22.0), 2)
 
+
+# ── Architectural overlay: walls, doors, windows (shared by both engines) ───
 
 def _make_marker(
     *,
@@ -816,6 +861,11 @@ def _generate_partition_walls(
                         ))
     return markers
 
+
+# ── THE TILER — current primary placement engine (Sprint 15 Phase 2 →) ──────
+# Used by every building type in _TILED_BUILDING_TYPES. Partitions rooms into
+# front/corridor/private/service rows and scales each row to fill the
+# building's width exactly, so the footprint has zero gaps.
 
 # ── Zone classification for tiled layout ─────────────────────────────────────
 
@@ -1127,6 +1177,8 @@ def _tile_rooms(
     return placed, footprint
 
 
+# ── Adjacency-aware room ordering (Sprint 16 Phase 2) ────────────────────────
+
 def _chain_by_adjacency(
     rooms: list[RoomSpec],
     must_pairs: set[frozenset],
@@ -1203,6 +1255,8 @@ _GROUND_ANCHORED_TYPES: frozenset[str] = frozenset({
     "retail_display", "checkout",
 })
 
+
+# ── Floor assignment ──────────────────────────────────────────────────────────
 
 def _assign_commercial_floors(
     specs: list[RoomSpec],
@@ -1354,6 +1408,8 @@ def _layout_bounds(rooms: list[dict]) -> dict:
         "depth": round(max_z - min_z + 0.02, 2),
     }
 
+
+# ── Candidate assembly — builds one full floor-by-floor layout ──────────────
 
 def _build_layout_candidate(
     *,
@@ -1526,6 +1582,8 @@ def _build_layout_candidate(
     ).to_dict()
     return layout
 
+
+# ── Public entrypoint ────────────────────────────────────────────────────────
 
 def generate_layout(
     room_specs: list[RoomSpec],
