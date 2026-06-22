@@ -633,6 +633,12 @@ def _architectural_markers(
     return markers
 
 
+_DOOR_WIDTH = 0.9     # metres
+_DOOR_HEIGHT = 2.1    # metres
+_DOOR_THICKNESS = 0.12  # metres — matches the existing window/entry-door markers
+_MIN_DOORWAY_SPAN = 1.2  # metres — shorter shared walls don't get a door opening
+
+
 def _generate_partition_walls(
     rooms: list[dict],
     *,
@@ -642,14 +648,17 @@ def _generate_partition_walls(
 ) -> list[dict]:
     """
     Generate thin partition wall meshes between every pair of adjacent rooms
-    on the same floor.  Two rooms are considered adjacent when the gap between
-    their nearest edges is <= _GAP (i.e. they were placed side-by-side).
+    on the same floor, plus a door marker centred on each wall long enough to
+    fit one. Two rooms are considered adjacent when the gap between their
+    nearest edges is <= _GAP (i.e. they were placed side-by-side); a doorway
+    along that shared wall is what makes the floor plan actually walkable
+    room-to-room, not just visually divided.
     """
     wall_h = 2.8
     wall_t = 0.15
     adjacency_threshold = _GAP + 0.05  # small tolerance
     room_only = [r for r in rooms if r.get("objectType") == "room"]
-    walls: list[dict] = []
+    markers: list[dict] = []
 
     checked: set[tuple[str, str]] = set()
     for i, a in enumerate(room_only):
@@ -666,40 +675,66 @@ def _generate_partition_walls(
 
             # Adjacent along Z axis (rooms side-by-side in X direction)
             if z_gap <= adjacency_threshold and x_gap < 0.05:
-                # shared X boundary
+                # shared X boundary — a vertical wall running along Z
                 wall_x = (min(ax2, bx2) + max(ax1, bx1)) / 2
                 overlap_z1 = max(az1, bz1)
                 overlap_z2 = min(az2, bz2)
-                if overlap_z2 > overlap_z1:
-                    walls.append(_make_marker(
+                span = overlap_z2 - overlap_z1
+                if span > 0:
+                    wall_z = (overlap_z1 + overlap_z2) / 2
+                    markers.append(_make_marker(
                         label="Partition Wall",
                         room_type="wall",
                         object_type="wall",
                         floor_id=floor_id,
                         floor_level=floor_level,
                         elevation=elevation,
-                        position={"x": wall_x, "y": wall_h / 2, "z": (overlap_z1 + overlap_z2) / 2},
-                        size={"w": wall_t, "h": wall_h, "d": round(overlap_z2 - overlap_z1, 2)},
+                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
+                        size={"w": wall_t, "h": wall_h, "d": round(span, 2)},
                     ))
+                    if span >= _MIN_DOORWAY_SPAN:
+                        markers.append(_make_marker(
+                            label="Interior Door",
+                            room_type="door",
+                            object_type="door",
+                            floor_id=floor_id,
+                            floor_level=floor_level,
+                            elevation=elevation,
+                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
+                            size={"w": _DOOR_THICKNESS, "h": _DOOR_HEIGHT, "d": min(_DOOR_WIDTH, span)},
+                        ))
 
             # Adjacent along X axis (rooms side-by-side in Z direction)
             elif x_gap <= adjacency_threshold and z_gap < 0.05:
-                # shared Z boundary
+                # shared Z boundary — a horizontal wall running along X
                 wall_z = (min(az2, bz2) + max(az1, bz1)) / 2
                 overlap_x1 = max(ax1, bx1)
                 overlap_x2 = min(ax2, bx2)
-                if overlap_x2 > overlap_x1:
-                    walls.append(_make_marker(
+                span = overlap_x2 - overlap_x1
+                if span > 0:
+                    wall_x = (overlap_x1 + overlap_x2) / 2
+                    markers.append(_make_marker(
                         label="Partition Wall",
                         room_type="wall",
                         object_type="wall",
                         floor_id=floor_id,
                         floor_level=floor_level,
                         elevation=elevation,
-                        position={"x": (overlap_x1 + overlap_x2) / 2, "y": wall_h / 2, "z": wall_z},
-                        size={"w": round(overlap_x2 - overlap_x1, 2), "h": wall_h, "d": wall_t},
+                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
+                        size={"w": round(span, 2), "h": wall_h, "d": wall_t},
                     ))
-    return walls
+                    if span >= _MIN_DOORWAY_SPAN:
+                        markers.append(_make_marker(
+                            label="Interior Door",
+                            room_type="door",
+                            object_type="door",
+                            floor_id=floor_id,
+                            floor_level=floor_level,
+                            elevation=elevation,
+                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
+                            size={"w": min(_DOOR_WIDTH, span), "h": _DOOR_HEIGHT, "d": _DOOR_THICKNESS},
+                        ))
+    return markers
 
 
 # ── Zone classification for tiled layout ─────────────────────────────────────
