@@ -92,3 +92,54 @@ def test_multi_room_layout_has_more_doors_than_just_the_entry():
     all_doors = [room for room in layout["rooms"] if room["objectType"] == "door"]
 
     assert len(all_doors) > 1
+
+
+def _room_by_type(layout: dict, room_type: str) -> dict:
+    return next(r for r in layout["rooms"] if r.get("roomType") == room_type)
+
+
+def _door_between(layout: dict, type_a: str, type_b: str) -> dict | None:
+    a, b = _room_by_type(layout, type_a), _room_by_type(layout, type_b)
+    for door in _interior_doors(layout):
+        if abs(door["position"]["x"] - a["position"]["x"]) < 4 and abs(door["position"]["z"] - a["position"]["z"]) < 4:
+            for room, other in ((a, b), (b, a)):
+                ax1, ax2 = room["position"]["x"] - room["size"]["w"] / 2, room["position"]["x"] + room["size"]["w"] / 2
+                az1, az2 = room["position"]["z"] - room["size"]["d"] / 2, room["position"]["z"] + room["size"]["d"] / 2
+                if (ax1 - 0.2 <= door["position"]["x"] <= ax2 + 0.2) and (az1 - 0.2 <= door["position"]["z"] <= az2 + 0.2):
+                    bx1 = other["position"]["x"] - other["size"]["w"] / 2 - 0.2
+                    bx2 = other["position"]["x"] + other["size"]["w"] / 2 + 0.2
+                    bz1 = other["position"]["z"] - other["size"]["d"] / 2 - 0.2
+                    bz2 = other["position"]["z"] + other["size"]["d"] / 2 + 0.2
+                    if bx1 <= door["position"]["x"] <= bx2 and bz1 <= door["position"]["z"] <= bz2:
+                        return door
+    return None
+
+
+def test_private_service_cells_route_through_the_corridor_not_each_other():
+    """
+    Regression for the clinic layout where Office<->Bathroom and
+    Bathroom<->Consultation Room each got a direct door (because they're
+    adjacent in the same back row), instead of each opening onto the
+    Hallway like an architecturally sane plan would.
+    """
+    layout = _generate(
+        "clinic with entry, reception, waiting room, consultation room, office, bathroom and storage"
+    )
+    room_types = {r.get("roomType") for r in layout["rooms"]}
+    assert "hallway" in room_types
+
+    # Lateral doors between two private/service cells must not exist.
+    assert _door_between(layout, "office", "bathroom") is None
+
+    # Each private/service cell must still be reachable via the hallway.
+    for private_type in ("office", "bathroom"):
+        if private_type in room_types:
+            assert _door_between(layout, "hallway", private_type) is not None, (
+                f"{private_type} has no door onto the hallway"
+            )
+
+
+def test_open_plan_public_rooms_still_connect_directly():
+    layout = _generate("apartment with entry, living room, kitchen, dining room and 2 bedrooms")
+
+    assert _door_between(layout, "kitchen", "dining_room") is not None
