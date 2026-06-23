@@ -256,3 +256,95 @@ async def test_high_confidence_source_pattern_beats_seed_pattern():
     assert rules.room_size_range("kitchen") == (12.0, 16.0)
     assert rules.applied_pattern_count == 1
     assert rules.ignored_pattern_count == 0
+
+
+async def test_multiple_same_tier_patterns_are_aggregated_with_the_median():
+    """
+    Sprint 17 Phase 3 — three independently scraped high-confidence sources
+    disagreeing on bedroom area should produce the MEDIAN, a real
+    statistical prior, not just whichever row the resolver happened to see
+    first.
+    """
+    async with TestSessionLocal() as session:
+        user = User(name="Pattern User", email="pattern-aggregate@example.com", hashed_password="unused")
+        session.add(user)
+        await session.flush()
+        source = ScraperSource(
+            name="Three sources",
+            base_url="https://example.com/three-sources",
+            robots_txt_url="https://example.com/robots.txt",
+            data_type="text/html",
+            source_category="room_size_reference",
+            created_by=user.id,
+        )
+        session.add(source)
+        await session.flush()
+        session.add_all(
+            [
+                LayoutPattern(
+                    source_id=source.id, source_url="https://a.example.com",
+                    accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+                    building_type="apartment", room_type="bedroom",
+                    typical_area_sqm_min=9.0, typical_area_sqm_max=13.0,
+                    zone="private", adjacent_to=["bathroom"], confidence="high",
+                ),
+                LayoutPattern(
+                    source_id=source.id, source_url="https://b.example.com",
+                    accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+                    building_type="apartment", room_type="bedroom",
+                    typical_area_sqm_min=11.0, typical_area_sqm_max=15.0,
+                    zone="private", adjacent_to=["bathroom"], confidence="high",
+                ),
+                LayoutPattern(
+                    source_id=source.id, source_url="https://c.example.com",
+                    accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+                    building_type="apartment", room_type="bedroom",
+                    typical_area_sqm_min=17.0, typical_area_sqm_max=23.0,
+                    zone="private", adjacent_to=["hallway"], confidence="high",
+                ),
+            ]
+        )
+        await session.commit()
+
+        rules = await get_layout_pattern_rules(session, "apartment", {"bedroom"})
+
+    # Median of (9, 11, 17) = 11; median of (13, 15, 23) = 15.
+    assert rules.room_size_range("bedroom") == (11.0, 15.0)
+    assert rules.applied_pattern_count == 3
+    # "bathroom" was reported by 2 of 3 sources (meets the support threshold
+    # for n=3); "hallway" was reported by only 1 and gets dropped.
+    assert rules.adjacency_for("bedroom") == ("bathroom",)
+
+
+async def test_single_source_adjacency_is_kept_even_without_corroboration():
+    """With only one or two sources there's nothing to corroborate against
+    yet, so any mention should still count (matches the prior single-pattern
+    behaviour) rather than being dropped for lack of support."""
+    async with TestSessionLocal() as session:
+        user = User(name="Pattern User", email="pattern-single@example.com", hashed_password="unused")
+        session.add(user)
+        await session.flush()
+        source = ScraperSource(
+            name="Single source",
+            base_url="https://example.com/single-source",
+            robots_txt_url="https://example.com/robots.txt",
+            data_type="text/html",
+            source_category="room_size_reference",
+            created_by=user.id,
+        )
+        session.add(source)
+        await session.flush()
+        session.add(
+            LayoutPattern(
+                source_id=source.id, source_url=source.base_url,
+                accessed_at=datetime(2026, 6, 7, tzinfo=timezone.utc),
+                building_type="apartment", room_type="bedroom",
+                typical_area_sqm_min=11.0, typical_area_sqm_max=15.0,
+                zone="private", adjacent_to=["bathroom", "hallway"], confidence="high",
+            )
+        )
+        await session.commit()
+
+        rules = await get_layout_pattern_rules(session, "apartment", {"bedroom"})
+
+    assert rules.adjacency_for("bedroom") == ("bathroom", "hallway")
