@@ -1,10 +1,14 @@
+from collections import Counter
 from dataclasses import dataclass
+from statistics import median
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.layout_pattern import LayoutPattern
 from app.services.layout_vocabulary_service import normalize_building_type, normalize_room_type
+
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "seed": 1}
 
 
 DEFAULT_ROOM_RULES: dict[str, dict] = {
@@ -176,16 +180,52 @@ def fallback_layout_rules(
     )
 
 
-def _merge_pattern(fallback: RoomPatternRule, pattern: LayoutPattern) -> RoomPatternRule:
+def _select_best_tier_patterns(patterns: list[LayoutPattern]) -> list[LayoutPattern]:
+    """
+    Among usable patterns for one room type, keep only those at the highest
+    confidence tier present (high > medium > seed) — a single real
+    high-confidence source still wins outright over a pile of seed rows, the
+    same trust hierarchy the resolver always had. Patterns *within* that best
+    tier (e.g. several independently scraped high-confidence sources that
+    happen to agree or disagree) are aggregated together rather than just
+    picking whichever one happened to be most recent.
+    """
+    best_rank = max(_CONFIDENCE_RANK.get(p.confidence, 0) for p in patterns)
+    return [p for p in patterns if _CONFIDENCE_RANK.get(p.confidence, 0) == best_rank]
+
+
+def _aggregate_patterns_for_room(fallback: RoomPatternRule, patterns: list[LayoutPattern]) -> RoomPatternRule:
+    """
+    Aggregate every pattern in the winning confidence tier into one prior.
+    Area ranges use the median across sources (robust to one noisy outlier —
+    a real statistical prior, not just whichever row sorted first).
+    Adjacency only keeps pairs reported by a real fraction of sources once
+    there are enough of them to be picky about; with one or two sources any
+    mention counts, since there's nothing to corroborate against yet.
+    """
+    mins = [p.typical_area_sqm_min for p in patterns if p.typical_area_sqm_min is not None]
+    maxes = [p.typical_area_sqm_max for p in patterns if p.typical_area_sqm_max is not None]
+    ratio_mins = [p.room_to_total_area_ratio_min for p in patterns if p.room_to_total_area_ratio_min is not None]
+    ratio_maxes = [p.room_to_total_area_ratio_max for p in patterns if p.room_to_total_area_ratio_max is not None]
+
+    zone_votes = Counter(p.zone for p in patterns if p.zone)
+    zone = zone_votes.most_common(1)[0][0] if zone_votes else fallback.zone
+
+    support_threshold = 1 if len(patterns) <= 2 else max(2, len(patterns) // 2)
+    adjacent_votes = Counter(rt for p in patterns for rt in (p.adjacent_to or []))
+    avoid_votes = Counter(rt for p in patterns for rt in (p.avoid_adjacent_to or []))
+    adjacent_to = tuple(sorted(rt for rt, count in adjacent_votes.items() if count >= support_threshold))
+    avoid_adjacent_to = tuple(sorted(rt for rt, count in avoid_votes.items() if count >= support_threshold))
+
     return RoomPatternRule(
         room_type=fallback.room_type,
-        typical_area_sqm_min=pattern.typical_area_sqm_min or fallback.typical_area_sqm_min,
-        typical_area_sqm_max=pattern.typical_area_sqm_max or fallback.typical_area_sqm_max,
-        zone=pattern.zone or fallback.zone,
-        adjacent_to=tuple(pattern.adjacent_to or fallback.adjacent_to),
-        avoid_adjacent_to=tuple(pattern.avoid_adjacent_to or fallback.avoid_adjacent_to),
-        room_to_total_area_ratio_min=pattern.room_to_total_area_ratio_min,
-        room_to_total_area_ratio_max=pattern.room_to_total_area_ratio_max,
+        typical_area_sqm_min=round(median(mins), 2) if mins else fallback.typical_area_sqm_min,
+        typical_area_sqm_max=round(median(maxes), 2) if maxes else fallback.typical_area_sqm_max,
+        zone=zone,
+        adjacent_to=adjacent_to or fallback.adjacent_to,
+        avoid_adjacent_to=avoid_adjacent_to or fallback.avoid_adjacent_to,
+        room_to_total_area_ratio_min=round(median(ratio_mins), 3) if ratio_mins else None,
+        room_to_total_area_ratio_max=round(median(ratio_maxes), 3) if ratio_maxes else None,
         pattern_data_used=True,
     )
 
@@ -217,23 +257,27 @@ async def get_layout_pattern_rules(
         reverse=True,
     )
 
-    room_rules = dict(rules.room_rules)
-    used_rooms: set[str] = set()
-    used_confidences: set[str] = set()
-    applied_pattern_count = 0
+    usable_by_room: dict[str, list[LayoutPattern]] = {}
     ignored_pattern_count = 0
     layout_patterns = list(rules.layout_patterns)
     for pattern in patterns:
         if not _is_usable_layout_pattern(pattern):
             ignored_pattern_count += 1
             continue
-        if pattern.room_type not in used_rooms:
-            room_rules[pattern.room_type] = _merge_pattern(rules.rule_for(pattern.room_type), pattern)
-            used_rooms.add(pattern.room_type)
-            used_confidences.add(pattern.confidence)
-            applied_pattern_count += 1
+        usable_by_room.setdefault(pattern.room_type, []).append(pattern)
         if pattern.layout_pattern and pattern.layout_pattern not in layout_patterns:
             layout_patterns.append(pattern.layout_pattern)
+
+    room_rules = dict(rules.room_rules)
+    used_rooms: set[str] = set()
+    used_confidences: set[str] = set()
+    applied_pattern_count = 0
+    for room_type, room_patterns in usable_by_room.items():
+        best_tier_patterns = _select_best_tier_patterns(room_patterns)
+        room_rules[room_type] = _aggregate_patterns_for_room(rules.rule_for(room_type), best_tier_patterns)
+        used_rooms.add(room_type)
+        used_confidences.update(p.confidence for p in best_tier_patterns)
+        applied_pattern_count += len(best_tier_patterns)
 
     return LayoutPatternRules(
         building_type=normalized_building_type,
