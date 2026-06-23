@@ -538,10 +538,10 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
-### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0 & 1 complete, Phase 2 core complete)
+### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0, 1, 2 & 3 core complete)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
-> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + Phase 2, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
+> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + Phase 2 + Phase 3, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
 
 A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
 
@@ -590,7 +590,15 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 - [ ] Door-clearance checks (a clearance rectangle in front of each door, flagged if another room/object overlaps it) are not implemented — the roadmap's stretch goal for this phase, lower priority than the partitioner and circulation work above
 - [ ] BSP is currently only used for the back/private+service row; the front row (open-plan living/kitchen/dining) deliberately still uses uniform-depth `_fill_row` since a benchmark test asserts those rooms share an exact Z position — revisit if BSP's depth-variance benefit is wanted there too
 
-Not yet started: Phase 3 (Scrapling), Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
+**Phase 3 progress (Scrapling + data priors) ✅ Core deliverables complete:**
+- [x] **Scrapling fetcher swap:** `fetch_public_page` now tries Scrapling's `AsyncFetcher` first (fast, no browser, curl_cffi-based — handles the common case and basic bot checks via TLS/header fingerprinting), escalating to `StealthyFetcher` (a real stealthy browser session) only when the plain fetch comes back blocked (403/429/503) or the body shows a captcha/block-page marker. Installed from `github.com/D4Vinci/Scrapling` (explicit instruction, not the PyPI release), pinned to the resolved commit in `requirements.txt`. `StealthyFetcher`'s browser binaries need `scrapling install` as a deployment step — not run in this environment and not needed for tests or the plain-fetch path; the import is guarded so a missing browser install degrades to skipping escalation rather than crashing the scraper.
+- [x] **Real statistical aggregation:** `get_layout_pattern_rules` previously picked exactly one `LayoutPattern` row per room type (highest confidence, most recent) and discarded every other usable row — scraping ten sites for "bedroom" area only ever used one of them. `_select_best_tier_patterns` + `_aggregate_patterns_for_room` now combine every pattern in the winning confidence tier: area ranges use the median across sources (robust to outliers), adjacency only keeps pairs corroborated by a real fraction of sources once there are enough to be picky about. The existing trust hierarchy is preserved exactly — a single high-confidence source still beats a pile of seed rows outright (a prior test pins this down); aggregation only kicks in *within* the winning tier.
+- [x] `applied_pattern_count` now honestly counts every pattern that fed the aggregate, not just one per room type
+- [x] Tests cover the escalation/blocked-detection logic directly (mocking at the `AsyncFetcher`/`StealthyFetcher` boundary, not `fetch_public_page` itself, since the rest of the scraper suite monkeypatches that wholesale), median aggregation across disagreeing sources, the adjacency support threshold, and single-source mentions still counting without corroboration
+- [ ] The roadmap's bigger structured-extraction piece — a new `ScrapedProject` table, a real Spider crawler, and project-level fields (full room lists with per-room areas, plan descriptors) beyond the existing per-sentence `LayoutPattern` extraction — is not started. The aggregation pipe above already operates on the existing `LayoutPattern` table; a richer source table would feed it more (and better) data but isn't required for the aggregation logic itself to work
+- [ ] Scheduled/background crawling, crawl queues, and the public scraper/source-management workflow for normal users remain out of scope (carried over from Sprint 10's deferred list)
+
+Not yet started: Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
 
 ---
 
