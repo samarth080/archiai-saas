@@ -131,6 +131,20 @@ class GenerationInsights(BaseModel):
     appliedRules: list[str]
 
 
+class LayoutOption(BaseModel):
+    """A full candidate layout that did not win — surfaced to the user as a
+    pickable option in the generate response (Sprint 17 Phase 4 option
+    gallery), instead of being discarded as soon as the scorer picks a
+    winner."""
+
+    version: str
+    metadata: GenerateMetadata
+    building: BuildingResponse | None = None
+    floors: list[FloorResponse] | None = None
+    rooms: list[RoomResponse]
+    insights: GenerationInsights | None = None
+
+
 class GenerateResponse(BaseModel):
     version: str
     designId: str | None = None
@@ -140,6 +154,7 @@ class GenerateResponse(BaseModel):
     floors: list[FloorResponse] | None = None
     rooms: list[RoomResponse]
     insights: GenerationInsights | None = None
+    alternatives: list[LayoutOption] | None = None
 
 
 class RefineResponse(GenerateResponse):

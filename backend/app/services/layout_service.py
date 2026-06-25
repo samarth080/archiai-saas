@@ -1687,7 +1687,8 @@ def generate_layout(
     vastu_requested: bool = False,
     plot_width_m: float | None = None,
     orientation: str | None = None,
-) -> dict:
+    return_all_candidates: bool = False,
+) -> dict | tuple[dict, list[dict]]:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
     room_specs = apply_template_defaults(room_specs, building_type)
@@ -1770,4 +1771,6 @@ def generate_layout(
             "suggestions": vastu_result.suggestions,
         }
 
+    if return_all_candidates:
+        return best, candidates
     return best
