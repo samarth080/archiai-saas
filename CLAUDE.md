@@ -538,10 +538,10 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
-### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0, 1, 2 & 3 core complete)
+### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0-3 core complete, Phase 4 underway)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)
-> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + Phase 2 + Phase 3, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
+> Branches: `sprint-17/dimensions-on-canvas` (Phase 1, off `main`), `sprint-17/phase0-design-params` (Phase 0 + Phase 2 + Phase 3 + Phase 4, stacked on top of it). Neither is pushed yet — this machine's GitHub credentials (`udai-shunya`) lack write access to `samarth080/archiai-saas`; push once that's resolved.
 
 A longer-horizon plan to move from "concept layout MVP" to a standout product, reverse-engineered from Hypar's parametric-generative approach. Five pillars, sequenced into phases:
 
@@ -550,8 +550,9 @@ A longer-horizon plan to move from "concept layout MVP" to a standout product, r
 - **Pillar C — Data learning:** swap the scraper's fetcher to Scrapling (handles JS/anti-bot sites like ArchDaily/Dezeen), extract structured project data (not just visible text), aggregate into statistical priors (area distributions, adjacency probabilities) feeding the existing `LayoutPatternRules` pipe.
 - **Pillar D — UI/UX overhaul:** single-screen layout (brief/params, canvas + option gallery, inspector/metrics), muted architectural palette, option gallery for generated candidates, command palette, dimensioned plan-view rendering with door swings.
 - **Pillar E — Interop & hardening:** SVG/DXF/glTF export, production frontend build (currently Docker serves the Vite dev server), refresh-token auth hardening.
+- **Pillar F — 3D modeling fidelity (not started, broadly scoped):** rooms currently render as flat-colored boxes with no real wall/door/window geometry (doors and windows are thin marker boxes, not openings cut into a wall), no furniture, no materials/textures, and no roof or exterior facade detail — multi-floor buildings are just stacked flat slabs. Flagged by the user as a real gap; not broken down into phases yet, revisit once Phase 4's UI/export work lands.
 
-Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimensions + UI shell) → Phase 2 (BSP planning engine + circulation) → Phase 3 (Scrapling + priors) → Phase 4 (optioneering + export) → Phase 5 (optional ML + IFC, later).
+Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimensions + UI shell) → Phase 2 (BSP planning engine + circulation) → Phase 3 (Scrapling + priors) → Phase 4 (optioneering + export) → Phase 5 (optional ML + IFC, later). Pillar F isn't yet slotted into a phase.
 
 **Phase 0 progress (DesignParams + first parametric levers):**
 - [x] `DesignParams` schema (`plotWidthM`, `plotDepthM`, `floors`, `orientation`, `vastu`) added to `GenerateRequest` as a fully optional sibling of `prompt` — omitting it leaves generation byte-for-byte unaffected
@@ -598,7 +599,16 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 - [ ] The roadmap's bigger structured-extraction piece — a new `ScrapedProject` table, a real Spider crawler, and project-level fields (full room lists with per-room areas, plan descriptors) beyond the existing per-sentence `LayoutPattern` extraction — is not started. The aggregation pipe above already operates on the existing `LayoutPattern` table; a richer source table would feed it more (and better) data but isn't required for the aggregation logic itself to work
 - [ ] Scheduled/background crawling, crawl queues, and the public scraper/source-management workflow for normal users remain out of scope (carried over from Sprint 10's deferred list)
 
-Not yet started: Phase 4 (optioneering/export), Phase 5 (optional ML/IFC). Pillar D's palette/UI-polish work was deliberately skipped this round — it's subjective and couples to a hardcoded test color assertion, lower priority than shipping working features.
+**Phase 4 progress (Pillar D started — option gallery + muted palette):**
+- [x] **Option gallery:** `generate_layout` already built 2-3 full candidate layouts per request (tile vs bsp for tiled types, x-offset variants for the row-band fallback) and discarded everything but the winner. `generate_layout` gained a `return_all_candidates` flag (default off, every existing call site unaffected); `/api/design/generate` now returns the losers as `alternatives` — never persisted, since only the winner is saved as the Design/DesignVersion. New `OptionGallery.tsx` renders a compact card per alternative (score, engine, room count, area) below the insights panel; clicking one swaps it into the canvas (`loadLayout` + `markDirty`, since picking an alternative doesn't auto-save it).
+- [x] **Muted architectural palette:** `ROOM_COLORS` (backend) and `OBJECT_DEFAULTS`/`INITIAL_ROOMS` (frontend) were raw bright Tailwind 400/500 swatches — a "toy blocks" look. Every value is now that same hex run through one fixed HSL transform (saturation ×0.62, lightness +0.07), so the palette stays internally consistent (same relative hues/distinguishability) while reading as a muted architectural drawing instead of candy UI. `wall` deliberately untouched (structural marker, not a room identity color).
+- [x] **Single-screen layout already satisfied:** checked the existing Project page structure before planning new work — canvas, Inspector, EditorToolbar, MetricsHud, prompt bar with collapsible plot params, and now the option gallery are already all on one screen with no route hops. Pillar D's "single-screen layout" ask needed no new work.
+- [ ] Command palette (⌘K) — not started
+- [ ] Dimensioned plan-view rendering with door swings — not started (door geometry itself is a Pillar F gap, see below)
+- [ ] Parameter-sweep optioneering to get 6-12 candidates instead of the current 2-3 — not started; the gallery infrastructure is ready for it whenever the candidate count grows
+- [ ] Pillar E (SVG/DXF/glTF export, production frontend build) — not started
+
+Not yet started: the rest of Phase 4 (command palette, plan-view door swings, parameter-sweep optioneering, Pillar E export/hardening), Phase 5 (optional ML/IFC), Pillar F (3D modeling fidelity — see the roadmap doc's section 7a, flagged by the user but not yet phased).
 
 ---
 
