@@ -170,6 +170,12 @@ describe('updateRoom', () => {
     expect(room?.position).toEqual({ x: 2, y: 1.5, z: 4 })
   })
 
+  it('toggles showDimensions', () => {
+    expect(useCanvasStore.getState().showDimensions).toBe(false)
+    useCanvasStore.getState().setShowDimensions(true)
+    expect(useCanvasStore.getState().showDimensions).toBe(true)
+  })
+
   it('logs edit activity with old and new values', () => {
     useCanvasStore.getState().updateRoom('room-1', {
       position: { x: 3, y: 1.5, z: 4 },

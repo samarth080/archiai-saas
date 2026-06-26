@@ -180,11 +180,14 @@ def test_multi_floor_layout_uses_shared_floor_footprint():
 
 def test_multi_floor_entry_door_is_only_on_ground_floor():
     layout = generate_layout(_make_specs(), building_type="apartment", total_floors=2)
-    doors = [room for room in layout["rooms"] if room["objectType"] == "door"]
+    entry_doors = [
+        room for room in layout["rooms"]
+        if room["objectType"] == "door" and room["label"] == "Entry Door"
+    ]
 
-    assert len(doors) == 1
-    assert doors[0]["floorLevel"] == 0
-    assert doors[0]["floorId"] == "floor_0"
+    assert len(entry_doors) == 1
+    assert entry_doors[0]["floorLevel"] == 0
+    assert entry_doors[0]["floorId"] == "floor_0"
 
 
 def test_multi_floor_upper_rooms_wrap_instead_of_forming_one_long_strip():

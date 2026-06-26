@@ -148,7 +148,7 @@ def test_apply_add_appends_room_without_moving_existing():
     assert bedroom["objectType"] == "room"
     assert bedroom["floorLevel"] == 0
     assert bedroom["size"] == {"w": 4.0, "h": 3.0, "d": 4.0}
-    assert bedroom["color"] == "#f472b6"
+    assert bedroom["color"] == "#e4a6c6"
     # Y bottom on the floor
     assert bedroom["position"]["y"] == bedroom["size"]["h"] / 2
 

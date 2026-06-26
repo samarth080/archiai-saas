@@ -93,6 +93,69 @@ def _near_any(source_rooms: list[dict], target_rooms: list[dict], max_gap: float
     return any(_edge_gap(source, target) <= max_gap for source in source_rooms for target in target_rooms)
 
 
+def _floor_unreachable_rooms(rooms: list[dict]) -> list[str]:
+    """
+    Real circulation check (Sprint 17 Phase 2): for each floor, verify every
+    architectural room is reachable from that floor's entry point by walking
+    interior doors — not just visually divided by walls, but actually
+    walkable. The entry point is the room typed 'entry' on the ground floor,
+    or the room nearest the stairs on upper floors, falling back to the first
+    room if neither exists. Returns the labels of any room left unreachable.
+    """
+    architectural = [r for r in rooms if r.get("objectType") == "room"]
+    doors = [r for r in rooms if r.get("objectType") == "door" and r.get("label") != "Entry Door"]
+    stairs = [r for r in rooms if r.get("objectType") == "stair"]
+    levels = sorted({r.get("floorLevel") for r in architectural})
+
+    unreachable: list[str] = []
+    for level in levels:
+        floor_rooms = [r for r in architectural if r.get("floorLevel") == level]
+        if len(floor_rooms) <= 1:
+            continue
+
+        bounds = [_room_bounds(r) for r in floor_rooms]
+        graph: dict[int, set[int]] = {i: set() for i in range(len(floor_rooms))}
+        for door in doors:
+            if door.get("floorLevel") != level:
+                continue
+            dx, dz = door["position"]["x"], door["position"]["z"]
+            touching = [
+                i for i, (x1, x2, z1, z2) in enumerate(bounds)
+                if x1 - 0.3 <= dx <= x2 + 0.3 and z1 - 0.3 <= dz <= z2 + 0.3
+            ]
+            for i in touching:
+                for j in touching:
+                    if i != j:
+                        graph[i].add(j)
+
+        start = next((i for i, r in enumerate(floor_rooms) if r.get("roomType") == "entry"), None)
+        if start is None:
+            floor_stairs = [s for s in stairs if s.get("floorLevel") == level]
+            if floor_stairs:
+                start = min(
+                    range(len(floor_rooms)),
+                    key=lambda i: min(_edge_gap(floor_rooms[i], stair) for stair in floor_stairs),
+                )
+            else:
+                start = 0
+
+        seen = {start}
+        queue = [start]
+        while queue:
+            current = queue.pop()
+            for neighbour in graph[current]:
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    queue.append(neighbour)
+
+        unreachable.extend(
+            room.get("label", room.get("roomType", "room"))
+            for i, room in enumerate(floor_rooms)
+            if i not in seen
+        )
+    return unreachable
+
+
 def score_layout_quality(
     layout: dict,
     *,
@@ -303,6 +366,14 @@ def score_layout_quality(
             warnings.append("Restaurant kitchen is too close to the public entry")
         else:
             reasons.append("Restaurant kitchen is buffered from the public entry")
+
+    unreachable_rooms = _floor_unreachable_rooms(rooms)
+    if unreachable_rooms:
+        score -= min(20, len(unreachable_rooms) * 8)
+        warnings.append(f"Rooms not reachable via interior doors: {', '.join(unreachable_rooms)}")
+        suggestions.append("Add a door connecting the unreachable room to the rest of the floor")
+    elif architectural_rooms:
+        reasons.append("Every room is reachable from the entry via interior doors")
 
     total_floors = metadata.get("totalFloors", 1)
     stairs_by_floor = {

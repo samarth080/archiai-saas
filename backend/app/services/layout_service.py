@@ -1,3 +1,32 @@
+"""
+Deterministic floor-plan generation, no paid AI APIs.
+
+generate_layout() is the public entrypoint: given parsed RoomSpecs and a
+building type, it produces 1+ candidate layouts and returns the
+highest-scoring one as plain-dict JSON (see _build_layout_candidate).
+
+This file carries two placement engines from different points in the
+project's history — know which one a building type actually uses before
+changing either:
+
+- THE TILER (_tile_rooms and friends, below the "Zone classification for
+  tiled layout" banner) is the current primary engine. It partitions rooms
+  into front/corridor/private/service rows and scales each row to fill the
+  building's width exactly (zero gaps). _TILED_BUILDING_TYPES lists every
+  building type that routes through it — as of Sprint 16 that's effectively
+  everything the parser can emit.
+- THE LEGACY ROW-BAND ENGINE (_place_rooms / _repair_rooms) predates the
+  tiler and is kept only as a fallback for any building type NOT in
+  _TILED_BUILDING_TYPES. It places rooms in flow-ordered rows without
+  guaranteeing zero gaps, which is exactly the "blank space" problem the
+  tiler was built to fix (see the Sprint 16 entry in docs/SPRINT_HISTORY.md).
+
+Both engines share the same post-processing: _architectural_markers adds
+boundary walls/windows/the entry door, and _generate_partition_walls adds
+interior walls plus door openings between rooms (gated by _wants_direct_door
+so private/service cells route through a corridor instead of opening
+directly into their lateral neighbour — see Sprint 17 Phase 2).
+"""
 import uuid
 from math import sqrt
 
@@ -7,34 +36,42 @@ from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
 from app.services.parser.constraint_extractor import AdjacencyConstraint
 
+# Muted architectural palette (Sprint 17 Phase 4) — each colour below is the
+# original bright Tailwind swatch run through a fixed HSL transform (saturation
+# x0.62, lightness +0.07) rather than hand-picked, so the set stays internally
+# consistent: same relative hues and distinguishability, just desaturated and
+# lightened toward a paper/drawing feel instead of a "toy blocks" one. `wall`
+# is left alone since it's a structural marker, not a room identity colour.
 ROOM_COLORS: dict[str, str] = {
-    "living_room":    "#818cf8",
-    "kitchen":        "#34d399",
-    "master_bedroom": "#fb923c",
-    "bedroom":        "#f472b6",
-    "bathroom":       "#60a5fa",
-    "dining_room":    "#facc15",
-    "office":         "#a78bfa",
-    "study":          "#c084fc",
-    "workspace":      "#8b5cf6",
-    "meeting_room":   "#7c3aed",
-    "reception":      "#14b8a6",
-    "waiting_room":   "#2dd4bf",
-    "consultation_room": "#38bdf8",
-    "classroom":      "#f59e0b",
-    "retail_display": "#22c55e",
-    "checkout":       "#eab308",
-    "storage":        "#a8a29e",
-    "entry":          "#64748b",
-    "hallway":        "#94a3b8",
-    "balcony":        "#4ade80",
-    "garage":         "#78716c",
-    "utility":        "#cbd5e1",
-    "stairs":         "#9ca3af",
+    "living_room":    "#b3b8e9",
+    "kitchen":        "#6bc0a1",
+    "master_bedroom": "#dea97d",
+    "bedroom":        "#e4a6c6",
+    "bathroom":       "#9abbe4",
+    "dining_room":    "#d6bd5d",
+    "office":         "#c8bced",
+    "study":          "#d2b7ed",
+    "workspace":      "#ac95e1",
+    "meeting_room":   "#9977d4",
+    "reception":      "#3cb4a6",
+    "waiting_room":   "#66bfb4",
+    "consultation_room": "#79bddb",
+    "classroom":      "#d0a254",
+    "retail_display": "#50bb77",
+    "checkout":       "#cead48",
+    "storage":        "#b7b4b2",
+    "entry":          "#7d8795",
+    "hallway":        "#afb6c1",
+    "balcony":        "#80cc9c",
+    "garage":         "#888380",
+    "utility":        "#e4e7ec",
+    "stairs":         "#b3b6bc",
     "wall":           "#475569",
-    "door":           "#a16207",
-    "window":         "#38bdf8",
+    "door":           "#a0702c",
+    "window":         "#79bddb",
 }
+
+# ── Layout-engine constants ─────────────────────────────────────────────────
 
 _GAP = 0.6  # metres between rooms in same row
 _ADJACENCY_ROW_GAP = 0.35
@@ -117,6 +154,8 @@ ENTRY_PRIVATE_AVOID_TYPES = {
 }
 
 
+# ── Small generic helpers ────────────────────────────────────────────────────
+
 def _floor_name(level: int) -> str:
     names = {
         0: "Ground Floor",
@@ -126,6 +165,8 @@ def _floor_name(level: int) -> str:
     }
     return names.get(level, f"Floor {level}")
 
+
+# ── Room sizing ──────────────────────────────────────────────────────────────
 
 def _room_area(specs: list[RoomSpec]) -> float:
     return round(sum(room.w * room.d for room in specs), 2)
@@ -188,6 +229,8 @@ def _size_room_specs(
     return sized
 
 
+# ── Geometry helpers (shared by both placement engines) ─────────────────────
+
 def _edge_gap(a: dict, b: dict) -> float:
     if a.get("floorLevel") != b.get("floorLevel"):
         return float("inf")
@@ -220,6 +263,10 @@ def _rooms_overlap(a: dict, b: dict) -> bool:
     _eps = 0.02
     return ax1 + _eps < bx2 and ax2 - _eps > bx1 and az1 + _eps < bz2 and az2 - _eps > bz1
 
+
+# ── LEGACY row-band placement engine ─────────────────────────────────────────
+# Fallback only for building types NOT in _TILED_BUILDING_TYPES (see below).
+# Predates the tiler; does not guarantee a zero-gap footprint.
 
 def _flow_priority(building_type: str, room: RoomSpec) -> tuple[int, str]:
     priority = BUILDING_FLOW_PRIORITY.get(building_type, BUILDING_FLOW_PRIORITY["apartment"])
@@ -437,6 +484,8 @@ def _repair_rooms(rooms: list[dict], *, building_type: str) -> list[dict]:
     return repaired
 
 
+# ── Footprint & stairs helpers (shared by both placement engines) ───────────
+
 def _add_stairs(
     floor_id: str,
     floor_level: int,
@@ -511,6 +560,8 @@ def _max_row_width_for_layout(room_specs: list[RoomSpec], total_floors: int, bui
     return round(min(max(base_width, 16.0), 22.0), 2)
 
 
+# ── Architectural overlay: walls, doors, windows (shared by both engines) ───
+
 def _make_marker(
     *,
     label: str,
@@ -542,6 +593,11 @@ def _make_marker(
     }
 
 
+_ORIENTATION_ENTRY_WALL: dict[str, str] = {
+    "S": "front", "N": "rear", "E": "right", "W": "left",
+}
+
+
 def _architectural_markers(
     rooms: list[dict],
     *,
@@ -549,6 +605,7 @@ def _architectural_markers(
     floor_level: int,
     elevation: float,
     footprint: dict,
+    orientation: str | None = None,
 ) -> list[dict]:
     if not rooms or not footprint["w"] or not footprint["d"]:
         return []
@@ -606,18 +663,55 @@ def _architectural_markers(
             position={"x": x + w + off, "y": wall_h / 2, "z": z + d / 2},
             size={"w": wall_t, "h": wall_h, "d": vertical_wall_d},
         ),
-        _make_marker(
-            label="Exterior Window",
-            room_type="window",
-            object_type="window",
-            floor_id=floor_id,
-            floor_level=floor_level,
-            elevation=elevation,
-            position={"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + 0.7},
-            size={"w": 1.4, "h": 1.0, "d": 0.12},
-        ),
     ]
+
+    # The entry/road-facing wall is chosen from DesignParams.orientation when
+    # given (S/N/E/W); it defaults to the front wall, matching prior behaviour.
+    # Windows go on the other three exterior walls for cross-floor daylight,
+    # one per wall, sized to that wall's span.
+    entry_wall = _ORIENTATION_ENTRY_WALL.get((orientation or "S").upper(), "front")
+    exterior_offset = 0.7  # metres beyond the wall face — keeps the marker clear of the wall mesh
+    window_specs = {
+        "front": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z - exterior_offset},
+        "rear": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + exterior_offset},
+        "left": {"x": x - exterior_offset, "y": 1.7, "z": z + d - min(2.0, d / 2)},
+        "right": {"x": x + w + exterior_offset, "y": 1.7, "z": z + d - min(2.0, d / 2)},
+    }
+    window_sizes = {
+        "front": {"w": 1.4, "h": 1.0, "d": 0.12},
+        "rear": {"w": 1.4, "h": 1.0, "d": 0.12},
+        "left": {"w": 0.12, "h": 1.0, "d": 1.4},
+        "right": {"w": 0.12, "h": 1.0, "d": 1.4},
+    }
+    for wall_side, position in window_specs.items():
+        if wall_side == entry_wall:
+            continue
+        markers.append(
+            _make_marker(
+                label="Exterior Window",
+                room_type="window",
+                object_type="window",
+                floor_id=floor_id,
+                floor_level=floor_level,
+                elevation=elevation,
+                position=position,
+                size=window_sizes[wall_side],
+            )
+        )
+
     if floor_level == 0:
+        entry_positions = {
+            "front": {"x": x + min(2.0, w / 2), "y": 1.1, "z": z - exterior_offset},
+            "rear": {"x": x + min(2.0, w / 2), "y": 1.1, "z": z + d + exterior_offset},
+            "left": {"x": x - exterior_offset, "y": 1.1, "z": z + min(2.0, d / 2)},
+            "right": {"x": x + w + exterior_offset, "y": 1.1, "z": z + min(2.0, d / 2)},
+        }
+        entry_sizes = {
+            "front": {"w": 1.0, "h": 2.2, "d": 0.12},
+            "rear": {"w": 1.0, "h": 2.2, "d": 0.12},
+            "left": {"w": 0.12, "h": 2.2, "d": 1.0},
+            "right": {"w": 0.12, "h": 2.2, "d": 1.0},
+        }
         markers.append(
             _make_marker(
                 label="Entry Door",
@@ -626,11 +720,39 @@ def _architectural_markers(
                 floor_id=floor_id,
                 floor_level=floor_level,
                 elevation=elevation,
-                position={"x": x + min(2.0, w / 2), "y": 1.1, "z": z - 0.7},
-                size={"w": 1.0, "h": 2.2, "d": 0.12},
+                position=entry_positions[entry_wall],
+                size=entry_sizes[entry_wall],
             )
         )
     return markers
+
+
+_DOOR_WIDTH = 0.9     # metres
+_DOOR_HEIGHT = 2.1    # metres
+_DOOR_THICKNESS = 0.12  # metres — matches the existing window/entry-door markers
+_MIN_DOORWAY_SPAN = 1.2  # metres — shorter shared walls don't get a door opening
+
+
+def _wants_direct_door(a: dict, b: dict, *, has_corridor: bool) -> bool:
+    """
+    Decide whether two adjacent rooms should get a doorway directly between
+    them, or whether they should only be reachable via the corridor.
+
+    Without a corridor on the floor there's no alternative circulation path,
+    so every adjacent pair gets a door (matches pre-corridor layouts). With a
+    corridor, the corridor itself always gets a door to whatever it touches;
+    open-plan public rooms (living/kitchen/dining/etc.) still flow into each
+    other directly; but two private/service cells (e.g. an office and a
+    bathroom sitting side by side in the same row) should each open onto the
+    corridor, not into one another.
+    """
+    a_type = a.get("roomType")
+    b_type = b.get("roomType")
+    if a_type in _TILED_CORRIDOR_TYPES or b_type in _TILED_CORRIDOR_TYPES:
+        return True
+    if not has_corridor:
+        return True
+    return a_type in _TILED_FRONT_TYPES and b_type in _TILED_FRONT_TYPES
 
 
 def _generate_partition_walls(
@@ -642,14 +764,22 @@ def _generate_partition_walls(
 ) -> list[dict]:
     """
     Generate thin partition wall meshes between every pair of adjacent rooms
-    on the same floor.  Two rooms are considered adjacent when the gap between
-    their nearest edges is <= _GAP (i.e. they were placed side-by-side).
+    on the same floor, plus a door marker centred on each wall long enough to
+    fit one. Two rooms are considered adjacent when the gap between their
+    nearest edges is <= _GAP (i.e. they were placed side-by-side); a doorway
+    along that shared wall is what makes the floor plan actually walkable.
+
+    Not every adjacent wall gets a doorway, though — see _wants_direct_door.
+    Private/service rooms sitting beside each other in the same row (e.g. an
+    office next to a bathroom) should each connect to the corridor, not to
+    each other directly; the wall between them stays solid.
     """
     wall_h = 2.8
     wall_t = 0.15
     adjacency_threshold = _GAP + 0.05  # small tolerance
     room_only = [r for r in rooms if r.get("objectType") == "room"]
-    walls: list[dict] = []
+    has_corridor = any(r.get("roomType") in _TILED_CORRIDOR_TYPES for r in room_only)
+    markers: list[dict] = []
 
     checked: set[tuple[str, str]] = set()
     for i, a in enumerate(room_only):
@@ -660,47 +790,88 @@ def _generate_partition_walls(
                 continue
             checked.add(pair)
             bx1, bx2, bz1, bz2 = _room_bounds(b)
+            wants_door = _wants_direct_door(a, b, has_corridor=has_corridor)
 
-            x_gap = max(0.0, max(ax1, bx1) - min(ax2, bx2))
-            z_gap = max(0.0, max(az1, bz1) - min(az2, bz2))
+            # overlap_* is positive when the rooms' spans overlap on that axis,
+            # negative (a gap) when they don't. When one room is narrower than
+            # another and sits fully within its span on one axis (e.g. an
+            # office narrower than the corridor it's stacked against), BOTH
+            # axes can come out near zero — so the branch must be chosen by
+            # which axis has the larger real overlap (the shared wall span),
+            # not just by which gap happens to be small.
+            overlap_x = min(ax2, bx2) - max(ax1, bx1)
+            overlap_z = min(az2, bz2) - max(az1, bz1)
+            x_gap = max(0.0, -overlap_x)
+            z_gap = max(0.0, -overlap_z)
 
             # Adjacent along Z axis (rooms side-by-side in X direction)
-            if z_gap <= adjacency_threshold and x_gap < 0.05:
-                # shared X boundary
+            if overlap_z >= overlap_x and z_gap <= adjacency_threshold:
+                # shared X boundary — a vertical wall running along Z
                 wall_x = (min(ax2, bx2) + max(ax1, bx1)) / 2
                 overlap_z1 = max(az1, bz1)
                 overlap_z2 = min(az2, bz2)
-                if overlap_z2 > overlap_z1:
-                    walls.append(_make_marker(
+                span = overlap_z2 - overlap_z1
+                if span > 0:
+                    wall_z = (overlap_z1 + overlap_z2) / 2
+                    markers.append(_make_marker(
                         label="Partition Wall",
                         room_type="wall",
                         object_type="wall",
                         floor_id=floor_id,
                         floor_level=floor_level,
                         elevation=elevation,
-                        position={"x": wall_x, "y": wall_h / 2, "z": (overlap_z1 + overlap_z2) / 2},
-                        size={"w": wall_t, "h": wall_h, "d": round(overlap_z2 - overlap_z1, 2)},
+                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
+                        size={"w": wall_t, "h": wall_h, "d": round(span, 2)},
                     ))
+                    if wants_door and span >= _MIN_DOORWAY_SPAN:
+                        markers.append(_make_marker(
+                            label="Interior Door",
+                            room_type="door",
+                            object_type="door",
+                            floor_id=floor_id,
+                            floor_level=floor_level,
+                            elevation=elevation,
+                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
+                            size={"w": _DOOR_THICKNESS, "h": _DOOR_HEIGHT, "d": min(_DOOR_WIDTH, span)},
+                        ))
 
             # Adjacent along X axis (rooms side-by-side in Z direction)
-            elif x_gap <= adjacency_threshold and z_gap < 0.05:
-                # shared Z boundary
+            elif overlap_x >= overlap_z and x_gap <= adjacency_threshold:
+                # shared Z boundary — a horizontal wall running along X
                 wall_z = (min(az2, bz2) + max(az1, bz1)) / 2
                 overlap_x1 = max(ax1, bx1)
                 overlap_x2 = min(ax2, bx2)
-                if overlap_x2 > overlap_x1:
-                    walls.append(_make_marker(
+                span = overlap_x2 - overlap_x1
+                if span > 0:
+                    wall_x = (overlap_x1 + overlap_x2) / 2
+                    markers.append(_make_marker(
                         label="Partition Wall",
                         room_type="wall",
                         object_type="wall",
                         floor_id=floor_id,
                         floor_level=floor_level,
                         elevation=elevation,
-                        position={"x": (overlap_x1 + overlap_x2) / 2, "y": wall_h / 2, "z": wall_z},
-                        size={"w": round(overlap_x2 - overlap_x1, 2), "h": wall_h, "d": wall_t},
+                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
+                        size={"w": round(span, 2), "h": wall_h, "d": wall_t},
                     ))
-    return walls
+                    if wants_door and span >= _MIN_DOORWAY_SPAN:
+                        markers.append(_make_marker(
+                            label="Interior Door",
+                            room_type="door",
+                            object_type="door",
+                            floor_id=floor_id,
+                            floor_level=floor_level,
+                            elevation=elevation,
+                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
+                            size={"w": min(_DOOR_WIDTH, span), "h": _DOOR_HEIGHT, "d": _DOOR_THICKNESS},
+                        ))
+    return markers
 
+
+# ── THE TILER — current primary placement engine (Sprint 15 Phase 2 →) ──────
+# Used by every building type in _TILED_BUILDING_TYPES. Partitions rooms into
+# front/corridor/private/service rows and scales each row to fill the
+# building's width exactly, so the footprint has zero gaps.
 
 # ── Zone classification for tiled layout ─────────────────────────────────────
 
@@ -736,6 +907,12 @@ _TILED_BUILDING_TYPES: frozenset[str] = frozenset({
 _MIN_BUILDING_WIDTH = 7.0   # metres
 _MAX_BUILDING_WIDTH = 22.0  # metres
 _CORRIDOR_DEPTH = 1.5       # metres — corridor/hallway row height
+
+# Wider bounds for an explicit user-supplied plot width (DesignParams), since a
+# real plot can legitimately be narrower or wider than what the program-area
+# heuristic would infer.
+_PLOT_WIDTH_MIN = 4.0   # metres
+_PLOT_WIDTH_MAX = 40.0  # metres
 
 # Residential layouts insert an implicit privacy corridor between the public
 # (front) and private (back) rows so bedrooms are buffered from living areas.
@@ -848,6 +1025,89 @@ def _fill_row(
     return result
 
 
+# ── BSP space partitioner — Sprint 17 Phase 2 ────────────────────────────────
+# _fill_row (above) only ever varies room WIDTH within a band; every room in
+# the band is forced to the same DEPTH (the band's average), which distorts
+# proportions when rooms genuinely need different depths (e.g. a deep bedroom
+# next to a shallow bathroom). _bsp_partition_rect generalises this to a true
+# 2D recursive space partition: it always fully tiles its input rectangle
+# (same zero-gap guarantee as _fill_row) but can cut along either axis, so
+# rooms can end up with different depths as well as different widths. It
+# competes with the plain tiler as an alternate candidate (see generate_layout
+# / _build_layout_candidate's placement_style) rather than replacing it, since
+# uniform-depth front rows (open-plan living/kitchen/dining) are deliberately
+# left alone — _fill_row still handles those.
+
+_BSP_MIN_DIM = 1.5  # metres — never cut a rectangle down to less than this
+
+
+def _balanced_split_index(areas: list[float]) -> int:
+    """Index i (1 <= i < len(areas)) where sum(areas[:i]) is closest to half the total."""
+    total = sum(areas)
+    target = total / 2
+    best_idx, best_diff = 1, abs(areas[0] - target)
+    running = areas[0]
+    for i in range(2, len(areas)):
+        running += areas[i - 1]
+        diff = abs(running - target)
+        if diff < best_diff:
+            best_idx, best_diff = i, diff
+    return best_idx
+
+
+def _bsp_partition_rect(
+    specs: list[RoomSpec],
+    x0: float,
+    z0: float,
+    w: float,
+    d: float,
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    rules: LayoutPatternRules,
+) -> list[dict]:
+    """Recursively partition the (w x d) rectangle at (x0, z0) among specs, in order."""
+    if not specs:
+        return []
+    if len(specs) == 1:
+        return [
+            _tiled_room_obj(
+                specs[0], x0, z0, w, d,
+                floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+            )
+        ]
+
+    areas = [max(s.w * s.d, 0.1) for s in specs]
+    total_area = sum(areas)
+    split_idx = _balanced_split_index(areas)
+    left_specs, right_specs = specs[:split_idx], specs[split_idx:]
+    left_ratio = sum(areas[:split_idx]) / total_area if total_area > 0 else 0.5
+
+    # Cut whichever axis is currently longer, so pieces stay roughly square
+    # instead of degenerating into slivers as the recursion goes deeper.
+    if w >= d:
+        left_w = max(_BSP_MIN_DIM, min(w - _BSP_MIN_DIM, w * left_ratio))
+        right_w = w - left_w
+        return _bsp_partition_rect(
+            left_specs, x0, z0, left_w, d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        ) + _bsp_partition_rect(
+            right_specs, x0 + left_w, z0, right_w, d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        )
+    else:
+        left_d = max(_BSP_MIN_DIM, min(d - _BSP_MIN_DIM, d * left_ratio))
+        right_d = d - left_d
+        return _bsp_partition_rect(
+            left_specs, x0, z0, w, left_d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        ) + _bsp_partition_rect(
+            right_specs, x0, z0 + left_d, w, right_d,
+            floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+        )
+
+
 _STAIR_STRIP_W = _STAIRS_SIZE["w"] + 0.2  # metres reserved at building right edge for stairs
 
 
@@ -862,6 +1122,7 @@ def _tile_rooms(
     stair_reserve: float = 0.0,
     must_pairs: set[frozenset] | None = None,
     should_pairs: set[frozenset] | None = None,
+    use_bsp_back: bool = False,
 ) -> tuple[list[dict], dict]:
     """
     Tile rooms into a pre-defined rectangular footprint.
@@ -994,7 +1255,10 @@ def _tile_rooms(
         current_z += corridor_depth
 
     if back_row:
-        placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        if use_bsp_back:
+            placed.extend(_bsp_partition_rect(back_row, 0.0, current_z, fill_width, private_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        else:
+            placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
         current_z += private_depth
 
     if other:
@@ -1005,6 +1269,8 @@ def _tile_rooms(
     footprint = {"x": 0.0, "z": 0.0, "w": round(building_width, 2), "d": round(building_depth, 2)}
     return placed, footprint
 
+
+# ── Adjacency-aware room ordering (Sprint 16 Phase 2) ────────────────────────
 
 def _chain_by_adjacency(
     rooms: list[RoomSpec],
@@ -1082,6 +1348,8 @@ _GROUND_ANCHORED_TYPES: frozenset[str] = frozenset({
     "retail_display", "checkout",
 })
 
+
+# ── Floor assignment ──────────────────────────────────────────────────────────
 
 def _assign_commercial_floors(
     specs: list[RoomSpec],
@@ -1234,6 +1502,8 @@ def _layout_bounds(rooms: list[dict]) -> dict:
     }
 
 
+# ── Candidate assembly — builds one full floor-by-floor layout ──────────────
+
 def _build_layout_candidate(
     *,
     room_specs: list[RoomSpec],
@@ -1247,20 +1517,27 @@ def _build_layout_candidate(
     zone_assignments: dict[str, str] | None = None,
     must_adjacency_pairs: set[frozenset] | None = None,
     should_adjacency_pairs: set[frozenset] | None = None,
+    plot_width_m: float | None = None,
+    orientation: str | None = None,
+    placement_style: str = "tile",
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
 
     # For tiled layouts pre-compute a shared target width from the widest floor
-    # so all storeys have the same footprint width.
+    # so all storeys have the same footprint width. An explicit plot_width_m
+    # (from DesignParams) overrides the program-area heuristic.
     tiled_target_width: float | None = None
     tiled_stair_reserve = _STAIR_STRIP_W if (use_tiler and total_floors > 1) else 0.0
     if use_tiler:
-        per_floor_areas = [sum(s.w * s.d for s in specs) for specs in floor_specs if specs]
-        if per_floor_areas:
-            max_area = max(per_floor_areas)
-            computed = round(sqrt(max_area * 1.6), 1)
-            tiled_target_width = max(_MIN_BUILDING_WIDTH, min(computed, _MAX_BUILDING_WIDTH))
+        if plot_width_m is not None:
+            tiled_target_width = max(_PLOT_WIDTH_MIN, min(round(plot_width_m, 1), _PLOT_WIDTH_MAX))
+        else:
+            per_floor_areas = [sum(s.w * s.d for s in specs) for specs in floor_specs if specs]
+            if per_floor_areas:
+                max_area = max(per_floor_areas)
+                computed = round(sqrt(max_area * 1.6), 1)
+                tiled_target_width = max(_MIN_BUILDING_WIDTH, min(computed, _MAX_BUILDING_WIDTH))
 
     max_row_width = _max_row_width_for_layout(room_specs, total_floors, building_type)
     pending_floors: list[dict] = []
@@ -1284,6 +1561,7 @@ def _build_layout_candidate(
                 stair_reserve=tiled_stair_reserve,
                 must_pairs=must_adjacency_pairs,
                 should_pairs=should_adjacency_pairs,
+                use_bsp_back=(placement_style == "bsp"),
             )
         else:
             rooms = _place_rooms(
@@ -1338,6 +1616,7 @@ def _build_layout_candidate(
                 floor_level=pending_floor["level"],
                 elevation=pending_floor["elevation"],
                 footprint=footprint,
+                orientation=orientation,
             )
         )
         rooms.extend(
@@ -1382,6 +1661,7 @@ def _build_layout_candidate(
             "template": template.name,
             "templateStrategy": template.layout_pattern_strategy,
             "candidateCount": 1,
+            "placementEngine": placement_style if use_tiler else "row",
         },
         "building": {
             "floorHeight": _FLOOR_HEIGHT,
@@ -1399,6 +1679,8 @@ def _build_layout_candidate(
     return layout
 
 
+# ── Public entrypoint ────────────────────────────────────────────────────────
+
 def generate_layout(
     room_specs: list[RoomSpec],
     prompt: str = "",
@@ -1409,7 +1691,10 @@ def generate_layout(
     adjacency_constraints: list[AdjacencyConstraint] | None = None,
     zone_assignments: dict[str, str] | None = None,
     vastu_requested: bool = False,
-) -> dict:
+    plot_width_m: float | None = None,
+    orientation: str | None = None,
+    return_all_candidates: bool = False,
+) -> dict | tuple[dict, list[dict]]:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
     room_specs = apply_template_defaults(room_specs, building_type)
@@ -1431,9 +1716,15 @@ def generate_layout(
     }
 
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
-    # Tiled building types produce a single deterministic layout; row-based types
-    # try three x-offset variants and pick the highest-scoring one.
-    offsets = (0.0,) if building_type in _TILED_BUILDING_TYPES else (0.0, 0.5, 1.0)
+    # Tiled building types compete two placement engines for the back/private
+    # row — the plain tiler (uniform depth) vs. a real BSP space partition
+    # (rooms can take different depths, not just different widths) — and keep
+    # whichever scores higher. Row-based fallback types instead try three
+    # x-offset variants of the single legacy engine.
+    use_tiler_type = building_type in _TILED_BUILDING_TYPES
+    variants = (
+        [(0.0, "tile"), (0.0, "bsp")] if use_tiler_type else [(o, "tile") for o in (0.0, 0.5, 1.0)]
+    )
     candidates = [
         _build_layout_candidate(
             room_specs=room_specs,
@@ -1447,11 +1738,22 @@ def generate_layout(
             zone_assignments=zone_assignments,
             must_adjacency_pairs=must_pairs or None,
             should_adjacency_pairs=should_pairs or None,
+            plot_width_m=plot_width_m,
+            orientation=orientation,
+            placement_style=style,
         )
-        for offset in offsets
+        for offset, style in variants
     ]
     best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
     best["metadata"]["candidateCount"] = len(candidates)
+
+    design_params_echo: dict = {}
+    if plot_width_m is not None:
+        design_params_echo["plotWidthM"] = plot_width_m
+    if orientation is not None:
+        design_params_echo["orientation"] = orientation.upper()
+    if design_params_echo:
+        best["metadata"]["designParams"] = design_params_echo
 
     if vastu_requested:
         from app.services.parser.vastu import check_vastu_compliance
@@ -1475,4 +1777,6 @@ def generate_layout(
             "suggestions": vastu_result.suggestions,
         }
 
+    if return_all_candidates:
+        return best, candidates
     return best

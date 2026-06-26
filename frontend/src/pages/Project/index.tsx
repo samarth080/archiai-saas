@@ -7,11 +7,14 @@ import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
+import { MetricsHud } from '../../components/canvas/MetricsHud'
+import { OptionGallery } from '../../components/canvas/OptionGallery'
 import {
   DesignDraftResponse,
   fetchDesignDraft,
   generateLayout,
   getLatestProjectDesign,
+  LayoutOption,
   refineLayout,
   saveDesignLayout,
 } from '../../services/design.service'
@@ -160,6 +163,11 @@ export default function ProjectPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [prompt, setPrompt] = useState('')
+  const [showParams, setShowParams] = useState(false)
+  const [plotWidthM, setPlotWidthM] = useState('')
+  const [floorsOverride, setFloorsOverride] = useState('')
+  const [orientation, setOrientation] = useState<'' | 'N' | 'S' | 'E' | 'W'>('')
+  const [alternatives, setAlternatives] = useState<LayoutOption[]>([])
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
@@ -185,6 +193,7 @@ export default function ProjectPage() {
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
   const setRecoveredDraftAvailable = useCanvasStore((s) => s.setRecoveredDraftAvailable)
+  const activeScore = useCanvasStore((s) => s.generationInsights?.score)
 
   useAutoSave({ designId, enabled: Boolean(designId) })
 
@@ -200,14 +209,25 @@ export default function ProjectPage() {
         setDraftToRecover(null)
         setRecoveredDraftAvailable(false)
         setRefinementSummary(result.refinementSummary)
+        setAlternatives([])
         setPrompt('')
       } else {
-        const result = await generateLayout(prompt, id)
+        const designParams = {
+          plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
+          floors: floorsOverride.trim() ? Number(floorsOverride) : undefined,
+          orientation: orientation || undefined,
+        }
+        const hasParams =
+          designParams.plotWidthM !== undefined ||
+          designParams.floors !== undefined ||
+          designParams.orientation !== undefined
+        const result = await generateLayout(prompt, id, hasParams ? designParams : undefined)
         loadLayout(result)
         setDraftToRecover(null)
         setRecoveredDraftAvailable(false)
         setHasSavedLayout(true)
         setRefinementSummary(null)
+        setAlternatives(result.alternatives ?? [])
       }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
@@ -220,6 +240,16 @@ export default function ProjectPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handlePickOption = (option: LayoutOption) => {
+    const { designId: currentDesignId, designVersionId: currentDesignVersionId } = useCanvasStore.getState()
+    loadLayout({
+      ...option,
+      designId: currentDesignId ?? undefined,
+      designVersionId: currentDesignVersionId ?? undefined,
+    })
+    useCanvasStore.getState().markDirty()
   }
 
   const handleSaveLayout = async () => {
@@ -631,6 +661,7 @@ export default function ProjectPage() {
             <div className="relative flex-1 h-full">
               <Canvas3D className="h-full" />
               <EditorToolbar />
+              <MetricsHud />
               {!hasSavedLayout && roomCount === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="rounded border border-dashed border-gray-300 bg-white/90 px-4 py-3 text-sm text-gray-500 shadow-sm">
@@ -643,6 +674,13 @@ export default function ProjectPage() {
           </div>
 
           <GenerationInsights />
+
+          <OptionGallery
+            options={alternatives}
+            activeScore={activeScore}
+            onPick={handlePickOption}
+            onDismiss={() => setAlternatives([])}
+          />
 
           {refinementSummary && (
             <div
@@ -693,7 +731,61 @@ export default function ProjectPage() {
               >
                 Refine
               </button>
+              {mode === 'generate' && (
+                <button
+                  type="button"
+                  className="px-3 py-1 bg-white text-gray-500 hover:text-gray-700 border-l border-gray-300"
+                  onClick={() => setShowParams((value) => !value)}
+                  aria-expanded={showParams}
+                >
+                  {showParams ? 'Hide params' : 'Plot params'}
+                </button>
+              )}
             </div>
+            {mode === 'generate' && showParams && (
+              <div className="flex gap-3 items-end text-xs text-gray-600">
+                <label className="flex flex-col gap-1">
+                  Plot width (m)
+                  <input
+                    type="number"
+                    min={4}
+                    max={40}
+                    step={0.5}
+                    placeholder="auto"
+                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={plotWidthM}
+                    onChange={(e) => setPlotWidthM(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Floors
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    placeholder="auto"
+                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={floorsOverride}
+                    onChange={(e) => setFloorsOverride(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  Entry faces
+                  <select
+                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    value={orientation}
+                    onChange={(e) => setOrientation(e.target.value as typeof orientation)}
+                  >
+                    <option value="">auto</option>
+                    <option value="S">South</option>
+                    <option value="N">North</option>
+                    <option value="E">East</option>
+                    <option value="W">West</option>
+                  </select>
+                </label>
+                <span className="text-gray-400 pb-1">Leave blank to infer from the prompt</span>
+              </div>
+            )}
             <div className="flex gap-2 items-end">
               <textarea
                 aria-label="Layout prompt"

@@ -92,3 +92,26 @@ def test_quality_score_reports_invalid_floor_assignment():
 
     assert result.score < 100
     assert any("invalid floors" in warning for warning in result.warnings)
+
+
+def test_normally_generated_layouts_have_no_unreachable_rooms():
+    """Real generations should always be fully connected via interior doors."""
+    layout = generate_layout(_residential_specs())
+
+    result = score_layout_quality(layout)
+
+    assert not any("not reachable" in warning for warning in result.warnings)
+    assert any("reachable from the entry" in reason for reason in result.reasons)
+
+
+def test_quality_score_reports_unreachable_room():
+    """A room with no interior door connecting it to anything should be flagged."""
+    layout = deepcopy(generate_layout(_residential_specs()))
+    bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")
+    bedroom["position"] = {"x": 500.0, "y": bedroom["position"]["y"], "z": 500.0}
+
+    result = score_layout_quality(layout)
+
+    assert result.score < 100
+    assert any("not reachable" in warning for warning in result.warnings)
+    assert any("Bedroom" in warning for warning in result.warnings if "not reachable" in warning)

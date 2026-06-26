@@ -188,6 +188,105 @@ describe('ProjectPage refine flow', () => {
     expect(refineButton).toBeDisabled()
   })
 
+  it('sends designParams when plot width / floors / orientation are filled in', async () => {
+    const generated = {
+      version: '1.0',
+      designId: 'd1',
+      designVersionId: 'v1',
+      metadata: { prompt: 'studio', building_type: 'apartment', room_count: 1 },
+      building: { floorHeight: 3.2 },
+      floors: [{ id: 'floor_0', name: 'Ground', level: 0, elevation: 0, rooms: [] }],
+      rooms: [],
+    }
+    vi.mocked(api.post).mockResolvedValue({ data: generated })
+
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Plot params' }))
+    await user.type(screen.getByLabelText(/Plot width/), '10')
+    await user.type(screen.getByLabelText(/Floors/), '2')
+    await user.selectOptions(screen.getByLabelText('Entry faces'), 'N')
+    await user.type(screen.getByLabelText('Layout prompt'), 'studio apartment')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/api/design/generate', {
+        prompt: 'studio apartment',
+        projectId: 'p1',
+        designParams: { plotWidthM: 10, floors: 2, orientation: 'N' },
+      }),
+    )
+  })
+
+  it('shows the option gallery after generating and lets the user pick an alternative', async () => {
+    const winner = {
+      version: '1.0',
+      designId: 'd1',
+      designVersionId: 'v1',
+      metadata: { prompt: 'apartment', building_type: 'apartment', room_count: 1, placementEngine: 'tile' },
+      building: { floorHeight: 3.2 },
+      floors: [{ id: 'floor_0', name: 'Ground', level: 0, elevation: 0, rooms: [] }],
+      rooms: [],
+      insights: { score: 90, reasons: [], warnings: [], appliedRules: [] },
+      alternatives: [
+        {
+          version: '1.0',
+          metadata: { prompt: 'apartment', building_type: 'apartment', room_count: 1, placementEngine: 'bsp' },
+          building: { floorHeight: 3.2 },
+          floors: [
+            {
+              id: 'floor_0',
+              name: 'Ground',
+              level: 0,
+              elevation: 0,
+              rooms: [
+                {
+                  id: 'alt-room-1',
+                  label: 'Bedroom',
+                  objectType: 'room',
+                  position: { x: 0, y: 1.5, z: 0 },
+                  size: { w: 4, h: 3, d: 4 },
+                  rotation: { x: 0, y: 0, z: 0 },
+                  color: '#f472b6',
+                },
+              ],
+            },
+          ],
+          rooms: [
+            {
+              id: 'alt-room-1',
+              label: 'Bedroom',
+              objectType: 'room',
+              position: { x: 0, y: 1.5, z: 0 },
+              size: { w: 4, h: 3, d: 4 },
+              rotation: { x: 0, y: 0, z: 0 },
+              color: '#f472b6',
+            },
+          ],
+          insights: { score: 84, reasons: [], warnings: [], appliedRules: [] },
+        },
+      ],
+    }
+    vi.mocked(api.post).mockResolvedValue({ data: winner })
+
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('Layout prompt'), 'apartment with bedroom')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+
+    expect(await screen.findByText('Alternatives')).toBeInTheDocument()
+    expect(screen.getByText('90')).toBeInTheDocument()
+    expect(screen.getByText('BSP partition')).toBeInTheDocument()
+
+    await user.click(screen.getByText('BSP partition'))
+
+    expect(useCanvasStore.getState().rooms.map((room) => room.label)).toEqual(['Bedroom'])
+    expect(useCanvasStore.getState().saveStatus).toBe('unsaved')
+    expect(useCanvasStore.getState().designId).toBe('d1')
+  })
+
   it('posts to /api/design/refine when Refine mode is active', async () => {
     const designFixture = {
       version: '1.0',

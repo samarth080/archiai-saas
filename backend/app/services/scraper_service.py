@@ -1,8 +1,13 @@
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 
-import httpx
+from scrapling import AsyncFetcher
 from sqlalchemy.ext.asyncio import AsyncSession
+
+try:
+    from scrapling import StealthyFetcher
+except ImportError:  # pragma: no cover - the [fetchers] extra's browser deps are optional at runtime
+    StealthyFetcher = None
 
 from app.models.layout_pattern import LayoutPattern
 from app.models.scraped_record import ScrapedRecord
@@ -59,15 +64,41 @@ def extract_visible_text(html: str) -> str:
     return parser.text()
 
 
+_BLOCKED_STATUS_CODES = {403, 429, 503}
+_BLOCKED_MARKERS = ("captcha", "access denied", "are you a robot", "checking your browser")
+
+
+def _looks_blocked(status: int, html_content: str) -> bool:
+    if status in _BLOCKED_STATUS_CODES:
+        return True
+    return any(marker in html_content[:2000].lower() for marker in _BLOCKED_MARKERS)
+
+
 async def fetch_public_page(url: str) -> str:
+    """
+    Fetch a public page's HTML. Tries a plain (fast, no-browser) request first;
+    escalates to a real stealthy browser session only if that looks blocked or
+    failed — JS-rendered / anti-bot-protected sites (e.g. ArchDaily, Dezeen)
+    often need the browser to even serve real content. The escalation needs
+    `scrapling install` to have downloaded its browser binaries; if that
+    hasn't been run, StealthyFetcher import fails at module load and this
+    function simply skips the escalation rather than crashing.
+    """
     headers = {"User-Agent": f"{ROBOTS_USER_AGENT}/0.1 (+public-text-reference-pipeline)"}
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        content_type = response.headers.get("content-type", "")
-        if content_type and not any(value in content_type for value in ("html", "text")):
-            raise ScraperFetchError("Only public text and HTML sources are supported")
-        return response.text
+    response = await AsyncFetcher.get(url, timeout=15, headers=headers, follow_redirects=True)
+    html_content = str(response.html_content)
+
+    if (response.status >= 400 or _looks_blocked(response.status, html_content)) and StealthyFetcher is not None:
+        response = await StealthyFetcher.async_fetch(url, headless=True, network_idle=True, timeout=20000)
+        html_content = str(response.html_content)
+
+    if response.status >= 400:
+        raise ScraperFetchError(f"Failed to fetch {url}: HTTP {response.status}")
+
+    content_type = (response.headers or {}).get("content-type", "")
+    if content_type and not any(value in content_type for value in ("html", "text")):
+        raise ScraperFetchError("Only public text and HTML sources are supported")
+    return html_content
 
 
 async def scrape_public_text(

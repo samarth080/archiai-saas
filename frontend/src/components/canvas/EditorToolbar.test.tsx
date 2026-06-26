@@ -78,4 +78,13 @@ describe('EditorToolbar draft indicator', () => {
     const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'room-1')
     expect(room?.rotation.y).toBe(15)
   })
+
+  it('toggles showDimensions from the toolbar', () => {
+    render(<EditorToolbar />)
+
+    expect(useCanvasStore.getState().showDimensions).toBe(false)
+    fireEvent.click(screen.getByLabelText('Dimensions'))
+
+    expect(useCanvasStore.getState().showDimensions).toBe(true)
+  })
 })

@@ -4,6 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore, Room } from '../../store/canvasStore'
+import { DimensionAnnotations } from './DimensionAnnotations'
 
 interface OrbitHandle {
   enabled: boolean
@@ -25,9 +26,11 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   const selectedId = useCanvasStore((s) => s.selectedId)
   const selectRoom = useCanvasStore((s) => s.selectRoom)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
+  const showDimensions = useCanvasStore((s) => s.showDimensions)
 
   const isSelected = selectedId === room.id
   const isBoundaryMarker = room.objectType === 'wall' || room.objectType === 'door' || room.objectType === 'window'
+  const isDimensionable = room.objectType === 'room' || room.objectType === 'stair'
   const isPlanView = viewMode !== '3d'
   const materialOpacity =
     room.objectType === 'window'
@@ -188,10 +191,21 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     </Html>
   ) : null
 
+  // The "show all" toggle only renders in plan/top view: in a 3D perspective
+  // camera, dimension lines for every room overlap and become unreadable
+  // (each line sits a fixed offset outside its own room, which collides with
+  // neighbouring rooms' lines in a tightly tiled plan). The selected room's
+  // own dimensions are still shown in any view mode, since that's one room.
+  const dimensions =
+    isDimensionable && (isSelected || (showDimensions && isPlanView)) ? (
+      <DimensionAnnotations room={room} emphasized={isSelected} />
+    ) : null
+
   return (
     <>
       {mesh}
       {label}
+      {dimensions}
     </>
   )
 }

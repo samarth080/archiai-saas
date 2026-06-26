@@ -13,6 +13,17 @@ export interface GenerateMetadata {
   totalAreaSqm?: number
 }
 
+export interface LayoutOption {
+  version: string
+  metadata: GenerateMetadata
+  building?: {
+    floorHeight?: number
+  }
+  floors?: CanvasFloor[]
+  rooms: Room[]
+  insights?: GenerationInsights
+}
+
 export interface GenerateResponse {
   version: string
   designId?: string
@@ -24,6 +35,7 @@ export interface GenerateResponse {
   floors?: CanvasFloor[]
   rooms: Room[]
   insights?: GenerationInsights
+  alternatives?: LayoutOption[]
 }
 
 export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> {
@@ -39,8 +51,22 @@ export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> 
   metadata: Record<string, unknown>
 }
 
-export async function generateLayout(prompt: string, projectId?: string): Promise<GenerateResponse> {
-  const { data } = await api.post<GenerateResponse>('/api/design/generate', { prompt, projectId })
+export interface DesignParams {
+  plotWidthM?: number
+  floors?: number
+  orientation?: 'N' | 'S' | 'E' | 'W'
+}
+
+export async function generateLayout(
+  prompt: string,
+  projectId?: string,
+  designParams?: DesignParams,
+): Promise<GenerateResponse> {
+  const { data } = await api.post<GenerateResponse>('/api/design/generate', {
+    prompt,
+    projectId,
+    designParams,
+  })
   return data
 }
 

@@ -49,6 +49,7 @@ export function EditorToolbar() {
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const viewMode = useCanvasStore((s) => s.viewMode)
   const snapToGrid = useCanvasStore((s) => s.snapToGrid)
+  const showDimensions = useCanvasStore((s) => s.showDimensions)
   const saveStatus = useCanvasStore((s) => s.saveStatus)
   const lastSavedAt = useCanvasStore((s) => s.lastSavedAt)
   const draftStatus = useCanvasStore((s) => s.draftStatus)
@@ -57,6 +58,7 @@ export function EditorToolbar() {
   const setSelectedFloor = useCanvasStore((s) => s.setSelectedFloor)
   const setViewMode = useCanvasStore((s) => s.setViewMode)
   const setSnapToGrid = useCanvasStore((s) => s.setSnapToGrid)
+  const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
   const addObject = useCanvasStore((s) => s.addObject)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
@@ -113,6 +115,16 @@ export function EditorToolbar() {
           onChange={(event) => setSnapToGrid(event.target.checked)}
         />
         Snap
+      </label>
+
+      <label className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-indigo-600"
+          checked={showDimensions}
+          onChange={(event) => setShowDimensions(event.target.checked)}
+        />
+        Dimensions
       </label>
 
       <select
