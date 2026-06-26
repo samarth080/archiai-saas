@@ -123,14 +123,17 @@ interface CanvasState {
   serializeLayout: () => CanvasLayout
 }
 
+// Muted architectural palette (Sprint 17 Phase 4) — matches the backend's
+// ROOM_COLORS transform (saturation x0.62, lightness +0.07 in HSL) so
+// manually-added objects and generated ones read as one coherent palette.
 const OBJECT_DEFAULTS: Record<CanvasObjectType, Pick<Room, 'label' | 'size' | 'color'>> = {
-  room: { label: 'Room', size: { w: 4, h: 3, d: 4 }, color: '#818cf8' },
-  wall: { label: 'Wall', size: { w: 6, h: 2.8, d: 0.25 }, color: '#94a3b8' },
-  door: { label: 'Door', size: { w: 1, h: 2.2, d: 0.2 }, color: '#a16207' },
-  window: { label: 'Window', size: { w: 1.4, h: 1.2, d: 0.18 }, color: '#38bdf8' },
-  stair: { label: 'Stair', size: { w: 2.5, h: 1, d: 4 }, color: '#f97316' },
-  floor: { label: 'Floor', size: { w: 8, h: 0.15, d: 8 }, color: '#64748b' },
-  open_space: { label: 'Open Space', size: { w: 5, h: 0.1, d: 5 }, color: '#22c55e' },
+  room: { label: 'Room', size: { w: 4, h: 3, d: 4 }, color: '#b3b8e9' },
+  wall: { label: 'Wall', size: { w: 6, h: 2.8, d: 0.25 }, color: '#afb6c1' },
+  door: { label: 'Door', size: { w: 1, h: 2.2, d: 0.2 }, color: '#a0702c' },
+  window: { label: 'Window', size: { w: 1.4, h: 1.2, d: 0.18 }, color: '#79bddb' },
+  stair: { label: 'Stair', size: { w: 2.5, h: 1, d: 4 }, color: '#d58f5d' },
+  floor: { label: 'Floor', size: { w: 8, h: 0.15, d: 8 }, color: '#7d8795' },
+  open_space: { label: 'Open Space', size: { w: 5, h: 0.1, d: 5 }, color: '#50bb77' },
 }
 
 export const INITIAL_ROOMS: Room[] = [
@@ -141,7 +144,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 0 },
     size: { w: 6, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#818cf8',
+    color: '#b3b8e9',
   },
   {
     id: 'room-2',
@@ -150,7 +153,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 7, y: 1.5, z: 0 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#34d399',
+    color: '#6bc0a1',
   },
   {
     id: 'room-3',
@@ -159,7 +162,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 6 },
     size: { w: 5, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#fb923c',
+    color: '#dea97d',
   },
   {
     id: 'room-4',
@@ -168,7 +171,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 6, y: 1.5, z: 6 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#f472b6',
+    color: '#e4a6c6',
   },
   {
     id: 'room-5',
@@ -177,7 +180,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 11, y: 1.5, z: 6 },
     size: { w: 3, h: 3, d: 3 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#60a5fa',
+    color: '#9abbe4',
   },
 ]
 
