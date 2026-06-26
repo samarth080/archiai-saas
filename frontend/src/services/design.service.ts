@@ -13,6 +13,17 @@ export interface GenerateMetadata {
   totalAreaSqm?: number
 }
 
+export interface LayoutOption {
+  version: string
+  metadata: GenerateMetadata
+  building?: {
+    floorHeight?: number
+  }
+  floors?: CanvasFloor[]
+  rooms: Room[]
+  insights?: GenerationInsights
+}
+
 export interface GenerateResponse {
   version: string
   designId?: string
@@ -24,6 +35,7 @@ export interface GenerateResponse {
   floors?: CanvasFloor[]
   rooms: Room[]
   insights?: GenerationInsights
+  alternatives?: LayoutOption[]
 }
 
 export interface DesignDraftResponse extends Omit<GenerateResponse, 'metadata'> {

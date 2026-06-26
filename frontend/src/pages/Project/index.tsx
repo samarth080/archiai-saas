@@ -8,11 +8,13 @@ import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
 import { MetricsHud } from '../../components/canvas/MetricsHud'
+import { OptionGallery } from '../../components/canvas/OptionGallery'
 import {
   DesignDraftResponse,
   fetchDesignDraft,
   generateLayout,
   getLatestProjectDesign,
+  LayoutOption,
   refineLayout,
   saveDesignLayout,
 } from '../../services/design.service'
@@ -165,6 +167,7 @@ export default function ProjectPage() {
   const [plotWidthM, setPlotWidthM] = useState('')
   const [floorsOverride, setFloorsOverride] = useState('')
   const [orientation, setOrientation] = useState<'' | 'N' | 'S' | 'E' | 'W'>('')
+  const [alternatives, setAlternatives] = useState<LayoutOption[]>([])
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
@@ -190,6 +193,7 @@ export default function ProjectPage() {
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
   const setRecoveredDraftAvailable = useCanvasStore((s) => s.setRecoveredDraftAvailable)
+  const activeScore = useCanvasStore((s) => s.generationInsights?.score)
 
   useAutoSave({ designId, enabled: Boolean(designId) })
 
@@ -205,6 +209,7 @@ export default function ProjectPage() {
         setDraftToRecover(null)
         setRecoveredDraftAvailable(false)
         setRefinementSummary(result.refinementSummary)
+        setAlternatives([])
         setPrompt('')
       } else {
         const designParams = {
@@ -222,6 +227,7 @@ export default function ProjectPage() {
         setRecoveredDraftAvailable(false)
         setHasSavedLayout(true)
         setRefinementSummary(null)
+        setAlternatives(result.alternatives ?? [])
       }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
@@ -234,6 +240,16 @@ export default function ProjectPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handlePickOption = (option: LayoutOption) => {
+    const { designId: currentDesignId, designVersionId: currentDesignVersionId } = useCanvasStore.getState()
+    loadLayout({
+      ...option,
+      designId: currentDesignId ?? undefined,
+      designVersionId: currentDesignVersionId ?? undefined,
+    })
+    useCanvasStore.getState().markDirty()
   }
 
   const handleSaveLayout = async () => {
@@ -658,6 +674,13 @@ export default function ProjectPage() {
           </div>
 
           <GenerationInsights />
+
+          <OptionGallery
+            options={alternatives}
+            activeScore={activeScore}
+            onPick={handlePickOption}
+            onDismiss={() => setAlternatives([])}
+          />
 
           {refinementSummary && (
             <div
