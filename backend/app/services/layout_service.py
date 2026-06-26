@@ -36,33 +36,39 @@ from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
 from app.services.parser.constraint_extractor import AdjacencyConstraint
 
+# Muted architectural palette (Sprint 17 Phase 4) — each colour below is the
+# original bright Tailwind swatch run through a fixed HSL transform (saturation
+# x0.62, lightness +0.07) rather than hand-picked, so the set stays internally
+# consistent: same relative hues and distinguishability, just desaturated and
+# lightened toward a paper/drawing feel instead of a "toy blocks" one. `wall`
+# is left alone since it's a structural marker, not a room identity colour.
 ROOM_COLORS: dict[str, str] = {
-    "living_room":    "#818cf8",
-    "kitchen":        "#34d399",
-    "master_bedroom": "#fb923c",
-    "bedroom":        "#f472b6",
-    "bathroom":       "#60a5fa",
-    "dining_room":    "#facc15",
-    "office":         "#a78bfa",
-    "study":          "#c084fc",
-    "workspace":      "#8b5cf6",
-    "meeting_room":   "#7c3aed",
-    "reception":      "#14b8a6",
-    "waiting_room":   "#2dd4bf",
-    "consultation_room": "#38bdf8",
-    "classroom":      "#f59e0b",
-    "retail_display": "#22c55e",
-    "checkout":       "#eab308",
-    "storage":        "#a8a29e",
-    "entry":          "#64748b",
-    "hallway":        "#94a3b8",
-    "balcony":        "#4ade80",
-    "garage":         "#78716c",
-    "utility":        "#cbd5e1",
-    "stairs":         "#9ca3af",
+    "living_room":    "#b3b8e9",
+    "kitchen":        "#6bc0a1",
+    "master_bedroom": "#dea97d",
+    "bedroom":        "#e4a6c6",
+    "bathroom":       "#9abbe4",
+    "dining_room":    "#d6bd5d",
+    "office":         "#c8bced",
+    "study":          "#d2b7ed",
+    "workspace":      "#ac95e1",
+    "meeting_room":   "#9977d4",
+    "reception":      "#3cb4a6",
+    "waiting_room":   "#66bfb4",
+    "consultation_room": "#79bddb",
+    "classroom":      "#d0a254",
+    "retail_display": "#50bb77",
+    "checkout":       "#cead48",
+    "storage":        "#b7b4b2",
+    "entry":          "#7d8795",
+    "hallway":        "#afb6c1",
+    "balcony":        "#80cc9c",
+    "garage":         "#888380",
+    "utility":        "#e4e7ec",
+    "stairs":         "#b3b6bc",
     "wall":           "#475569",
-    "door":           "#a16207",
-    "window":         "#38bdf8",
+    "door":           "#a0702c",
+    "window":         "#79bddb",
 }
 
 # ── Layout-engine constants ─────────────────────────────────────────────────
