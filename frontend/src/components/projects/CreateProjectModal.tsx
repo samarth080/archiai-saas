@@ -35,8 +35,8 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">New Project</h2>
+      <div className="bg-white/95 backdrop-blur rounded-xl p-6 w-full max-w-md">
+        <h2 className="text-lg font-semibold text-ink mb-4">New Project</h2>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
             label="Title"
@@ -47,15 +47,15 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
             })}
           />
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="block text-sm font-medium text-ink/80 mb-1">
               Description{' '}
-              <span className="text-gray-400 font-normal">(optional)</span>
+              <span className="text-muted-light font-normal">(optional)</span>
             </label>
             <textarea
               id="description"
               {...register('description')}
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full border border-ink/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
               placeholder="Describe your project..."
             />
           </div>
