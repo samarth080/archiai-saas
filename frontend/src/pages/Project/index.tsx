@@ -478,7 +478,7 @@ export default function ProjectPage() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-gray-400">Loading...</p>
+        <p className="text-muted-light">Loading...</p>
       </div>
     )
   }
@@ -494,7 +494,7 @@ export default function ProjectPage() {
   if (!project) return null
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-surface">
       <Sidebar
         userName={user?.name}
         userEmail={user?.email}
@@ -504,11 +504,11 @@ export default function ProjectPage() {
       {/* Main */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
+        <div className="flex flex-col gap-3 border-b border-ink/10 bg-white/80 backdrop-blur px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
           <div className="flex-1 min-w-0">
             <button
               onClick={() => navigate('/dashboard')}
-              className="text-sm text-indigo-600 hover:text-indigo-800 mb-2 block"
+              className="text-sm text-brand-600 hover:text-brand-700 mb-2 block"
             >
               ← Projects
             </button>
@@ -518,19 +518,19 @@ export default function ProjectPage() {
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full text-xl font-bold border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full text-xl font-bold border border-ink/15 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={2}
                   placeholder="Description (optional)"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="w-full border border-ink/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                 />
                 {saveError && <p className="text-sm text-red-600">{saveError}</p>}
               </div>
             ) : (
-              <h1 className="text-xl font-bold text-gray-900 truncate">{project.title}</h1>
+              <h1 className="text-xl font-bold text-ink truncate">{project.title}</h1>
             )}
           </div>
           <div className="flex flex-wrap items-start gap-2 xl:max-w-[72%] xl:justify-end xl:pt-6">
@@ -582,14 +582,14 @@ export default function ProjectPage() {
                       value={versionName}
                       onChange={(e) => setVersionName(e.target.value)}
                       placeholder="Version name (optional)"
-                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="h-8 rounded-lg border border-ink/15 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
                     />
                     <input
                       type="text"
                       value={changeSummary}
                       onChange={(e) => setChangeSummary(e.target.value)}
                       placeholder="Change summary (optional)"
-                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="h-8 rounded-lg border border-ink/15 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
                     />
                   </div>
                   <Button
@@ -664,7 +664,7 @@ export default function ProjectPage() {
               <MetricsHud />
               {!hasSavedLayout && roomCount === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="rounded border border-dashed border-gray-300 bg-white/90 px-4 py-3 text-sm text-gray-500 shadow-sm">
+                  <div className="rounded-xl border border-dashed border-ink/15 bg-white/80 backdrop-blur px-4 py-3 text-sm text-muted shadow-sm">
                     No saved layout yet. Generate a layout from the prompt below.
                   </div>
                 </div>
@@ -701,16 +701,16 @@ export default function ProjectPage() {
           )}
 
           {/* Prompt bar */}
-          <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-2">
+          <div className="border-t border-ink/10 bg-white/80 backdrop-blur p-3 flex flex-col gap-2">
             <div
               role="tablist"
               aria-label="Prompt mode"
-              className="inline-flex w-fit rounded border border-gray-300 text-xs overflow-hidden"
+              className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden"
             >
               <button
                 role="tab"
                 aria-selected={mode === 'generate'}
-                className={`px-3 py-1 ${mode === 'generate' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'}`}
+                className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-white text-muted'}`}
                 onClick={() => {
                   userPickedModeRef.current = true
                   setMode('generate')
@@ -723,7 +723,7 @@ export default function ProjectPage() {
                 aria-selected={mode === 'refine'}
                 disabled={!designId}
                 title={designId ? '' : 'Generate a layout first'}
-                className={`px-3 py-1 ${mode === 'refine' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-white text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
                 onClick={() => {
                   userPickedModeRef.current = true
                   setMode('refine')
@@ -734,7 +734,7 @@ export default function ProjectPage() {
               {mode === 'generate' && (
                 <button
                   type="button"
-                  className="px-3 py-1 bg-white text-gray-500 hover:text-gray-700 border-l border-gray-300"
+                  className="px-3 py-1 bg-white text-muted hover:text-ink border-l border-ink/15"
                   onClick={() => setShowParams((value) => !value)}
                   aria-expanded={showParams}
                 >
@@ -743,7 +743,7 @@ export default function ProjectPage() {
               )}
             </div>
             {mode === 'generate' && showParams && (
-              <div className="flex gap-3 items-end text-xs text-gray-600">
+              <div className="flex gap-3 items-end text-xs text-muted">
                 <label className="flex flex-col gap-1">
                   Plot width (m)
                   <input
@@ -752,7 +752,7 @@ export default function ProjectPage() {
                     max={40}
                     step={0.5}
                     placeholder="auto"
-                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
                     value={plotWidthM}
                     onChange={(e) => setPlotWidthM(e.target.value)}
                   />
@@ -764,7 +764,7 @@ export default function ProjectPage() {
                     min={1}
                     max={6}
                     placeholder="auto"
-                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
                     value={floorsOverride}
                     onChange={(e) => setFloorsOverride(e.target.value)}
                   />
@@ -772,7 +772,7 @@ export default function ProjectPage() {
                 <label className="flex flex-col gap-1">
                   Entry faces
                   <select
-                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
                     value={orientation}
                     onChange={(e) => setOrientation(e.target.value as typeof orientation)}
                   >
@@ -783,13 +783,13 @@ export default function ProjectPage() {
                     <option value="W">West</option>
                   </select>
                 </label>
-                <span className="text-gray-400 pb-1">Leave blank to infer from the prompt</span>
+                <span className="text-muted-light pb-1">Leave blank to infer from the prompt</span>
               </div>
             )}
             <div className="flex gap-2 items-end">
               <textarea
                 aria-label="Layout prompt"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
                 rows={2}
                 placeholder={
                   mode === 'refine'
@@ -805,7 +805,7 @@ export default function ProjectPage() {
               />
               <button
                 aria-busy={generating}
-                className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
+                className="bg-brand-600 hover:bg-brand-500 disabled:bg-brand-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
                 onClick={handleSubmit}
                 disabled={generating || !prompt.trim()}
               >
