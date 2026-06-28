@@ -11,10 +11,10 @@ interface Props {
 }
 
 const TYPE_BADGE: Record<string, string> = {
-  generated: 'bg-indigo-100 text-indigo-700',
+  generated: 'bg-brand-100 text-brand-700',
   manual: 'bg-emerald-100 text-emerald-700',
   refined: 'bg-amber-100 text-amber-700',
-  duplicate: 'bg-gray-100 text-gray-600',
+  duplicate: 'bg-ink/5 text-muted',
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -88,13 +88,13 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
         className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-gray-900">Version history</h2>
+        <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">Version history</h2>
           <button
             type="button"
             aria-label="Close history"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-light hover:text-muted"
           >
             ✕
           </button>
@@ -102,18 +102,18 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-          {loading && <p className="text-sm text-gray-400">Loading…</p>}
+          {loading && <p className="text-sm text-muted-light">Loading…</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}
           {!loading && !error && versions.length === 0 && (
-            <p className="text-sm text-gray-400">No versions saved yet.</p>
+            <p className="text-sm text-muted-light">No versions saved yet.</p>
           )}
           {versions.map((v) => (
             <div
               key={v.id}
-              className="rounded border border-gray-200 p-3 flex flex-col gap-1"
+              className="rounded-xl border border-ink/10 p-3 flex flex-col gap-1"
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-medium text-gray-800 truncate">
+                <span className="text-sm font-medium text-ink/80 truncate">
                   {v.version_name ?? 'Untitled version'}
                 </span>
                 <button
@@ -121,7 +121,7 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
                   aria-label="Restore"
                   disabled={restoringId === v.id}
                   onClick={() => handleRestore(v.id)}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50 whitespace-nowrap"
+                  className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50 whitespace-nowrap"
                 >
                   {restoringId === v.id ? 'Restoring…' : 'Restore'}
                 </button>
@@ -129,14 +129,14 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
               <div className="flex items-center gap-2">
                 {v.version_type && (
                   <span
-                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                      TYPE_BADGE[v.version_type] ?? 'bg-gray-100 text-gray-500'
+                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded-lg ${
+                      TYPE_BADGE[v.version_type] ?? 'bg-ink/5 text-muted'
                     }`}
                   >
                     {TYPE_LABEL[v.version_type] ?? v.version_type}
                   </span>
                 )}
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-muted-light font-mono">
                   {formatRelative(v.created_at)}
                 </span>
               </div>
