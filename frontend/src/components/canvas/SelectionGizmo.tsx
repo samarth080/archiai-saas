@@ -16,7 +16,7 @@ export function SelectionGizmo() {
   const area = room.size.w * room.size.d
 
   return (
-    <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 flex items-center gap-2.5 rounded-full border border-brand-200 bg-white/90 backdrop-blur px-3.5 py-1.5 shadow-sm">
+    <div className="absolute left-1/2 top-16 z-20 -translate-x-1/2 flex items-center gap-2.5 rounded-full border border-brand-200 bg-white/90 backdrop-blur px-3.5 py-1.5 shadow-sm">
       <span
         aria-hidden="true"
         className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
