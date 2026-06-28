@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 
 import { isInternalDataPipelineEnabled } from '../../config/internalTools'
 import { Button } from '../ui/Button'
+import { Avatar } from '../ui/Avatar'
 
 interface SidebarProps {
   userName?: string
@@ -41,32 +42,6 @@ function NavIcon({ name }: { name: keyof typeof ICONS }) {
     >
       {ICONS[name]}
     </svg>
-  )
-}
-
-// Deterministic avatar color from a hash of the user's name/email, so the
-// same person always gets the same color (no randomness, no extra data).
-const AVATAR_COLORS = ['#7A6CD6', '#3FA39B', '#E08A6B', '#C77DBB', '#5B8DD9']
-
-function hashString(value: string): number {
-  let hash = 0
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0
-  }
-  return hash
-}
-
-function Avatar({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase() || '?'
-  const color = AVATAR_COLORS[hashString(name) % AVATAR_COLORS.length]
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-      style={{ backgroundColor: color }}
-    >
-      {initial}
-    </span>
   )
 }
 
@@ -110,7 +85,7 @@ export function Sidebar({
       </nav>
       <div className="border-t border-ink/10 p-4">
         <div className="mb-3 flex items-center gap-2.5">
-          <Avatar name={displayName} />
+          <Avatar name={displayName} size={8} />
           <p className="min-w-0 truncate text-sm text-muted">{displayName}</p>
         </div>
         <Button variant="secondary" onClick={onLogout} className="w-full text-sm">
