@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
 import { Button } from '../../components/ui/Button'
@@ -148,6 +148,7 @@ function hasRecoverableDraft(
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { logOut, user } = useAuth()
 
   const [project, setProject] = useState<Project | null>(null)
@@ -354,6 +355,17 @@ export default function ProjectPage() {
       setMode('refine')
     }
   }, [designId, mode])
+
+  // Prefill the prompt when arriving from the Dashboard's hero composer,
+  // which creates the project first and forwards the brief via navigation
+  // state rather than auto-generating sight-unseen.
+  useEffect(() => {
+    const initialPrompt = (location.state as { initialPrompt?: string } | null)?.initialPrompt
+    if (initialPrompt) {
+      setPrompt(initialPrompt)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
 
   const enterEditMode = () => {
     if (!project) return
