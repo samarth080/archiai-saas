@@ -89,10 +89,10 @@ export function EditorToolbar() {
   }
 
   return (
-    <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2 rounded border border-gray-200 bg-white/95 p-2 shadow-sm">
+    <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap items-center gap-2 rounded-xl border border-ink/10 bg-white/90 backdrop-blur p-2 shadow-sm">
       <span
         aria-live="polite"
-        className={`rounded border px-2 py-1 text-xs font-medium ${statusClasses[saveStatus]}`}
+        className={`rounded-lg border px-2 py-1 text-xs font-medium ${statusClasses[saveStatus]}`}
       >
         {saveStatusLabel(saveStatus, lastSavedAt)}
       </span>
@@ -100,27 +100,27 @@ export function EditorToolbar() {
       {draftStatus !== 'idle' && (
         <span
           aria-live="polite"
-          className={`rounded border px-2 py-1 text-xs font-medium ${draftStatusClasses[draftStatus]}`}
+          className={`rounded-lg border px-2 py-1 text-xs font-medium ${draftStatusClasses[draftStatus]}`}
           title={draftStatus === 'error' ? draftError ?? undefined : undefined}
         >
           {draftStatusLabel(draftStatus, lastDraftSavedAt)}
         </span>
       )}
 
-      <label className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700">
+      <label className="flex items-center gap-2 rounded-lg border border-ink/10 px-2 py-1 text-xs font-medium text-ink/80">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-indigo-600"
+          className="h-4 w-4 accent-brand-600"
           checked={snapToGrid}
           onChange={(event) => setSnapToGrid(event.target.checked)}
         />
         Snap
       </label>
 
-      <label className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700">
+      <label className="flex items-center gap-2 rounded-lg border border-ink/10 px-2 py-1 text-xs font-medium text-ink/80">
         <input
           type="checkbox"
-          className="h-4 w-4 accent-indigo-600"
+          className="h-4 w-4 accent-brand-600"
           checked={showDimensions}
           onChange={(event) => setShowDimensions(event.target.checked)}
         />
@@ -129,7 +129,7 @@ export function EditorToolbar() {
 
       <select
         aria-label="Canvas view mode"
-        className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        className="h-8 rounded-lg border border-ink/15 bg-white px-2 text-xs text-ink/80 focus:outline-none focus:ring-2 focus:ring-brand-400"
         value={viewMode}
         onChange={(event) => setViewMode(event.target.value as CanvasViewMode)}
       >
@@ -141,7 +141,7 @@ export function EditorToolbar() {
       {floors.length > 1 && (
         <select
           aria-label="Selected floor"
-          className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="h-8 rounded-lg border border-ink/15 bg-white px-2 text-xs text-ink/80 focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={selectedFloor}
           onChange={(event) => {
             const value = event.target.value
@@ -160,7 +160,7 @@ export function EditorToolbar() {
       <div className="flex items-center gap-1">
         <select
           aria-label="Object type"
-          className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="h-8 rounded-lg border border-ink/15 bg-white px-2 text-xs text-ink/80 focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={objectType}
           onChange={(event) => setObjectType(event.target.value as CanvasObjectType)}
         >
@@ -171,7 +171,7 @@ export function EditorToolbar() {
           ))}
         </select>
         <button
-          className="h-8 rounded bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="h-8 rounded-lg bg-brand-600 px-3 text-xs font-medium text-white hover:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400"
           onClick={() => addObject(objectType)}
         >
           Add
@@ -179,15 +179,15 @@ export function EditorToolbar() {
       </div>
 
       <button
-        className="h-8 rounded border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 rounded-lg border border-ink/15 px-3 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!selectedId}
         onClick={() => selectedId && duplicateRoom(selectedId)}
       >
         Duplicate
       </button>
-      <div className="flex items-center gap-1 rounded border border-gray-200 px-1 py-1">
+      <div className="flex items-center gap-1 rounded-lg border border-ink/10 px-1 py-1">
         <button
-          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-6 rounded-lg px-2 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!selectedObject}
           onClick={() => rotateSelected(-15)}
           title="Rotate selected object left"
@@ -195,7 +195,7 @@ export function EditorToolbar() {
           Rotate -15 deg
         </button>
         <button
-          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-6 rounded-lg px-2 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!selectedObject}
           onClick={() => rotateSelected(15)}
           title="Rotate selected object right"
@@ -203,7 +203,7 @@ export function EditorToolbar() {
           Rotate +15 deg
         </button>
         <button
-          className="h-6 rounded px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-6 rounded-lg px-2 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!selectedObject}
           onClick={() => rotateSelected(90)}
           title="Rotate selected object by 90 degrees"
@@ -212,7 +212,7 @@ export function EditorToolbar() {
         </button>
       </div>
       <button
-        className="h-8 rounded border border-red-200 px-3 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 rounded-lg border border-red-200 px-3 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
         disabled={!selectedId}
         onClick={() => selectedId && deleteRoom(selectedId)}
       >

@@ -29,10 +29,10 @@ export function GenerationInsights() {
   return (
     <section
       aria-label="Generation insights"
-      className="border-t border-gray-200 bg-white px-4 py-2"
+      className="border-t border-ink/10 bg-white px-4 py-2"
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
-        <span className="font-semibold text-gray-800">Layout insights</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+        <span className="font-semibold text-ink/80">Layout insights</span>
         {buildingType && <span>Building: {buildingType}</span>}
         {template && <span>Template: {template}</span>}
         {zones.length > 0 && <span>Zones: {zones.join(', ')}</span>}
@@ -52,12 +52,12 @@ export function GenerationInsights() {
             </span>
           ))}
           {(insights.suggestions ?? []).slice(0, 2).map((suggestion) => (
-            <span key={suggestion} className="text-indigo-700">
+            <span key={suggestion} className="text-brand-700">
               Suggestion: {suggestion}
             </span>
           ))}
           {insights.reasons.slice(0, 2).map((reason) => (
-            <span key={reason} className="text-gray-500">
+            <span key={reason} className="text-muted">
               {reason}
             </span>
           ))}

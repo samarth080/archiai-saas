@@ -31,24 +31,24 @@ export function OptionGallery({ options, activeScore, onPick, onDismiss }: Optio
   return (
     <section
       aria-label="Alternative layout options"
-      className="border-t border-gray-200 bg-white px-4 py-2.5"
+      className="border-t border-ink/10 bg-white px-4 py-2.5"
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-light">
           Alternatives
         </span>
         <div className="flex items-center gap-3">
           {typeof activeScore === 'number' && (
-            <span className="flex items-baseline gap-1 text-xs text-gray-500">
-              <span>Current</span>
-              <span className="font-semibold tabular-nums text-gray-700">{activeScore}</span>
-              <span className="text-gray-400">/100</span>
+            <span className="flex items-baseline gap-1 text-xs text-muted font-mono">
+              <span className="font-sans">Current</span>
+              <span className="font-semibold tabular-nums text-ink/80">{activeScore}</span>
+              <span className="text-muted-light">/100</span>
             </span>
           )}
           <button
             type="button"
             aria-label="Dismiss alternatives"
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-light hover:text-muted"
             onClick={onDismiss}
           >
             ✕
@@ -61,17 +61,17 @@ export function OptionGallery({ options, activeScore, onPick, onDismiss }: Optio
             key={index}
             type="button"
             onClick={() => onPick(option)}
-            className="flex-shrink-0 min-w-[7.5rem] rounded border border-gray-200 hover:border-indigo-300 bg-white hover:bg-indigo-50/60 px-3 py-2 text-left transition-colors"
+            className="flex-shrink-0 min-w-[7.5rem] rounded-xl border border-ink/10 hover:border-brand-300 bg-white hover:bg-brand-50/60 px-3 py-2 text-left transition-colors"
           >
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-base font-semibold tabular-nums text-gray-800">
+              <span className="text-base font-mono font-semibold tabular-nums text-ink">
                 {option.insights?.score ?? '—'}
               </span>
-              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">
                 {engineLabel(option.metadata)}
               </span>
             </div>
-            <div className="text-[11px] text-gray-500 tabular-nums mt-0.5">
+            <div className="text-[11px] text-muted font-mono tabular-nums mt-0.5">
               {roomCount(option)} rooms · {totalArea(option).toFixed(0)} m²
             </div>
           </button>

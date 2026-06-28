@@ -46,14 +46,14 @@ export function Inspector() {
   }
 
   return (
-    <div className="w-56 bg-white border-l border-gray-200 p-4 flex flex-col gap-4 overflow-y-auto">
+    <div className="w-56 bg-white/90 backdrop-blur border-l border-ink/10 p-4 flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col gap-2">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Label</span>
+          <span className="text-xs font-semibold text-muted uppercase tracking-wide">Label</span>
           <input
             type="text"
             aria-label="Object label"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm font-semibold text-gray-800"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-semibold text-ink"
             value={room.label}
             onChange={(e) => {
               updateRoom(
@@ -68,10 +68,10 @@ export function Inspector() {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</span>
+          <span className="text-xs font-semibold text-muted uppercase tracking-wide">Type</span>
           <select
             aria-label="Object type"
-            className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-700"
+            className="w-full rounded-lg border border-ink/15 px-2 py-1 text-sm text-ink/80"
             value={room.objectType}
             onChange={(e) => {
               const objectType = e.target.value as CanvasObjectType
@@ -95,10 +95,10 @@ export function Inspector() {
 
         {floors.length > 1 && (
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Floor</span>
+            <span className="text-xs font-semibold text-muted uppercase tracking-wide">Floor</span>
             <select
               aria-label="Object floor"
-              className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-700"
+              className="w-full rounded-lg border border-ink/15 px-2 py-1 text-sm text-ink/80"
               value={room.floorLevel ?? 0}
               onChange={(e) => {
                 const floor = floors.find((candidate) => candidate.level === Number(e.target.value))
@@ -129,14 +129,14 @@ export function Inspector() {
 
       {/* Position */}
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Position</h3>
+        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Position</h3>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">X</span>
+          <span className="text-xs text-muted">X</span>
           <input
             type="number"
             aria-label="Position X"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.position.x}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -146,11 +146,11 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Z</span>
+          <span className="text-xs text-muted">Z</span>
           <input
             type="number"
             aria-label="Position Z"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.position.z}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -162,15 +162,15 @@ export function Inspector() {
 
       {/* Size */}
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Size</h3>
+        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Size</h3>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">W</span>
+          <span className="text-xs text-muted">W</span>
           <input
             type="number"
             min={1}
             aria-label="Width"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.w}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -180,12 +180,12 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">D</span>
+          <span className="text-xs text-muted">D</span>
           <input
             type="number"
             min={1}
             aria-label="Depth"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.d}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -195,12 +195,12 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">H</span>
+          <span className="text-xs text-muted">H</span>
           <input
             type="number"
             min={1}
             aria-label="Height"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.h}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -213,16 +213,16 @@ export function Inspector() {
       {/* Rotation */}
       <div className="flex flex-col gap-2">
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rotation</h3>
-          <p className="mt-1 text-[11px] text-gray-400">Use Y to turn walls, doors, windows, and rooms on the floor plan.</p>
+          <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Rotation</h3>
+          <p className="mt-1 text-[11px] text-muted-light">Use Y to turn walls, doors, windows, and rooms on the floor plan.</p>
         </div>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Rotate X</span>
+          <span className="text-xs text-muted">Rotate X</span>
           <input
             type="number"
             aria-label="Rotation X"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
             value={room.rotation.x}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -238,11 +238,11 @@ export function Inspector() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Rotate Y</span>
+          <span className="text-xs text-muted">Rotate Y</span>
           <input
             type="number"
             aria-label="Rotation Y"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
             value={room.rotation.y}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -260,21 +260,21 @@ export function Inspector() {
         <div className="grid grid-cols-3 gap-1" aria-label="Quick rotate Y controls">
           <button
             type="button"
-            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
             onClick={() => rotateY(-15)}
           >
             -15 deg
           </button>
           <button
             type="button"
-            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
             onClick={() => rotateY(15)}
           >
             +15 deg
           </button>
           <button
             type="button"
-            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
             onClick={() => rotateY(90)}
           >
             90 deg
@@ -282,11 +282,11 @@ export function Inspector() {
         </div>
 
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-gray-500">Rotate Z</span>
+          <span className="text-xs text-muted">Rotate Z</span>
           <input
             type="number"
             aria-label="Rotation Z"
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
             value={room.rotation.z}
             onChange={(e) => {
               const n = Number(e.target.value)
@@ -304,29 +304,29 @@ export function Inspector() {
 
       <div className="grid grid-cols-2 gap-2">
         <button
-          className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-ink/15 px-3 py-2 text-sm font-medium text-ink/80 hover:bg-ink/5"
           onClick={() => duplicateRoom(room.id)}
         >
           Duplicate
         </button>
         <button
-          className="rounded bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600"
+          className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600"
           onClick={() => deleteRoom(room.id)}
         >
           Delete
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-gray-200 pt-4">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent edits</h3>
+      <div className="flex flex-col gap-2 border-t border-ink/10 pt-4">
+        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Recent edits</h3>
         {activityLog.length === 0 ? (
-          <p className="text-xs text-gray-400">No edits yet</p>
+          <p className="text-xs text-muted-light">No edits yet</p>
         ) : (
           <div className="flex flex-col gap-2">
             {activityLog.slice(0, 5).map((entry) => (
-              <div key={entry.id} className="rounded border border-gray-200 px-2 py-1">
-                <p className="text-xs font-medium text-gray-700">{ACTION_LABELS[entry.action]}</p>
-                <p className="truncate text-xs text-gray-500">{entry.objectLabel}</p>
+              <div key={entry.id} className="rounded-lg border border-ink/10 px-2 py-1">
+                <p className="text-xs font-medium text-ink/80">{ACTION_LABELS[entry.action]}</p>
+                <p className="truncate text-xs text-muted">{entry.objectLabel}</p>
               </div>
             ))}
           </div>

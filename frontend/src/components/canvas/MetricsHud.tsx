@@ -25,19 +25,19 @@ export function MetricsHud() {
   if (habitableRooms.length === 0) return null
 
   return (
-    <div className="absolute right-4 top-4 z-10 flex flex-col gap-1 rounded border border-gray-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-sm">
+    <div className="absolute right-4 top-4 z-10 flex flex-col gap-1 rounded-xl border border-ink/10 bg-white/90 backdrop-blur px-3 py-2 text-xs text-ink/80 shadow-sm">
       <div className="flex items-center justify-between gap-4">
-        <span className="text-gray-500">Rooms</span>
-        <span className="font-semibold tabular-nums">{habitableRooms.length}</span>
+        <span className="text-muted">Rooms</span>
+        <span className="font-mono font-semibold tabular-nums">{habitableRooms.length}</span>
       </div>
       <div className="flex items-center justify-between gap-4">
-        <span className="text-gray-500">Total area</span>
-        <span className="font-semibold tabular-nums">{totalArea.toFixed(1)} m²</span>
+        <span className="text-muted">Total area</span>
+        <span className="font-mono font-semibold tabular-nums">{totalArea.toFixed(1)} m²</span>
       </div>
       {efficiency !== null && (
         <div className="flex items-center justify-between gap-4">
-          <span className="text-gray-500">Footprint use</span>
-          <span className="font-semibold tabular-nums">{efficiency.toFixed(0)}%</span>
+          <span className="text-muted">Footprint use</span>
+          <span className="font-mono font-semibold tabular-nums">{efficiency.toFixed(0)}%</span>
         </div>
       )}
     </div>
