@@ -179,6 +179,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     <Html
       position={[room.position.x, room.position.y + room.size.h / 2 + 0.35, room.position.z]}
       center
+      zIndexRange={[1, 0]}
       style={{ pointerEvents: 'none' }}
     >
       <div

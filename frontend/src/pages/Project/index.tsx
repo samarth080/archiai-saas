@@ -516,7 +516,7 @@ export default function ProjectPage() {
       />
 
       {/* Main */}
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Top bar */}
         <div className="flex flex-col gap-3 border-b border-ink/10 bg-white/80 backdrop-blur px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
           <div className="flex-1 min-w-0">
@@ -671,7 +671,7 @@ export default function ProjectPage() {
             </div>
           )}
           {/* Canvas + Inspector row */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden min-h-[420px]">
             <div className="relative flex-1 h-full">
               <Canvas3D className="h-full" />
               <EditorToolbar />
@@ -776,7 +776,7 @@ export default function ProjectPage() {
                   <textarea
                     aria-label="Layout prompt"
                     className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    rows={2}
+                    rows={1}
                     placeholder={
                       mode === 'refine'
                         ? "Refine your layout… e.g. 'add a bedroom', 'remove the office', 'make the kitchen bigger'"
