@@ -117,6 +117,9 @@ interface CanvasState {
   duplicateRoom: (id: string) => void
   duplicateSelected: () => void
   addObject: (objectType: CanvasObjectType) => void
+  addFloorAbove: () => void
+  addFloorBelow: () => void
+  removeFloor: (level: number) => void
   loadRooms: (rooms: Room[]) => void
   loadLayout: (layout: CanvasLayout) => void
   clearLayout: () => void
@@ -513,6 +516,58 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           },
           ...state.activityLog,
         ],
+      }
+    }),
+  addFloorAbove: () =>
+    set((state) => {
+      const level = Math.max(...state.floors.map((f) => f.level)) + 1
+      const floor: CanvasFloor = {
+        id: nextId('floor'),
+        name: floorName(level),
+        level,
+        elevation: level * state.floorHeight,
+      }
+      queueAutoSave()
+      return {
+        floors: [...state.floors, floor],
+        selectedFloor: level,
+        selectedId: null,
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
+      }
+    }),
+  addFloorBelow: () =>
+    set((state) => {
+      const level = Math.min(...state.floors.map((f) => f.level)) - 1
+      const floor: CanvasFloor = {
+        id: nextId('floor'),
+        name: floorName(level),
+        level,
+        elevation: level * state.floorHeight,
+      }
+      queueAutoSave()
+      return {
+        floors: [...state.floors, floor],
+        selectedFloor: level,
+        selectedId: null,
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
+      }
+    }),
+  removeFloor: (level) =>
+    set((state) => {
+      if (state.floors.length <= 1) return state
+      const floors = state.floors.filter((f) => f.level !== level)
+      const rooms = state.rooms.filter((room) => room.floorLevel !== level)
+      const fallbackLevel = floors[floors.length - 1].level
+      queueAutoSave()
+      return {
+        floors,
+        rooms,
+        selectedFloor: state.selectedFloor === level ? fallbackLevel : state.selectedFloor,
+        selectedId: null,
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
       }
     }),
   loadRooms: (rooms) => {
