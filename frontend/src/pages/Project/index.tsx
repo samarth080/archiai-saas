@@ -8,6 +8,8 @@ import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorToolbar } from '../../components/canvas/EditorToolbar'
 import { MetricsHud } from '../../components/canvas/MetricsHud'
+import { SelectionGizmo } from '../../components/canvas/SelectionGizmo'
+import { SpaceProgramPanel } from '../../components/canvas/SpaceProgramPanel'
 import { OptionGallery } from '../../components/canvas/OptionGallery'
 import {
   DesignDraftResponse,
@@ -674,6 +676,8 @@ export default function ProjectPage() {
               <Canvas3D className="h-full" />
               <EditorToolbar />
               <MetricsHud />
+              <SelectionGizmo />
+              <SpaceProgramPanel />
               {!hasSavedLayout && roomCount === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div className="rounded-xl border border-dashed border-ink/15 bg-white/80 backdrop-blur px-4 py-3 text-sm text-muted shadow-sm">
@@ -681,6 +685,123 @@ export default function ProjectPage() {
                   </div>
                 </div>
               )}
+
+              {/* Docked prompt bar — floats over the viewport rather than spanning full width */}
+              <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 flex flex-col gap-2 rounded-2xl border border-ink/10 bg-white/90 backdrop-blur p-3 shadow-lg">
+                <div
+                  role="tablist"
+                  aria-label="Prompt mode"
+                  className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden"
+                >
+                  <button
+                    role="tab"
+                    aria-selected={mode === 'generate'}
+                    className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-white text-muted'}`}
+                    onClick={() => {
+                      userPickedModeRef.current = true
+                      setMode('generate')
+                    }}
+                  >
+                    Generate
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={mode === 'refine'}
+                    disabled={!designId}
+                    title={designId ? '' : 'Generate a layout first'}
+                    className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-white text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    onClick={() => {
+                      userPickedModeRef.current = true
+                      setMode('refine')
+                    }}
+                  >
+                    Refine
+                  </button>
+                  {mode === 'generate' && (
+                    <button
+                      type="button"
+                      className="px-3 py-1 bg-white text-muted hover:text-ink border-l border-ink/15"
+                      onClick={() => setShowParams((value) => !value)}
+                      aria-expanded={showParams}
+                    >
+                      {showParams ? 'Hide params' : 'Plot params'}
+                    </button>
+                  )}
+                </div>
+                {mode === 'generate' && showParams && (
+                  <div className="flex gap-3 items-end text-xs text-muted">
+                    <label className="flex flex-col gap-1">
+                      Plot width (m)
+                      <input
+                        type="number"
+                        min={4}
+                        max={40}
+                        step={0.5}
+                        placeholder="auto"
+                        className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                        value={plotWidthM}
+                        onChange={(e) => setPlotWidthM(e.target.value)}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      Floors
+                      <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        placeholder="auto"
+                        className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                        value={floorsOverride}
+                        onChange={(e) => setFloorsOverride(e.target.value)}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      Entry faces
+                      <select
+                        className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                        value={orientation}
+                        onChange={(e) => setOrientation(e.target.value as typeof orientation)}
+                      >
+                        <option value="">auto</option>
+                        <option value="S">South</option>
+                        <option value="N">North</option>
+                        <option value="E">East</option>
+                        <option value="W">West</option>
+                      </select>
+                    </label>
+                    <span className="text-muted-light pb-1">Leave blank to infer from the prompt</span>
+                  </div>
+                )}
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    aria-label="Layout prompt"
+                    className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
+                    rows={2}
+                    placeholder={
+                      mode === 'refine'
+                        ? "Refine your layout… e.g. 'add a bedroom', 'remove the office', 'make the kitchen bigger'"
+                        : 'Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room'
+                    }
+                    value={prompt}
+                    onChange={(e) => {
+                      setPrompt(e.target.value)
+                      setRefinementSummary(null)
+                    }}
+                    disabled={generating}
+                  />
+                  <button
+                    aria-busy={generating}
+                    className="bg-brand-600 hover:bg-brand-500 disabled:bg-brand-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
+                    onClick={handleSubmit}
+                    disabled={generating || !prompt.trim()}
+                  >
+                    {generating
+                      ? mode === 'refine' ? 'Refining…' : 'Generating…'
+                      : mode === 'refine' ? 'Refine' : 'Generate'}
+                  </button>
+                </div>
+                {generateError && <p className="text-xs text-red-500">{generateError}</p>}
+              </div>
             </div>
             <Inspector />
           </div>
@@ -712,122 +833,6 @@ export default function ProjectPage() {
             </div>
           )}
 
-          {/* Prompt bar */}
-          <div className="border-t border-ink/10 bg-white/80 backdrop-blur p-3 flex flex-col gap-2">
-            <div
-              role="tablist"
-              aria-label="Prompt mode"
-              className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden"
-            >
-              <button
-                role="tab"
-                aria-selected={mode === 'generate'}
-                className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-white text-muted'}`}
-                onClick={() => {
-                  userPickedModeRef.current = true
-                  setMode('generate')
-                }}
-              >
-                Generate
-              </button>
-              <button
-                role="tab"
-                aria-selected={mode === 'refine'}
-                disabled={!designId}
-                title={designId ? '' : 'Generate a layout first'}
-                className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-white text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                onClick={() => {
-                  userPickedModeRef.current = true
-                  setMode('refine')
-                }}
-              >
-                Refine
-              </button>
-              {mode === 'generate' && (
-                <button
-                  type="button"
-                  className="px-3 py-1 bg-white text-muted hover:text-ink border-l border-ink/15"
-                  onClick={() => setShowParams((value) => !value)}
-                  aria-expanded={showParams}
-                >
-                  {showParams ? 'Hide params' : 'Plot params'}
-                </button>
-              )}
-            </div>
-            {mode === 'generate' && showParams && (
-              <div className="flex gap-3 items-end text-xs text-muted">
-                <label className="flex flex-col gap-1">
-                  Plot width (m)
-                  <input
-                    type="number"
-                    min={4}
-                    max={40}
-                    step={0.5}
-                    placeholder="auto"
-                    className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    value={plotWidthM}
-                    onChange={(e) => setPlotWidthM(e.target.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  Floors
-                  <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    placeholder="auto"
-                    className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    value={floorsOverride}
-                    onChange={(e) => setFloorsOverride(e.target.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  Entry faces
-                  <select
-                    className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-                    value={orientation}
-                    onChange={(e) => setOrientation(e.target.value as typeof orientation)}
-                  >
-                    <option value="">auto</option>
-                    <option value="S">South</option>
-                    <option value="N">North</option>
-                    <option value="E">East</option>
-                    <option value="W">West</option>
-                  </select>
-                </label>
-                <span className="text-muted-light pb-1">Leave blank to infer from the prompt</span>
-              </div>
-            )}
-            <div className="flex gap-2 items-end">
-              <textarea
-                aria-label="Layout prompt"
-                className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
-                rows={2}
-                placeholder={
-                  mode === 'refine'
-                    ? "Refine your layout… e.g. 'add a bedroom', 'remove the office', 'make the kitchen bigger'"
-                    : 'Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room'
-                }
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value)
-                  setRefinementSummary(null)
-                }}
-                disabled={generating}
-              />
-              <button
-                aria-busy={generating}
-                className="bg-brand-600 hover:bg-brand-500 disabled:bg-brand-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
-                onClick={handleSubmit}
-                disabled={generating || !prompt.trim()}
-              >
-                {generating
-                  ? mode === 'refine' ? 'Refining…' : 'Generating…'
-                  : mode === 'refine' ? 'Refine' : 'Generate'}
-              </button>
-            </div>
-            {generateError && <p className="text-xs text-red-500">{generateError}</p>}
-          </div>
         </div>
       </main>
 
