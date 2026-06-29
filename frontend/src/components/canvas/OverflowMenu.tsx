@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscapeToClose } from '../../hooks/useEscapeToClose'
 
 interface OverflowMenuProps {
   onHistory: () => void
@@ -36,6 +37,7 @@ export function OverflowMenu({
   deleteError,
 }: OverflowMenuProps) {
   const [open, setOpen] = useState(false)
+  useEscapeToClose(open, () => setOpen(false))
 
   const exportsDisabled = roomCount === 0 || exportingImage || exportingPdf
 

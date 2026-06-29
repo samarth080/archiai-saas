@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SaveStatus, useCanvasStore } from '../../store/canvasStore'
+import { useEscapeToClose } from '../../hooks/useEscapeToClose'
 
 interface SavePopoverProps {
   designId: string | null
@@ -38,6 +39,7 @@ export function SavePopover({
   onSave,
 }: SavePopoverProps) {
   const [open, setOpen] = useState(false)
+  useEscapeToClose(open, () => setOpen(false))
   const saveStatus = useCanvasStore((s) => s.saveStatus)
   const lastSavedAt = useCanvasStore((s) => s.lastSavedAt)
 

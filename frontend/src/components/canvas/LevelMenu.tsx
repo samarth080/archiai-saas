@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
+import { useEscapeToClose } from '../../hooks/useEscapeToClose'
 
 export function LevelMenu() {
   const [open, setOpen] = useState(false)
+  useEscapeToClose(open, () => setOpen(false))
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const setSelectedFloor = useCanvasStore((s) => s.setSelectedFloor)

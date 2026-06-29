@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { LayoutOption } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
+import { useEscapeToClose } from '../../hooks/useEscapeToClose'
 
 function stringMetadata(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
@@ -38,6 +39,7 @@ interface InsightsStripProps {
  */
 export function InsightsStrip({ alternatives, onPickAlternative }: InsightsStripProps) {
   const [open, setOpen] = useState(false)
+  useEscapeToClose(open, () => setOpen(false))
   const metadata = useCanvasStore((s) => s.layoutMetadata)
   const insights = useCanvasStore((s) => s.generationInsights)
 
