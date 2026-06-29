@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: #ECE7DE; font-family: 'Archivo', sans-serif; }
+  .doc-frame { width: 100%; border-collapse: collapse; }
+  .doc-frame td { padding: 0; }
+  .hdr-space, .ftr-space { display: none; }
+  @page { size: letter; margin: 0; }
+  @media print {
+    html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    .doc { max-width: none !important; margin: 0 !important; padding: 0 0.7in !important; box-shadow: none !important; }
+    .hdr-space, .ftr-space { display: table-cell; height: 0.7in; }
+    h1, h2, h3, h4 { break-after: avoid; }
+    figure, pre, blockquote, table, .keep { break-inside: avoid; }
+    p, li { orphans: 3; widows: 3; }
+  }
+</style>
+</helmet>
+<main class="doc" data-screen-label="Archi-AI Build Guide" style="box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#FBF8F2; color:#1B1916; padding:64px clamp(24px,5vw,0.85in) 96px; box-shadow:0 1px 40px rgba(0,0,0,.12); line-height:1.6;">
+<table class="doc-frame" role="presentation"><thead><tr><td class="hdr-space"></td></tr></thead><tbody><tr><td>
+
+  <div style="display:flex; align-items:center; gap:9px; margin-bottom:30px;">
+    <div style="width:28px; height:28px; border-radius:7px; background:linear-gradient(135deg,#E8A33D,#9B6B1E); display:flex; align-items:center; justify-content:center;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 6v12H3V9z"/></svg>
+    </div>
+    <span style="font-weight:800; font-size:15px; letter-spacing:.01em;">ARCHI<span style="color:#C77A1E;">·AI</span></span>
+    <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8A8378;">Build Guide · v1</span>
+  </div>
+
+  <h1 style="font-size:34px; font-weight:800; line-height:1.1; letter-spacing:-0.02em; margin:0 0 14px; text-wrap:balance;">Reverse-engineering the Hypar editor for Archi-AI</h1>
+  <p style="font-size:16px; color:#46423B; margin:0 0 8px; max-width:60ch;">A feature map of what makes the reference interface work, decomposed into modules you can build — plus a paste-ready prompt for your Django + TypeScript stack.</p>
+  <p style="font-size:13px; color:#8A8378; font-family:'IBM Plex Mono',monospace; margin:0 0 36px;">Original design. Patterns are generic CAD/3D-editor conventions — not a clone of any branded UI.</p>
+
+  <!-- POSITIONING -->
+  <div class="keep" style="border:1px solid #E2D9C8; border-left:3px solid #C77A1E; border-radius:10px; padding:18px 22px; margin-bottom:38px; background:#FFFCF6;">
+    <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#C77A1E; font-weight:700; margin-bottom:6px;">The Archi-AI bet</div>
+    <p style="margin:0; font-size:15px; color:#2E2A24;">Keyword-parse a plain-English brief → generate a first-pass layout → let non-architects <strong>sort, drag, resize, and refine</strong> it. The reference tool assumes domain fluency; Archi-AI removes that barrier. Everything below serves that loop.</p>
+  </div>
+
+  <!-- PART 1 -->
+  <h2 style="font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#C77A1E; font-weight:700; margin:0 0 4px;">Part 1</h2>
+  <h2 style="font-size:24px; font-weight:800; margin:0 0 18px; letter-spacing:-0.01em;">Feature map — what to build, by region</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:14px;">
+    <thead>
+      <tr style="text-align:left; border-bottom:2px solid #1B1916;">
+        <th style="padding:8px 10px 8px 0; font-weight:700; width:24%;">UI region</th>
+        <th style="padding:8px 10px; font-weight:700;">What it does &amp; how Archi-AI implements it</th>
+        <th style="padding:8px 0 8px 10px; font-weight:700; width:64px; text-align:center;">Pri</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">3D viewport</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Infinite ground grid with orbit / pan / zoom; building masses and spaces rendered as extruded volumes; click-to-select with hover highlight. <strong>Build with Three.js + OrbitControls.</strong> One ground <code>GridHelper</code>, one <code>Group</code> rebuilt from state, raycaster on pointer-up (ignore drags).</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#C77A1E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P0</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">AI chat panel</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Floating dock with quick-action shortcuts (“Create a space program”, “Add a footprint”, “Upload site plan / DXF”) + free-text input. <strong>The core of Archi-AI.</strong> Submit → parse → generate spaces → animate into the viewport. Keep a “verify results” disclaimer.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#C77A1E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P0</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Space program panel</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Right rail listing space types with color, count, and net area; searchable; reflects selection. Add buttons to re-layout and open a report. Each row selects/zooms its type.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#C77A1E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P0</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Selection gizmo</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">On select, a floating label shows type + area with a dropdown and lock; in-canvas handles edit width/depth/height with live dimension chips. <strong>This is the “refine” half of the loop</strong> — drag handles update the model and re-pack neighbours.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#3F7D6E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P1</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Top bar &amp; views</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Project name, option switcher, 2D/3D toggle, camera mode (Perspective / walk), units toggle, and a live “Net Area Placed” metric. 2D = top-down locked camera; 3D = orbiting perspective.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#3F7D6E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P1</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Tool dock</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Bottom-center toolbar to place primitives manually: building mass, space, wall, level, image/site, grid, door, measure. Manual fallback for everything the AI drafts.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#3F7D6E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P1</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Levels / floors</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Per-level layout switching (“Level 1 / Level 2”) so a program stacks across floors. Each level holds its own spaces; viewport filters by active level.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#3F7D6E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P1</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Reports &amp; metrics</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Net area, space counts, gross footprint, efficiency %. Export a program schedule (CSV/PDF). Surface live in a side card.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#3F7D6E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P1</span></td></tr>
+      <tr style="border-bottom:1px solid #E2D9C8;"><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Dashboard / files</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Project grid with plan-thumbnail cards, new/open/duplicate/delete, a hero “describe your building” prompt, plan import (DXF), and sharing. Entry point to the editor.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#C77A1E; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P0</span></td></tr>
+      <tr><td style="padding:11px 10px 11px 0; vertical-align:top; font-weight:600;">Collaboration</td><td style="padding:11px 10px; vertical-align:top; color:#46423B;">Multiple design “options” per project, share links, presence avatars. Defer real-time multiplayer; ship options + share first.</td><td style="padding:11px 0 11px 10px; text-align:center; vertical-align:top;"><span style="background:#8A8378; color:#fff; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;">P2</span></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:12px; color:#8A8378; margin:0 0 38px;">P0 = ships the core demo · P1 = makes it usable · P2 = later.</p>
+
+  <!-- PART 2 -->
+  <h2 style="font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#C77A1E; font-weight:700; margin:0 0 4px;">Part 2</h2>
+  <h2 style="font-size:24px; font-weight:800; margin:0 0 16px; letter-spacing:-0.01em;">Visual identity &amp; data model</h2>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px;">
+    <div class="keep" style="border:1px solid #E2D9C8; border-radius:10px; padding:16px 18px; background:#FFFCF6;">
+      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#8A8378; font-weight:700; margin-bottom:10px;">Tokens</div>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.9; color:#2E2A24;">
+        <div>bg <span style="color:#8A8378;">#121110</span> &nbsp; surface <span style="color:#8A8378;">#1A1815</span></div>
+        <div>ink <span style="color:#8A8378;">#F2EEE6</span> &nbsp; muted <span style="color:#8A8378;">#9C968B</span></div>
+        <div>accent <span style="color:#8A8378;">#E8A33D</span></div>
+        <div style="margin-top:6px;">type — Archivo + IBM Plex Mono</div>
+        <div>radius 9–14px · glass blur 12px</div>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:12px;">
+        <span style="width:26px; height:26px; border-radius:6px; background:#E8A33D;"></span>
+        <span style="width:26px; height:26px; border-radius:6px; background:#6FB6A6;"></span>
+        <span style="width:26px; height:26px; border-radius:6px; background:#D98C7A;"></span>
+        <span style="width:26px; height:26px; border-radius:6px; background:#9B8FC7;"></span>
+        <span style="width:26px; height:26px; border-radius:6px; background:#7FA8D9;"></span>
+        <span style="width:26px; height:26px; border-radius:6px; background:#8A8378;"></span>
+      </div>
+      <div style="font-size:11px; color:#8A8378; margin-top:8px;">Space-type palette (workplace / meeting / lobby / amenity / lab / support)</div>
+    </div>
+    <div class="keep" style="border:1px solid #E2D9C8; border-radius:10px; padding:16px 18px; background:#FFFCF6;">
+      <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#8A8378; font-weight:700; margin-bottom:10px;">Django models</div>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.8; color:#2E2A24;">
+        <div><b>Project</b> name, owner, units</div>
+        <div><b>Option</b> → Project, label</div>
+        <div><b>Level</b> → Option, name, elev</div>
+        <div><b>Footprint</b> → Level, polygon</div>
+        <div><b>SpaceType</b> name, color, default_area</div>
+        <div><b>Space</b> → Level, type, w, d, h, x, y</div>
+      </div>
+      <div style="font-size:11px; color:#8A8378; margin-top:10px;">DRF serializers per model; the editor reads/writes <code>Space</code> rows.</div>
+    </div>
+  </div>
+
+  <div class="keep" style="border:1px solid #E2D9C8; border-radius:10px; padding:16px 18px; margin-bottom:40px; background:#FFFCF6;">
+    <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#8A8378; font-weight:700; margin-bottom:10px;">Keyword parser — the generation core</div>
+    <p style="margin:0 0 10px; font-size:13.5px; color:#46423B;">Split the brief on commas / “and” / newlines into phrases. For each phrase: extract a count (digit or number-word, default 1), match the first keyword against a space-type lexicon, emit N spaces with that type’s default area (± variance), and shelf-pack them into the footprint. Auto-grow the footprint depth to fit.</p>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#2E2A24; background:#F1EADC; border-radius:7px; padding:10px 12px;">“12 offices, a lobby, 4 meeting rooms, a kitchen” → 12 Workplace · 1 Lobby · 4 Meeting · 1 Amenity</div>
+    <p style="margin:10px 0 0; font-size:12px; color:#8A8378;">Ship rules-based first (instant, free, deterministic). Swap the parser for an LLM call later behind the same interface — return the same <code>Space[]</code> shape.</p>
+  </div>
+
+  <!-- PART 3 -->
+  <h2 style="font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#C77A1E; font-weight:700; margin:0 0 4px;">Part 3</h2>
+  <h2 style="font-size:24px; font-weight:800; margin:0 0 8px; letter-spacing:-0.01em;">The integration prompt</h2>
+  <p style="font-size:14px; color:#46423B; margin:0 0 16px;">Paste this into your dev workflow (Cursor / Claude Code / etc). It targets a Django + TypeScript codebase and references the two reference designs shipped alongside this guide.</p>
+
+  <pre style="white-space:pre-wrap; font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.65; color:#E8E2D6; background:#1B1916; border-radius:12px; padding:22px 22px; margin:0 0 36px; overflow-x:auto;">Build the front-end for "Archi-AI", an AI-assisted space-planning
+tool for non-architects. Stack: Django (DRF) backend, TypeScript on
+the front end, Three.js for the 3D viewport. Match the two reference
+designs (Dashboard + Editor) exactly for layout, identity, and tone.
+
+PRODUCT
+A user describes a building in plain English. We keyword-parse the
+brief into a space program, generate a draft layout in 3D, and let
+them refine it by sorting, dragging, resizing, and deleting spaces.
+Audience has no architecture background — keep language plain and the
+loop forgiving.
+
+VISUAL IDENTITY (do not deviate)
+- Background #121110, surfaces #1A1815, ink #F2EEE6, muted #9C968B.
+- Single accent: amber #E8A33D. Space-type palette: Workplace
+  #E8A33D, Meeting #6FB6A6, Lobby #D98C7A, Amenity #9B8FC7, Lab
+  #7FA8D9, Support #8A8378.
+- Type: Archivo (UI/headings), IBM Plex Mono (numbers, areas, tags).
+- Floating glass panels (blur 12px, 1px hairline border, radius
+  9–14px). No gradients on UI chrome, no emoji. Bold and precise.
+
+SCREENS
+1. Dashboard: left nav (Projects/Templates/Shared/Site plans/Trash),
+   a hero "describe your building" prompt that routes to the editor,
+   and a responsive grid of project cards. Each card has a plan-style
+   thumbnail (dashed plot boundary + colored space blocks), net area,
+   levels, options, last-edited, and presence avatars.
+2. Editor: full-bleed Three.js viewport; top bar (project name,
+   option switcher, 2D/3D toggle, Perspective + walk, units, live
+   "Net Area Placed"); bottom-left AI chat panel; right "Space
+   Program" rail; bottom-center tool dock; selection gizmo on click.
+
+VIEWPORT (Three.js)
+- Ground GridHelper, hemisphere + 2 directional lights, OrbitControls
+  with damping, maxPolarAngle ~ PI/2, preserveDrawingBuffer:true.
+- Render the footprint as a thin slab + amber edge outline, each
+  space as an extruded BoxGeometry (color by type, opacity 0.9) with
+  dark EdgesGeometry. Rebuild a single Group from state on change.
+- Click = raycast on pointer-up only if pointer didn't drag (>5px).
+- Selected space: amber emissive + amber edges; others dim to 0.5.
+- 2D view = top-down locked camera (enableRotate=false); 3D = orbit.
+
+GENERATION (the core)
+- Parser: split brief on comma / "and" / newline; per phrase read a
+  leading count (digit or word: a/one..twelve, default 1), match a
+  keyword lexicon to a space type, emit N spaces sized from the
+  type's default area * (0.85–1.15) variance. Cap totals (~90).
+- Layout: shelf-pack rectangles left→right within footprint width
+  with a 5ft gap, wrap rows, auto-grow footprint depth to fit.
+- Show a brief generating state (~0.75s), then animate spaces in and
+  frame the camera. Always show "AI drafts a starting point. Verify."
+- Keep the parser behind one function returning Space[] so it can be
+  swapped for a backend/LLM endpoint later with no UI change.
+
+REFINE
+- Spaces panel: grouped by type with color dot, count, net area;
+  searchable; clicking a row selects/zooms that type. Re-layout
+  (reshuffle + repack) and Report buttons.
+- Gizmo: floating label (type dropdown + area + lock) + in-canvas
+  handles that resize w/d/h with live dimension chips; edits update
+  the model and re-pack neighbours. Drag-reorder + delete in panel.
+- Report card: total spaces, space types, net area, gross footprint,
+  efficiency %. Export schedule as CSV/PDF.
+
+DATA / API (Django + DRF)
+- Models: Project, Option(FK Project), Level(FK Option),
+  Footprint(FK Level, polygon), SpaceType(name,color,default_area),
+  Space(FK Level, FK SpaceType, w,d,h,x,y).
+- Endpoints: CRUD for projects/options/levels/spaces;
+  POST /api/projects/{id}/generate {brief} -> Space[] (parser runs
+  server-side, persisted to the active Level/Option).
+- Front end: typed API client (fetch + TS interfaces mirroring the
+  serializers); optimistic updates on drag/resize, debounced PATCH.
+
+QUALITY BAR
+- 60fps orbit with ~100 spaces; viewport resizes with the window.
+- Keyboard: Enter submits chat (Shift+Enter newline), Esc clears
+  selection, Delete removes selected space.
+- Accessible: focus states, 44px min hit targets, aria labels on
+  icon buttons. Responsive down to a tablet width.
+- No "AI slop": no purple gradients, no decorative emoji, no stat
+  tiles that don't mean anything. Every element earns its place.
+
+REPO HYGIENE
+- Commits and PRs must NOT add Claude / AI as a co-author,
+  Co-authored-by trailer, or collaborator. Author = me only.</pre>
+
+  <div class="keep" style="border-top:1px solid #E2D9C8; padding-top:18px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+    <span style="font-size:12px; color:#8A8378; font-family:'IBM Plex Mono',monospace;">Ships with: Archi-AI Editor.dc.html · Archi-AI Dashboard.dc.html</span>
+    <span style="font-size:12px; color:#8A8378;">Build order → Dashboard shell → Editor + viewport → Generation → Refine → Reports</span>
+  </div>
+
+</td></tr></tbody><tfoot><tr><td class="ftr-space"></td></tr></tfoot></table>
+</main>
+</x-dc>
+</body>
+</html>
