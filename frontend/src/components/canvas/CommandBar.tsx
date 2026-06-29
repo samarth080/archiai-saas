@@ -154,7 +154,9 @@ export function CommandBar({
               onClick={onSubmit}
               disabled={generating || !prompt.trim()}
             >
-              {generating ? 'Generating…' : 'Generate'}
+              {generating
+                ? mode === 'refine' ? 'Refining…' : 'Generating…'
+                : mode === 'refine' ? 'Refine' : 'Generate'}
             </button>
           </div>
         </div>

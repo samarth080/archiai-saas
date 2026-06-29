@@ -13,7 +13,9 @@ export function DraftToast({ visible, onRecover, onDismiss }: DraftToastProps) {
       aria-live="polite"
       className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-amber-200 bg-amber-50/95 backdrop-blur px-4 py-2 shadow-sm"
     >
-      <p className="text-xs font-medium text-amber-800">Unsaved draft found</p>
+      <p className="text-xs font-medium text-amber-800">
+        Unsaved draft found. You can recover your last auto-saved changes.
+      </p>
       <button
         type="button"
         onClick={onRecover}

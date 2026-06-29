@@ -25,7 +25,6 @@ vi.mock('../../hooks/useAuth', () => ({
 
 vi.mock('../../components/canvas/Canvas3D', () => ({ Canvas3D: () => null }))
 vi.mock('../../components/canvas/Inspector', () => ({ Inspector: () => null }))
-vi.mock('../../components/canvas/EditorToolbar', () => ({ EditorToolbar: () => null }))
 
 vi.mock('../../services/project.service', () => ({
   default: {
@@ -276,8 +275,8 @@ describe('ProjectPage refine flow', () => {
     await user.type(await screen.findByLabelText('Layout prompt'), 'apartment with bedroom')
     await user.click(screen.getByRole('button', { name: 'Generate' }))
 
-    expect(await screen.findByText('Alternatives')).toBeInTheDocument()
-    expect(screen.getByText('90')).toBeInTheDocument()
+    const altChip = await screen.findByRole('button', { name: /1 alternative/ })
+    await user.click(altChip)
     expect(screen.getByText('BSP partition')).toBeInTheDocument()
 
     await user.click(screen.getByText('BSP partition'))
@@ -384,18 +383,20 @@ describe('ProjectPage refine flow', () => {
 describe('ProjectPage history drawer', () => {
   it('opens the version history drawer when the History button is clicked', async () => {
     renderProjectPage()
+    const user = userEvent.setup()
 
-    const historyButton = await screen.findByRole('button', { name: 'History' })
-    await userEvent.click(historyButton)
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('button', { name: 'History' }))
 
     expect(screen.getByRole('dialog', { name: 'Version history' })).toBeInTheDocument()
   })
 
   it('closes the version history drawer when the close button is clicked', async () => {
     renderProjectPage()
+    const user = userEvent.setup()
 
-    const historyButton = await screen.findByRole('button', { name: 'History' })
-    await userEvent.click(historyButton)
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('button', { name: 'History' }))
 
     const closeButton = screen.getByRole('button', { name: 'Close history' })
     await userEvent.click(closeButton)
@@ -407,9 +408,10 @@ describe('ProjectPage history drawer', () => {
 
   it('opens the activity drawer when the Activity button is clicked', async () => {
     renderProjectPage()
+    const user = userEvent.setup()
 
-    const activityButton = await screen.findByRole('button', { name: 'Activity' })
-    await userEvent.click(activityButton)
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    await user.click(screen.getByRole('button', { name: 'Activity' }))
 
     expect(screen.getByRole('dialog', { name: 'Project activity' })).toBeInTheDocument()
   })
@@ -443,7 +445,7 @@ describe('ProjectPage draft recovery banner', () => {
 
     renderProjectPage()
 
-    await screen.findByRole('button', { name: 'History' })
+    await screen.findByText('Test Project')
     await waitFor(() =>
       expect(
         screen.queryByText('Unsaved draft found. You can recover your last auto-saved changes.'),
