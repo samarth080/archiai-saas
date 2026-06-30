@@ -134,6 +134,71 @@ async def test_update_project_success(client: AsyncClient):
     assert data["description"] == "Updated"
 
 
+async def test_update_project_thumbnail_url(client: AsyncClient):
+    token = await _register_and_token(client, "thumb_proj@example.com")
+    created = await client.post(
+        "/api/projects",
+        json={"title": "Thumb Project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = created.json()["id"]
+
+    response = await client.put(
+        f"/api/projects/{project_id}",
+        json={"thumbnail_url": "data:image/png;base64,abc123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["thumbnail_url"] == "data:image/png;base64,abc123"
+
+
+async def test_update_project_thumbnail_only_does_not_log_activity(client: AsyncClient):
+    token = await _register_and_token(client, "thumb_silent@example.com")
+    created = await client.post(
+        "/api/projects",
+        json={"title": "Silent Thumb Project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = created.json()["id"]
+
+    await client.put(
+        f"/api/projects/{project_id}",
+        json={"thumbnail_url": "data:image/png;base64,abc123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project_id}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    actions = [e["action"] for e in response.json()]
+    assert "project.updated" not in actions
+    assert actions == ["project.created"]
+
+
+async def test_update_project_title_still_logs_activity(client: AsyncClient):
+    token = await _register_and_token(client, "title_logs@example.com")
+    created = await client.post(
+        "/api/projects",
+        json={"title": "Loud Project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = created.json()["id"]
+
+    await client.put(
+        f"/api/projects/{project_id}",
+        json={"title": "Renamed Project"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get(
+        f"/api/projects/{project_id}/activity",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    actions = [e["action"] for e in response.json()]
+    assert actions == ["project.updated", "project.created"]
+
+
 async def test_delete_project_success(client: AsyncClient):
     token = await _register_and_token(client, "delete_proj@example.com")
     created = await client.post(

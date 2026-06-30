@@ -39,6 +39,12 @@ function captureCanvasThumbnail() {
   }
 }
 
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
 function exportFileName(projectTitle: string, extension: string) {
   const safeTitle = projectTitle
     .trim()
@@ -198,6 +204,27 @@ export default function ProjectPage() {
 
   useAutoSave({ designId, enabled: Boolean(designId) })
 
+  // Refreshes the Dashboard-card thumbnail right after Generate/Refine, not
+  // just on manual Save Layout — Generate already persists a Design behind
+  // the scenes, so a project can otherwise sit with no real preview
+  // indefinitely if the user never clicks Save. Fire-and-forget: waits one
+  // paint for the new layout to actually render, then best-effort uploads
+  // it without blocking or failing the generation flow.
+  const refreshThumbnailAfterGenerate = () => {
+    if (!id) return
+    void (async () => {
+      await waitForNextPaint()
+      const thumbnailUrl = captureCanvasThumbnail()
+      if (!thumbnailUrl) return
+      try {
+        await projectService.update(id, { thumbnail_url: thumbnailUrl })
+        setProject((current) => (current ? { ...current, thumbnail_url: thumbnailUrl } : current))
+      } catch (err) {
+        console.warn('Failed to refresh project thumbnail', err)
+      }
+    })()
+  }
+
   const handleSubmit = async () => {
     if (!prompt.trim()) return
     setGenerating(true)
@@ -212,6 +239,7 @@ export default function ProjectPage() {
         setRefinementSummary(result.refinementSummary)
         setAlternatives([])
         setPrompt('')
+        refreshThumbnailAfterGenerate()
       } else {
         const designParams = {
           plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
@@ -228,6 +256,7 @@ export default function ProjectPage() {
         setRecoveredDraftAvailable(false)
         setRefinementSummary(null)
         setAlternatives(result.alternatives ?? [])
+        refreshThumbnailAfterGenerate()
       }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }

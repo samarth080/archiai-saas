@@ -83,16 +83,22 @@ async def update_project(
         project.title = data.title
     if data.description is not None:
         project.description = data.description
+    if data.thumbnail_url is not None:
+        project.thumbnail_url = data.thumbnail_url
     project.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(project)
-    await log_activity(
-        db,
-        user_id,
-        "project.updated",
-        project_id=project_id,
-        workspace_id=project.workspace_id,
-    )
+    # A silent thumbnail refresh (e.g. after Generate) isn't a user-initiated
+    # edit worth logging — only log when something else also changed.
+    only_thumbnail_changed = bool(data.model_fields_set) and data.model_fields_set <= {"thumbnail_url"}
+    if not only_thumbnail_changed:
+        await log_activity(
+            db,
+            user_id,
+            "project.updated",
+            project_id=project_id,
+            workspace_id=project.workspace_id,
+        )
     return ProjectOut.model_validate(project)
 
 
