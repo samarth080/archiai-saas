@@ -54,33 +54,33 @@ export function ActivityDrawer({ projectId, open, onClose }: Props) {
         aria-label="Project activity"
         className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
       >
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-gray-900">Activity</h2>
+        <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">Activity</h2>
           <button
             type="button"
             aria-label="Close activity"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-light hover:text-muted"
           >
             ✕
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-          {loading && <p className="text-sm text-gray-400">Loading…</p>}
+          {loading && <p className="text-sm text-muted-light">Loading…</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}
           {!loading && !error && entries.length === 0 && (
-            <p className="text-sm text-gray-400">No activity yet.</p>
+            <p className="text-sm text-muted-light">No activity yet.</p>
           )}
           {entries.map((e) => (
             <div
               key={e.id}
-              className="rounded border border-gray-200 p-3 flex flex-col gap-0.5"
+              className="rounded-xl border border-ink/10 p-3 flex flex-col gap-0.5"
             >
-              <span className="text-sm font-medium text-gray-800">
+              <span className="text-sm font-medium text-ink/80">
                 {activityLabel(e.action)}
               </span>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-muted-light font-mono">
                 {formatRelative(e.timestamp)}
               </span>
             </div>

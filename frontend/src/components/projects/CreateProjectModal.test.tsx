@@ -34,13 +34,11 @@ describe('CreateProjectModal', () => {
     render(<CreateProjectModal onClose={vi.fn()} onCreated={onCreated} />)
 
     await user.type(screen.getByLabelText('Title'), '  New Project  ')
-    await user.type(screen.getByLabelText(/Description/), '  Demo  ')
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() =>
       expect(projectService.create).toHaveBeenCalledWith({
         title: 'New Project',
-        description: 'Demo',
       })
     )
     expect(onCreated).toHaveBeenCalledWith(projectFixture)

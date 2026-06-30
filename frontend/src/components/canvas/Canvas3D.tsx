@@ -51,6 +51,10 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
           deleteRoom(selectedId)
         }
       }
+
+      if (event.key === 'Escape') {
+        useCanvasStore.getState().deselectAll()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)

@@ -283,6 +283,51 @@ describe('addObject', () => {
   })
 })
 
+describe('floor actions', () => {
+  it('addFloorAbove pushes a new floor above the current top and selects it', () => {
+    const store = useCanvasStore.getState()
+    store.addFloorAbove()
+
+    const state = useCanvasStore.getState()
+    expect(state.floors.map((f) => f.level)).toEqual([0, 1])
+    expect(state.selectedFloor).toBe(1)
+    expect(state.floors[1].elevation).toBe(DEFAULT_FLOOR_HEIGHT)
+    expect(state.selectedId).toBeNull()
+  })
+
+  it('addFloorBelow pushes a new floor below the current bottom and selects it', () => {
+    const store = useCanvasStore.getState()
+    store.addFloorBelow()
+
+    const state = useCanvasStore.getState()
+    expect(state.floors.map((f) => f.level)).toEqual([0, -1])
+    expect(state.selectedFloor).toBe(-1)
+    expect(state.floors[1].elevation).toBe(-DEFAULT_FLOOR_HEIGHT)
+  })
+
+  it('removeFloor deletes the floor and its rooms, falling back to another floor', () => {
+    const store = useCanvasStore.getState()
+    store.addFloorAbove()
+    store.setSelectedFloor(1)
+    store.addObject('room')
+
+    store.removeFloor(1)
+
+    const state = useCanvasStore.getState()
+    expect(state.floors.map((f) => f.level)).toEqual([0])
+    expect(state.rooms.some((r) => r.floorLevel === 1)).toBe(false)
+    expect(state.selectedFloor).toBe(0)
+  })
+
+  it('removeFloor is a no-op when only one floor remains', () => {
+    const store = useCanvasStore.getState()
+    store.removeFloor(0)
+
+    const state = useCanvasStore.getState()
+    expect(state.floors).toHaveLength(1)
+  })
+})
+
 describe('loadRooms', () => {
   it('replaces all rooms and clears selectedId', () => {
     const store = useCanvasStore.getState()

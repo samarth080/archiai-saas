@@ -65,6 +65,7 @@ export interface UpdateProjectData {
   title?: string
   description?: string
   workspace_id?: string | null
+  thumbnail_url?: string
 }
 
 const projectService = {

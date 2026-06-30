@@ -30,6 +30,7 @@ class ProjectUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     workspace_id: str | None = None
+    thumbnail_url: str | None = None
 
     @field_validator("title")
     @classmethod

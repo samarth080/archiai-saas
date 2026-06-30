@@ -24,7 +24,6 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
     try {
       const project = await projectService.create({
         title: data.title.trim(),
-        description: data.description?.trim() || undefined,
         ...(workspaceId ? { workspace_id: workspaceId } : {}),
       })
       onCreated(project)
@@ -35,8 +34,8 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">New Project</h2>
+      <div className="bg-white/95 backdrop-blur rounded-xl p-6 w-full max-w-md">
+        <h2 className="text-lg font-semibold text-ink mb-4">New Project</h2>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
             label="Title"
@@ -46,19 +45,9 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
               minLength: { value: 1, message: 'Title is required' },
             })}
           />
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-              Description{' '}
-              <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              id="description"
-              {...register('description')}
-              rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-              placeholder="Describe your project..."
-            />
-          </div>
+          <p className="text-xs text-muted-light -mt-2">
+            You'll describe what to build next, on the project's own page.
+          </p>
           {submitError && (
             <p className="text-sm text-red-600">{submitError}</p>
           )}

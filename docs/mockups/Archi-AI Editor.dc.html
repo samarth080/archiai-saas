@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Archivo', sans-serif; }
+  .ax-mono { font-family: 'IBM Plex Mono', monospace; }
+  ::-webkit-scrollbar { width: 7px; }
+  ::-webkit-scrollbar-thumb { background: rgba(40,33,64,.16); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @keyframes ax-spin { to { transform: rotate(360deg); } }
+  @keyframes ax-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes ax-menu { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  textarea::placeholder { color: #A8A4B6; }
+  .ax-tool { position: relative; display: flex; }
+  .ax-tool .ax-tip { opacity: 0; pointer-events: none; transition: opacity .13s ease; }
+  .ax-tool:hover .ax-tip { opacity: 1; }
+</style>
+</helmet>
+<div data-screen-label="Archi-AI Editor" style="position:relative; width:100vw; height:100vh; overflow:hidden; background:#F2F1F7; color:#26222F; font-family:'Archivo',sans-serif; user-select:none;">
+
+  <!-- 3D viewport -->
+  <div ref="{{ setViewportRef }}" style="position:absolute; inset:0; z-index:0;"></div>
+
+  <!-- click-away backdrop for level menu -->
+  <sc-if value="{{ levelMenuOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeLevelMenu }}" style="position:absolute; inset:0; z-index:40;"></div>
+  </sc-if>
+
+  <!-- TOP BAR — minimal, transparent -->
+  <div style="position:absolute; top:0; left:0; right:0; z-index:41; display:flex; align-items:center; justify-content:space-between; padding:22px 28px; pointer-events:none;">
+    <div style="display:flex; align-items:center; gap:14px; pointer-events:auto;">
+      <div style="display:flex; align-items:baseline; gap:1px;">
+        <span style="font-weight:800; letter-spacing:.04em; font-size:15px;">ARCHI</span><span style="font-weight:800; letter-spacing:.04em; font-size:15px; color:#7A6CD6;">·AI</span>
+      </div>
+      <span style="width:1px; height:14px; background:rgba(40,33,64,.16);"></span>
+      <button style="display:flex; align-items:center; gap:6px; background:none; border:none; color:#56525F; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; padding:0;" style-hover="color:#26222F;">
+        Riverside Office
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <span style="width:1px; height:14px; background:rgba(40,33,64,.16);"></span>
+
+      <!-- LEVEL SELECTOR -->
+      <div style="position:relative;">
+        <button onClick="{{ toggleLevelMenu }}" style="{{ levelPillStyle }}" style-hover="background:rgba(255,255,255,.95);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7A6CD6" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>
+          <span style="font-size:13px; font-weight:600;">{{ activeLevelName }}</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#9A95A8;"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <sc-if value="{{ levelMenuOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; top:40px; left:0; width:188px; background:#FFFFFF; border:1px solid rgba(40,33,64,.1); border-radius:13px; padding:6px; box-shadow:0 18px 44px rgba(70,58,120,.22); z-index:42; animation:ax-menu .14s ease;">
+            <button onClick="{{ addUpper }}" style="{{ menuAddStyle }}" style-hover="background:rgba(122,108,214,.08); color:#7A6CD6;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Upper level
+            </button>
+            <sc-for list="{{ menuLevels }}" as="m" hint-placeholder-count="2">
+              <button onClick="{{ m.select }}" style="{{ m.style }}" style-hover="background:rgba(122,108,214,.08);">
+                <span style="width:16px; display:flex; justify-content:center; flex-shrink:0;">
+                  <sc-if value="{{ m.active }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A6CD6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></sc-if>
+                </span>
+                <span style="font-size:13px; font-weight:{{ m.weight }};">{{ m.name }}</span>
+              </button>
+            </sc-for>
+            <button onClick="{{ addLower }}" style="{{ menuAddStyle }}" style-hover="background:rgba(122,108,214,.08); color:#7A6CD6;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Lower level
+            </button>
+            <div style="height:1px; background:rgba(40,33,64,.08); margin:5px 6px;"></div>
+            <button onClick="{{ deleteLevel }}" style="{{ menuEditStyle }}" style-hover="{{ menuEditHover }}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+              {{ editLabel }}
+            </button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:22px; pointer-events:auto;">
+      <div style="display:flex; align-items:baseline; gap:9px;">
+        <span style="font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:#9A95A8;">Net area</span>
+        <span class="ax-mono" style="font-size:14px; font-weight:600; color:#7A6CD6;">{{ netAreaLabel }}</span>
+      </div>
+      <div style="display:flex; align-items:center; background:rgba(255,255,255,.7); border:1px solid rgba(40,33,64,.1); border-radius:8px; padding:2px;">
+        <button onClick="{{ setView2D }}" class="ax-mono" style="{{ view2dStyle }}">2D</button>
+        <button onClick="{{ setView3D }}" class="ax-mono" style="{{ view3dStyle }}">3D</button>
+      </div>
+      <div style="width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg,#8B7EE0,#6354B8); border:1px solid rgba(255,255,255,.7); box-shadow:0 2px 8px rgba(80,65,150,.25);"></div>
+    </div>
+  </div>
+
+  <!-- minimal left tool rail -->
+  <div style="position:absolute; left:24px; top:50%; transform:translateY(-50%); z-index:15; display:flex; flex-direction:column; gap:2px;">
+    <sc-for list="{{ tools }}" as="t" hint-placeholder-count="4">
+      <div class="ax-tool">
+        <button style="{{ t.style }}" style-hover="background:rgba(122,108,214,.12); color:#7A6CD6;"><span style="display:flex;">{{ t.icon }}</span></button>
+        <div class="ax-tip" style="position:absolute; left:48px; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:8px; white-space:nowrap; background:#26222F; color:#fff; border-radius:9px; padding:7px 10px 7px 12px; box-shadow:0 8px 22px rgba(40,33,64,.28);">
+          <span style="position:absolute; left:-4px; top:50%; width:9px; height:9px; background:#26222F; transform:translateY(-50%) rotate(45deg); border-radius:2px;"></span>
+          <span style="font-size:12px; font-weight:600;">{{ t.label }}</span>
+          <sc-if value="{{ t.shortcut }}" hint-placeholder-val="{{ false }}"><span class="ax-mono" style="font-size:10px; font-weight:600; color:#26222F; background:#fff; border-radius:4px; padding:2px 5px;">{{ t.shortcut }}</span></sc-if>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- empty-site label (hero only) -->
+  <sc-if value="{{ heroMode }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-188px); z-index:11; text-align:center; pointer-events:none;">
+      <div class="ax-mono" style="font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:#9A95A8;">Empty site · 124′ × 80′</div>
+    </div>
+  </sc-if>
+
+  <!-- HERO COMPOSER — the entry point -->
+  <sc-if value="{{ heroMode }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-90px); z-index:13; width:560px; max-width:calc(100vw - 80px);">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; padding-left:4px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A6CD6" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.2 5.3L20 9l-4 3.7L17 18l-5-2.8L7 18l1-5.3L4 9l5.8-.7z"/></svg>
+        <span style="font-size:13px; font-weight:600; letter-spacing:.02em; color:#56525F;">Describe {{ activeLevelName }} to begin</span>
+      </div>
+      <div style="background:rgba(255,255,255,.86); backdrop-filter:blur(18px); border:1px solid {{ heroBorder }}; border-radius:18px; padding:18px 18px 14px; box-shadow:0 24px 60px rgba(70,58,120,.16);">
+        <textarea ref="{{ setInputRef }}" onKeyDown="{{ onPromptKey }}" onFocus="{{ onFocus }}" onBlur="{{ onBlur }}" placeholder="A two-storey office with 12 desks, a lobby, 4 meeting rooms, a kitchen and 2 restrooms…" rows="3" style="width:100%; resize:none; background:none; border:none; outline:none; color:#26222F; font-family:'Archivo',sans-serif; font-size:16px; line-height:1.5; padding:0; margin:0;"></textarea>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:14px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#9A95A8; font-size:11px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+            AI drafts a starting point — refine it after.
+          </div>
+          <button onClick="{{ generate }}" style="display:flex; align-items:center; gap:7px; background:#7A6CD6; border:none; border-radius:10px; padding:10px 18px; color:#fff; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(122,108,214,.35);" style-hover="background:#8B7EE0;">
+            <sc-if value="{{ generating }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:ax-spin .8s linear infinite;"><path d="M12 3a9 9 0 1 0 9 9" stroke-linecap="round"/></svg></sc-if>
+            <sc-if value="{{ notGenerating }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></sc-if>
+            Generate
+          </button>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:14px; padding-left:2px; flex-wrap:wrap;">
+        <span style="font-size:12px; color:#9A95A8;">Try:</span>
+        <sc-for list="{{ quickStarts }}" as="q" hint-placeholder-count="4">
+          <button onClick="{{ q.go }}" style="background:rgba(255,255,255,.7); border:1px solid rgba(40,33,64,.1); border-radius:20px; padding:6px 14px; color:#56525F; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer;" style-hover="background:rgba(122,108,214,.12); border-color:rgba(122,108,214,.4); color:#7A6CD6;">{{ q.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- DOCKED COMMAND BAR — persistent after generation -->
+  <sc-if value="{{ dockMode }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; bottom:28px; left:50%; transform:translateX(-50%); z-index:16; width:600px; max-width:calc(100vw - 360px);">
+      <div style="display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.9); backdrop-filter:blur(18px); border:1px solid {{ dockBorder }}; border-radius:14px; padding:7px 7px 7px 16px; box-shadow:0 16px 44px rgba(70,58,120,.18);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A6CD6" stroke-width="1.8" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 3l2.2 5.3L20 9l-4 3.7L17 18l-5-2.8L7 18l1-5.3L4 9l5.8-.7z"/></svg>
+        <textarea ref="{{ setInputRef }}" onKeyDown="{{ onPromptKey }}" onFocus="{{ onFocus }}" onBlur="{{ onBlur }}" placeholder="Refine {{ activeLevelName }}, or describe a new layout…" rows="1" style="flex:1; resize:none; background:none; border:none; outline:none; color:#26222F; font-family:'Archivo',sans-serif; font-size:14px; line-height:1.4; padding:7px 0; margin:0; max-height:80px;"></textarea>
+        <button onClick="{{ generate }}" style="display:flex; align-items:center; justify-content:center; gap:6px; background:#7A6CD6; border:none; border-radius:9px; padding:9px 14px; color:#fff; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; flex-shrink:0;" style-hover="background:#8B7EE0;">
+          <sc-if value="{{ generating }}" hint-placeholder-val="{{ false }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:ax-spin .8s linear infinite;"><path d="M12 3a9 9 0 1 0 9 9" stroke-linecap="round"/></svg></sc-if>
+          <sc-if value="{{ notGenerating }}" hint-placeholder-val="{{ true }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></sc-if>
+          Generate
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- selection gizmo label -->
+  <sc-if value="{{ selectedSpace }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; top:74px; left:50%; transform:translateX(-50%); z-index:18; display:flex; align-items:center; gap:13px; background:rgba(255,255,255,.94); backdrop-filter:blur(14px); border:1px solid rgba(122,108,214,.45); border-radius:11px; padding:8px 8px 8px 14px; box-shadow:0 10px 28px rgba(70,58,120,.2);">
+      <span style="width:10px; height:10px; border-radius:50%; background:{{ selectedColor }};"></span>
+      <span style="font-size:13px; font-weight:600;">{{ selectedType }}</span>
+      <span class="ax-mono" style="font-size:12px; color:#6E6A7A;">{{ selectedAreaLabel }}</span>
+      <button onClick="{{ clearSelection }}" style="background:rgba(40,33,64,.06); border:none; border-radius:7px; padding:5px; cursor:pointer; color:#56525F; display:flex;" style-hover="background:rgba(40,33,64,.12);">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </sc-if>
+
+  <!-- RIGHT PANEL — only when there are spaces, minimal -->
+  <sc-if value="{{ hasSpaces }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; top:74px; right:28px; bottom:104px; width:276px; z-index:15; display:flex; flex-direction:column; animation:ax-rise .3s ease;">
+      <div style="background:rgba(255,255,255,.86); backdrop-filter:blur(16px); border:1px solid rgba(40,33,64,.1); border-radius:16px; padding:16px; display:flex; flex-direction:column; flex:1; min-height:0; box-shadow:0 16px 44px rgba(70,58,120,.12);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <span style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:#8A8595; font-weight:600;">{{ activeLevelName }}</span>
+          <span class="ax-mono" style="font-size:12px; color:#9A95A8;">{{ spaceCount }} spaces</span>
+        </div>
+        <sc-if value="{{ activeEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; display:flex; align-items:center; justify-content:center; text-align:center; color:#A8A4B6; font-size:13px; line-height:1.5; padding:0 10px;">This level is empty.<br>Describe it in the bar below.</div>
+        </sc-if>
+        <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:2px; min-height:0; margin:0 -6px;">
+          <sc-for list="{{ spaceTypes }}" as="g" hint-placeholder-count="5">
+            <div onClick="{{ g.select }}" style="{{ g.rowStyle }}" style-hover="background:rgba(122,108,214,.07);">
+              <span style="width:9px; height:9px; border-radius:50%; background:{{ g.color }}; flex-shrink:0;"></span>
+              <span style="flex:1; min-width:0; font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ g.type }}</span>
+              <span class="ax-mono" style="font-size:12px; color:#9A95A8;">{{ g.areaLabel }}</span>
+              <span class="ax-mono" style="font-size:12px; font-weight:600; color:#56525F; min-width:20px; text-align:right;">{{ g.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:18px; border-top:1px solid rgba(40,33,64,.09); padding-top:12px; margin-top:6px;">
+          <button onClick="{{ suggestLayout }}" style="display:flex; align-items:center; gap:7px; background:none; border:none; color:#6E6A7A; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; padding:0;" style-hover="color:#7A6CD6;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 22v-6h6"/><path d="M21 8a9 9 0 0 0-15-3.5L3 8m0 8a9 9 0 0 0 15 3.5l3-3.5"/></svg>
+            Re-layout
+          </button>
+          <button onClick="{{ toggleReport }}" style="display:flex; align-items:center; gap:7px; background:none; border:none; color:#6E6A7A; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; padding:0;" style-hover="color:#7A6CD6;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M8 16l4-6 3 4 4-7"/></svg>
+            Report
+          </button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- REPORT panel -->
+  <sc-if value="{{ showReport }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; top:74px; right:316px; width:232px; z-index:17; background:rgba(255,255,255,.96); backdrop-filter:blur(16px); border:1px solid rgba(40,33,64,.1); border-radius:16px; padding:16px; box-shadow:0 16px 44px rgba(70,58,120,.18); animation:ax-rise .2s ease;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:13px; font-weight:700;">Report</span>
+        <button onClick="{{ toggleReport }}" style="background:none; border:none; color:#6E6A7A; cursor:pointer; display:flex; padding:2px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+      <sc-for list="{{ reportRows }}" as="r" hint-placeholder-count="4">
+        <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(40,33,64,.07);">
+          <span style="font-size:12px; color:#6E6A7A;">{{ r.k }}</span>
+          <span class="ax-mono" style="font-size:12px; font-weight:600;">{{ r.v }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  state = {
+    view: '3D',
+    levels: [ { id: 'L1', spaces: [], depth: 80 } ],
+    activeId: 'L1',
+    selectedId: null,
+    generating: false,
+    showReport: false,
+    inputFocus: false,
+    levelMenu: false,
+  };
+
+  FOOT_W = 124;
+  FLOOR_H = 18;
+
+  TYPES = [
+    { match:['office','offices','workstation','workstations','desk','desks','workspace','bullpen','cubicle','classroom','classrooms'], type:'Workplace', color:'#7A6CD6', area:120, h:11 },
+    { match:['meeting','conference','huddle','boardroom','phone booth','focus'], type:'Meeting', color:'#3FA39B', area:200, h:11 },
+    { match:['lobby','reception','entrance','foyer','atrium','waiting','vestibule'], type:'Lobby', color:'#E08A6B', area:420, h:16 },
+    { match:['kitchen','pantry','break','breakroom','cafe','cafeteria','dining','lounge','gym','wellness'], type:'Amenity', color:'#C77DBB', area:280, h:12 },
+    { match:['restroom','bathroom','toilet','wc','storage','server','it room','mechanical','utility','copy','print','janitor','closet'], type:'Support', color:'#9AA0B0', area:90, h:10 },
+    { match:['lab','laboratory','studio','workshop','maker','exam','pharmacy'], type:'Lab', color:'#5B8DD9', area:320, h:13 },
+  ];
+
+  ACCENT = '#7A6CD6';
+
+  QUICK = [
+    { label:'Small office', brief:'10 offices, a lobby, 3 meeting rooms, a kitchen, 2 restrooms' },
+    { label:'Clinic', brief:'a waiting lobby, 8 exam rooms, a lab, a pharmacy, 3 restrooms, storage' },
+    { label:'Co-working', brief:'40 desks, a lobby, 6 meeting rooms, 2 phone booths, a cafe, a lounge, 4 restrooms' },
+    { label:'School wing', brief:'a lobby, 12 classrooms, a lab, a studio, a lounge, 4 restrooms' },
+  ];
+
+  setViewportRef = (el) => { this.viewportEl = el; };
+  setInputRef = (el) => { if (el) this.inputEl = el; };
+  onFocus = () => this.setState({ inputFocus: true });
+  onBlur = () => this.setState({ inputFocus: false });
+
+  // ---------- levels ----------
+  activeLevel() { return this.state.levels.find(l => l.id === this.state.activeId) || this.state.levels[0]; }
+  activeIndex() { return this.state.levels.findIndex(l => l.id === this.state.activeId); }
+  levelName(i) { return 'Level ' + (i + 1); }
+
+  toggleLevelMenu = () => this.setState(s => ({ levelMenu: !s.levelMenu }));
+  closeLevelMenu = () => this.setState({ levelMenu: false });
+
+  switchLevel = (id) => this.setState({ activeId: id, levelMenu: false, selectedId: null }, () => { this.rebuildScene(); this.frameCamera(); });
+
+  addLevel(pos) {
+    const id = 'L' + Math.random().toString(36).slice(2, 7);
+    const lvl = { id, spaces: [], depth: 80 };
+    const levels = this.state.levels.slice();
+    if (pos === 'upper') levels.push(lvl); else levels.unshift(lvl);
+    this.setState({ levels, activeId: id, levelMenu: false, selectedId: null }, () => { this.rebuildScene(); this.frameCamera(); });
+  }
+  addUpper = () => this.addLevel('upper');
+  addLower = () => this.addLevel('lower');
+
+  deleteLevel = () => {
+    if (this.state.levels.length <= 1) { this.setState({ levelMenu: false }); return; }
+    const idx = this.activeIndex();
+    const levels = this.state.levels.filter(l => l.id !== this.state.activeId);
+    const nextId = levels[Math.max(0, idx - 1)].id;
+    this.setState({ levels, activeId: nextId, levelMenu: false, selectedId: null }, () => { this.rebuildScene(); this.frameCamera(); });
+  };
+
+  // ---------- parsing ----------
+  parse(text) {
+    const words = { a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,fifteen:15,twenty:20,thirty:30,forty:40 };
+    const phrases = (text||'').toLowerCase().split(/,|;|\band\b|\n|\+/).map(s => s.trim()).filter(Boolean);
+    const out = [];
+    let total = 0;
+    for (const ph of phrases) {
+      let count = 1;
+      const num = ph.match(/\d+/);
+      if (num) count = parseInt(num[0], 10);
+      else { for (const w in words) { if (new RegExp('\\b'+w+'\\b').test(ph)) { count = words[w]; break; } } }
+      let def = null;
+      for (const t of this.TYPES) { if (t.match.some(k => ph.includes(k))) { def = t; break; } }
+      if (!def) continue;
+      count = Math.max(1, Math.min(count, 40));
+      for (let i = 0; i < count && total < 90; i++, total++) {
+        const variance = 0.85 + Math.random() * 0.3;
+        const area = Math.round(def.area * variance);
+        const w = Math.max(8, Math.round(Math.sqrt(area * 1.35)));
+        const d = Math.max(7, Math.round(area / w));
+        out.push({ id: 's' + total + '_' + Math.random().toString(36).slice(2,6), type: def.type, color: def.color, h: def.h, area, w, d, x:0, z:0 });
+      }
+    }
+    return out;
+  }
+
+  layout(level) {
+    const pad = 5;
+    const maxW = this.FOOT_W - pad;
+    let x = pad, z = pad, rowH = 0;
+    for (const s of level.spaces) {
+      if (x + s.w + pad > maxW) { x = pad; z += rowH + pad; rowH = 0; }
+      s.x = x; s.z = z;
+      x += s.w + pad;
+      rowH = Math.max(rowH, s.d);
+    }
+    level.depth = Math.max(80, z + rowH + pad);
+  }
+
+  // ---------- actions ----------
+  runQuick = (brief) => { if (this.inputEl) this.inputEl.value = brief; this._doGenerate(brief); };
+  onPromptKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.generate(); } };
+  generate = () => { const text = (this.inputEl && this.inputEl.value) || this.QUICK[0].brief; this._doGenerate(text); };
+
+  _doGenerate(text) {
+    this.setState({ generating: true, showReport: false, selectedId: null });
+    clearTimeout(this._gen);
+    this._gen = setTimeout(() => {
+      const spaces = this.parse(text);
+      const levels = this.state.levels.map(l => {
+        if (l.id !== this.state.activeId) return l;
+        const nl = { ...l, spaces };
+        this.layout(nl);
+        return nl;
+      });
+      this.setState({ levels, generating: false }, () => { this.rebuildScene(); this.frameCamera(); });
+    }, 700);
+  }
+
+  suggestLayout = () => {
+    const active = this.activeLevel();
+    if (!active || !active.spaces.length) return;
+    const spaces = active.spaces.slice();
+    for (let i = spaces.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [spaces[i],spaces[j]]=[spaces[j],spaces[i]]; }
+    const levels = this.state.levels.map(l => { if (l.id !== active.id) return l; const nl = { ...l, spaces }; this.layout(nl); return nl; });
+    this.setState({ levels, selectedId: null }, () => this.rebuildScene());
+  };
+
+  toggleReport = () => this.setState(s => ({ showReport: !s.showReport }));
+  clearSelection = () => this.setState({ selectedId: null }, () => this.updateSelection());
+  selectId = (id) => this.setState({ selectedId: id }, () => this.updateSelection());
+  setView2D = () => this.setView('2D');
+  setView3D = () => this.setView('3D');
+  setView(v) { this.setState({ view: v }, () => this.applyView()); }
+
+  componentDidMount() {
+    this._alive = true;
+    this._wait = () => {
+      if (!this._alive) return;
+      if (window.THREE && THREE.OrbitControls && this.viewportEl) this.initThree();
+      else this._waitTimer = setTimeout(this._wait, 60);
+    };
+    this._wait();
+    this._onResize = () => this.resize();
+    window.addEventListener('resize', this._onResize);
+    this._onKey = (e) => {
+      if (e.key === 'Escape') this.setState({ selectedId: null, levelMenu: false }, () => this.updateSelection());
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.state.selectedId && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') {
+        const levels = this.state.levels.map(l => { if (l.id !== this.state.activeId) return l; const nl = { ...l, spaces: l.spaces.filter(x => x.id !== this.state.selectedId) }; this.layout(nl); return nl; });
+        this.setState({ levels, selectedId: null }, () => this.rebuildScene());
+      }
+    };
+    window.addEventListener('keydown', this._onKey);
+  }
+  componentWillUnmount() {
+    this._alive = false;
+    clearTimeout(this._waitTimer); clearTimeout(this._gen);
+    cancelAnimationFrame(this._raf);
+    window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('keydown', this._onKey);
+    if (this.renderer) this.renderer.dispose();
+  }
+
+  initThree() {
+    const el = this.viewportEl;
+    const W = el.clientWidth, H = el.clientHeight;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#F2F1F7');
+    scene.fog = new THREE.Fog('#F2F1F7', 340, 760);
+
+    const cam = new THREE.PerspectiveCamera(42, W/H, 0.1, 4000);
+    this.cam = cam;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(W, H);
+    el.appendChild(renderer.domElement);
+    this.renderer = renderer;
+
+    const controls = new THREE.OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2.04;
+    controls.minDistance = 40;
+    controls.maxDistance = 1100;
+    this.controls = controls;
+
+    scene.add(new THREE.HemisphereLight('#ffffff', '#cfcbe0', 1.0));
+    const dir = new THREE.DirectionalLight('#ffffff', 0.65);
+    dir.position.set(120, 240, 90);
+    scene.add(dir);
+    const dir2 = new THREE.DirectionalLight('#b9adf0', 0.2);
+    dir2.position.set(-140, 120, -120);
+    scene.add(dir2);
+
+    const grid = new THREE.GridHelper(900, 180, 0xbcb7d2, 0xdedaec);
+    grid.material.transparent = true; grid.material.opacity = 0.85;
+    scene.add(grid);
+
+    this.scene = scene;
+    this.group = new THREE.Group(); scene.add(this.group);
+    this.meshById = {};
+
+    this.ray = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
+    this._downPt = null;
+    renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
+    renderer.domElement.addEventListener('pointerup', this.onPointerUp);
+
+    cam.position.set(150, 130, 200);
+    controls.target.set(0, 8, 0);
+    controls.update();
+
+    const loop = () => { if (!this._alive) return; this._raf = requestAnimationFrame(loop); controls.update(); renderer.render(scene, cam); };
+    loop();
+    this.rebuildScene();
+  }
+
+  onPointerDown = (e) => { this._downPt = { x: e.clientX, y: e.clientY }; };
+  onPointerUp = (e) => {
+    if (!this._downPt) return;
+    const moved = Math.hypot(e.clientX - this._downPt.x, e.clientY - this._downPt.y);
+    this._downPt = null;
+    if (moved > 5) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.ray.setFromCamera(this.mouse, this.cam);
+    const hits = this.ray.intersectObjects(Object.values(this.meshById).map(m => m.box));
+    if (hits.length) this.selectId(hits[0].object.userData.id);
+    else this.clearSelection();
+  };
+
+  rebuildScene() {
+    if (!this.group) return;
+    while (this.group.children.length) {
+      const c = this.group.children.pop();
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+    }
+    this.meshById = {};
+    const W = this.FOOT_W;
+    const FH = this.FLOOR_H;
+
+    this.state.levels.forEach((lvl, i) => {
+      const active = lvl.id === this.state.activeId;
+      const d = lvl.depth || 80;
+      const cx = W/2, cz = d/2;
+      const y0 = i * FH;
+
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(W, 0.5, d), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, metalness: 0, transparent: true, opacity: active ? 1 : 0.5 }));
+      slab.position.set(0, y0 - 0.25, 0);
+      this.group.add(slab);
+      const line = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W, 0.5, d)), new THREE.LineBasicMaterial({ color: active ? '#7A6CD6' : '#b9b4cc', transparent: true, opacity: active ? 0.6 : 0.3 }));
+      line.position.copy(slab.position);
+      this.group.add(line);
+
+      for (const s of lvl.spaces) {
+        const geo = new THREE.BoxGeometry(s.w, s.h, s.d);
+        const mat = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.5, metalness: 0.02, transparent: true, opacity: active ? 0.95 : 0.18, emissive: '#000000' });
+        const box = new THREE.Mesh(geo, mat);
+        box.position.set(s.x + s.w/2 - cx, y0 + s.h/2, s.z + s.d/2 - cz);
+        box.userData.id = s.id;
+        this.group.add(box);
+        if (active) {
+          const eg = new THREE.EdgesGeometry(geo);
+          const eln = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5 }));
+          eln.position.copy(box.position);
+          this.group.add(eln);
+          this.meshById[s.id] = { box, edge: eln, mat };
+        }
+      }
+    });
+    this.updateSelection();
+  }
+
+  updateSelection() {
+    const sel = this.state.selectedId;
+    for (const id in this.meshById) {
+      const m = this.meshById[id];
+      if (id === sel) {
+        m.mat.emissive.set('#7A6CD6'); m.mat.emissiveIntensity = 0.5; m.mat.opacity = 1;
+        m.edge.material.color.set('#7A6CD6'); m.edge.material.opacity = 1;
+      } else {
+        m.mat.emissive.set('#000000'); m.mat.emissiveIntensity = 0; m.mat.opacity = sel ? 0.4 : 0.95;
+        m.edge.material.color.set('#ffffff'); m.edge.material.opacity = 0.5;
+      }
+    }
+  }
+
+  maxDepth() { return Math.max(80, ...this.state.levels.map(l => l.depth || 80)); }
+
+  frameCamera() {
+    if (!this.cam || !this.controls) return;
+    const r = Math.max(this.FOOT_W, this.maxDepth());
+    const totalH = this.state.levels.length * this.FLOOR_H;
+    this.cam.position.set(r*1.05, Math.max(r*0.8, totalH*1.5 + 50), r*1.3);
+    this.controls.target.set(0, totalH/2, 0);
+    this.controls.update();
+  }
+
+  applyView() {
+    if (!this.cam || !this.controls) return;
+    const r = Math.max(this.FOOT_W, this.maxDepth());
+    const totalH = this.state.levels.length * this.FLOOR_H;
+    if (this.state.view === '2D') {
+      this.cam.position.set(0, r*1.8 + totalH, 0.01);
+      this.controls.target.set(0, 0, 0);
+      this.controls.enableRotate = false;
+    } else {
+      this.cam.position.set(r*1.05, Math.max(r*0.8, totalH*1.5 + 50), r*1.3);
+      this.controls.target.set(0, totalH/2, 0);
+      this.controls.enableRotate = true;
+    }
+    this.controls.update();
+  }
+
+  resize() {
+    if (!this.renderer || !this.viewportEl) return;
+    const W = this.viewportEl.clientWidth, H = this.viewportEl.clientHeight;
+    this.cam.aspect = W/H; this.cam.updateProjectionMatrix();
+    this.renderer.setSize(W, H);
+  }
+
+  icon(name) {
+    const I = {
+      select:'<path d="M5 3l14 7-6 2-2 6z"/>',
+      mass:'<path d="M12 2 21 7v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>',
+      space:'<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M9 3v18"/>',
+      wall:'<path d="M4 20V5h16v15M4 12h16"/>',
+      level:'<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/>',
+      site:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+      measure:'<path d="M3 8l5-5 13 13-5 5z"/><path d="M8 7l1.5 1.5M11 10l1.5 1.5M14 13l1.5 1.5"/>',
+    };
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+I[name]+'</svg>';
+  }
+  svg(html) { return React.createElement('span', { dangerouslySetInnerHTML: { __html: html } }); }
+
+  renderVals() {
+    const s = this.state;
+    const segOn = 'font-family:inherit; font-size:12px; font-weight:600; border:none; border-radius:6px; padding:5px 11px; cursor:pointer; background:#7A6CD6; color:#fff;';
+    const segOff = 'font-family:inherit; font-size:12px; font-weight:600; border:none; border-radius:6px; padding:5px 11px; cursor:pointer; background:transparent; color:#6E6A7A;';
+
+    const active = this.activeLevel();
+    const aSpaces = active ? active.spaces : [];
+    const activeIdx = this.activeIndex();
+
+    const groups = {};
+    for (const sp of aSpaces) {
+      if (!groups[sp.type]) groups[sp.type] = { type: sp.type, color: sp.color, count: 0, area: 0, sample: sp.id };
+      groups[sp.type].count++; groups[sp.type].area += sp.area;
+    }
+    const selSpace = aSpaces.find(x => x.id === s.selectedId) || null;
+    const selType = selSpace ? selSpace.type : null;
+    const spaceTypes = Object.values(groups).map(g => ({
+      type: g.type, color: g.color, count: g.count,
+      areaLabel: g.area.toLocaleString() + ' ft²',
+      select: () => this.selectId(g.sample),
+      rowStyle: 'display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer; background:' + (selType === g.type ? 'rgba(122,108,214,.12)' : 'transparent') + ';',
+    }));
+
+    const allSpaces = s.levels.reduce((a, l) => a.concat(l.spaces), []);
+    const totalArea = allSpaces.reduce((a, x) => a + x.area, 0);
+    const totalLabel = totalArea.toLocaleString() + ' ft²';
+    const grossArea = Math.round(this.FOOT_W * this.maxDepth() * s.levels.length);
+    const eff = grossArea ? Math.round((totalArea / grossArea) * 100) : 0;
+
+    const toolDefs = [
+      { n:'select', label:'Select', shortcut:'V' },
+      { n:'mass', label:'Building mass', shortcut:'M' },
+      { n:'space', label:'Space', shortcut:'S' },
+      { n:'wall', label:'Wall', shortcut:'W' },
+      { n:'level', label:'Levels', shortcut:'' },
+      { n:'site', label:'Site plan', shortcut:'' },
+      { n:'measure', label:'Measure', shortcut:'⌥' },
+    ];
+    const tools = toolDefs.map(d => ({
+      label: d.label, shortcut: d.shortcut || null, icon: this.svg(this.icon(d.n)),
+      style: 'display:flex; align-items:center; justify-content:center; width:38px; height:38px; background:transparent; border:none; border-radius:9px; color:' + (d.n==='select'?'#7A6CD6':'#9A95A8') + '; cursor:pointer;',
+    }));
+
+    const quickStarts = this.QUICK.map(q => ({ label: q.label, go: () => this.runQuick(q.brief) }));
+
+    // level menu (listed top → bottom)
+    const menuRowBase = 'display:flex; align-items:center; gap:6px; width:100%; text-align:left; background:transparent; border:none; border-radius:8px; padding:8px 10px; font-family:inherit; color:#26222F; cursor:pointer;';
+    const menuLevels = s.levels.map((l, i) => ({ l, i })).reverse().map(({ l, i }) => ({
+      name: this.levelName(i),
+      active: l.id === s.activeId,
+      weight: l.id === s.activeId ? '600' : '500',
+      select: () => this.switchLevel(l.id),
+      style: menuRowBase + (l.id === s.activeId ? ' background:rgba(122,108,214,.1);' : ''),
+    }));
+    const menuAddStyle = 'display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:transparent; border:none; border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px; font-weight:500; color:#6E6A7A; cursor:pointer;';
+    const canDelete = s.levels.length > 1;
+    const menuEditStyle = 'display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:transparent; border:none; border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px; font-weight:500; cursor:' + (canDelete ? 'pointer' : 'default') + '; color:' + (canDelete ? '#C2453F' : '#C4C0CE') + ';';
+
+    return {
+      view2dStyle: s.view === '2D' ? segOn : segOff,
+      view3dStyle: s.view === '3D' ? segOn : segOff,
+      setView2D: this.setView2D, setView3D: this.setView3D,
+      netAreaLabel: totalLabel,
+
+      // level selector
+      activeLevelName: this.levelName(activeIdx < 0 ? 0 : activeIdx),
+      levelMenuOpen: s.levelMenu,
+      toggleLevelMenu: this.toggleLevelMenu,
+      closeLevelMenu: this.closeLevelMenu,
+      levelPillStyle: 'display:flex; align-items:center; gap:7px; background:' + (s.levelMenu ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.7)') + '; border:1px solid rgba(40,33,64,.1); border-radius:9px; padding:6px 11px; color:#26222F; font-family:inherit; cursor:pointer;',
+      menuLevels, menuAddStyle, menuEditStyle,
+      menuEditHover: canDelete ? 'background:rgba(194,69,63,.08);' : '',
+      editLabel: canDelete ? 'Delete this level' : 'Edit levels',
+      addUpper: this.addUpper, addLower: this.addLower, deleteLevel: this.deleteLevel,
+
+      heroMode: allSpaces.length === 0,
+      dockMode: allSpaces.length > 0,
+      hasSpaces: allSpaces.length > 0,
+      activeEmpty: aSpaces.length === 0,
+      spaceCount: aSpaces.length,
+      spaceTypes,
+
+      selectedSpace: selSpace, selectedType: selType,
+      selectedColor: selSpace ? selSpace.color : '#7A6CD6',
+      selectedAreaLabel: selSpace ? selSpace.area.toLocaleString() + ' ft²' : '',
+      clearSelection: this.clearSelection,
+
+      showReport: s.showReport,
+      toggleReport: this.toggleReport,
+      reportRows: [
+        { k: 'Total spaces', v: String(allSpaces.length) },
+        { k: 'Levels', v: String(s.levels.length) },
+        { k: 'Net area', v: totalLabel },
+        { k: 'Gross (all floors)', v: grossArea.toLocaleString() + ' ft²' },
+        { k: 'Efficiency', v: eff + '%' },
+      ],
+
+      generating: s.generating, notGenerating: !s.generating,
+      generate: this.generate,
+      onPromptKey: this.onPromptKey, setInputRef: this.setInputRef,
+      onFocus: this.onFocus, onBlur: this.onBlur,
+      heroBorder: s.inputFocus ? 'rgba(122,108,214,.55)' : 'rgba(40,33,64,.1)',
+      dockBorder: s.inputFocus ? 'rgba(122,108,214,.55)' : 'rgba(40,33,64,.1)',
+      quickStarts,
+
+      suggestLayout: this.suggestLayout,
+      setViewportRef: this.setViewportRef,
+      tools,
+    };
+  }
+}
+</script>
+</body>
+</html>

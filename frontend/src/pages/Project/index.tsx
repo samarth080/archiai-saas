@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
-import { Button } from '../../components/ui/Button'
 import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
-import { EditorToolbar } from '../../components/canvas/EditorToolbar'
-import { MetricsHud } from '../../components/canvas/MetricsHud'
-import { OptionGallery } from '../../components/canvas/OptionGallery'
+import { EditorTopBar } from '../../components/canvas/EditorTopBar'
+import { ToolRail } from '../../components/canvas/ToolRail'
+import { SelectionGizmo } from '../../components/canvas/SelectionGizmo'
+import { ProgramPanel } from '../../components/canvas/ProgramPanel'
+import { InsightsStrip } from '../../components/canvas/InsightsStrip'
+import { CommandBar } from '../../components/canvas/CommandBar'
+import { DraftToast } from '../../components/canvas/DraftToast'
 import {
   DesignDraftResponse,
   fetchDesignDraft,
@@ -23,7 +26,6 @@ import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDraw
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
-import { GenerationInsights } from '../../components/canvas/GenerationInsights'
 import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
 import type { CanvasLayout } from '../../store/canvasStore'
 
@@ -35,6 +37,12 @@ function captureCanvasThumbnail() {
   } catch {
     return null
   }
+}
+
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
 }
 
 function exportFileName(projectTitle: string, extension: string) {
@@ -148,6 +156,7 @@ function hasRecoverableDraft(
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { logOut, user } = useAuth()
 
   const [project, setProject] = useState<Project | null>(null)
@@ -176,7 +185,6 @@ export default function ProjectPage() {
   const [changeSummary, setChangeSummary] = useState('')
   const [duplicating, setDuplicating] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
-  const [hasSavedLayout, setHasSavedLayout] = useState(false)
   const [mode, setMode] = useState<'generate' | 'refine'>('generate')
   const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
   const [draftToRecover, setDraftToRecover] = useState<DesignDraftResponse | null>(null)
@@ -193,9 +201,29 @@ export default function ProjectPage() {
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
   const setRecoveredDraftAvailable = useCanvasStore((s) => s.setRecoveredDraftAvailable)
-  const activeScore = useCanvasStore((s) => s.generationInsights?.score)
 
   useAutoSave({ designId, enabled: Boolean(designId) })
+
+  // Refreshes the Dashboard-card thumbnail right after Generate/Refine, not
+  // just on manual Save Layout — Generate already persists a Design behind
+  // the scenes, so a project can otherwise sit with no real preview
+  // indefinitely if the user never clicks Save. Fire-and-forget: waits one
+  // paint for the new layout to actually render, then best-effort uploads
+  // it without blocking or failing the generation flow.
+  const refreshThumbnailAfterGenerate = () => {
+    if (!id) return
+    void (async () => {
+      await waitForNextPaint()
+      const thumbnailUrl = captureCanvasThumbnail()
+      if (!thumbnailUrl) return
+      try {
+        await projectService.update(id, { thumbnail_url: thumbnailUrl })
+        setProject((current) => (current ? { ...current, thumbnail_url: thumbnailUrl } : current))
+      } catch (err) {
+        console.warn('Failed to refresh project thumbnail', err)
+      }
+    })()
+  }
 
   const handleSubmit = async () => {
     if (!prompt.trim()) return
@@ -211,6 +239,7 @@ export default function ProjectPage() {
         setRefinementSummary(result.refinementSummary)
         setAlternatives([])
         setPrompt('')
+        refreshThumbnailAfterGenerate()
       } else {
         const designParams = {
           plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
@@ -225,9 +254,9 @@ export default function ProjectPage() {
         loadLayout(result)
         setDraftToRecover(null)
         setRecoveredDraftAvailable(false)
-        setHasSavedLayout(true)
         setRefinementSummary(null)
         setAlternatives(result.alternatives ?? [])
+        refreshThumbnailAfterGenerate()
       }
     } catch (err) {
       const apiErr = err as { response?: { data?: { error?: string } } }
@@ -240,6 +269,16 @@ export default function ProjectPage() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handleModeChange = (next: 'generate' | 'refine') => {
+    userPickedModeRef.current = true
+    setMode(next)
+  }
+
+  const handlePromptChange = (value: string) => {
+    setPrompt(value)
+    setRefinementSummary(null)
   }
 
   const handlePickOption = (option: LayoutOption) => {
@@ -271,7 +310,6 @@ export default function ProjectPage() {
       loadLayout(result)
       setDraftToRecover(null)
       setRecoveredDraftAvailable(false)
-      setHasSavedLayout(true)
       setVersionName('')
       setChangeSummary('')
       if (thumbnailUrl) {
@@ -305,7 +343,6 @@ export default function ProjectPage() {
             loadLayout(latestDesign)
             setDraftToRecover(null)
             setRecoveredDraftAvailable(false)
-            setHasSavedLayout(true)
           }
           if (latestDesign.designId) {
             try {
@@ -323,7 +360,6 @@ export default function ProjectPage() {
           if (apiErr.response?.status === 404) {
             if (active) {
               clearLayout()
-              setHasSavedLayout(false)
             }
           } else {
             console.warn('Failed to load latest project design', designErr)
@@ -354,6 +390,17 @@ export default function ProjectPage() {
       setMode('refine')
     }
   }, [designId, mode])
+
+  // Prefill the prompt when arriving from the Dashboard's hero composer,
+  // which creates the project first and forwards the brief via navigation
+  // state rather than auto-generating sight-unseen.
+  useEffect(() => {
+    const initialPrompt = (location.state as { initialPrompt?: string } | null)?.initialPrompt
+    if (initialPrompt) {
+      setPrompt(initialPrompt)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
 
   const enterEditMode = () => {
     if (!project) return
@@ -478,7 +525,7 @@ export default function ProjectPage() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-gray-400">Loading...</p>
+        <p className="text-muted-light">Loading...</p>
       </div>
     )
   }
@@ -494,7 +541,7 @@ export default function ProjectPage() {
   if (!project) return null
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-surface">
       <Sidebar
         userName={user?.name}
         userEmail={user?.email}
@@ -503,319 +550,101 @@ export default function ProjectPage() {
 
       {/* Main */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Top bar */}
-        <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 xl:flex-row xl:items-start xl:justify-between xl:px-6 xl:py-4">
-          <div className="flex-1 min-w-0">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-sm text-indigo-600 hover:text-indigo-800 mb-2 block"
-            >
-              ← Projects
-            </button>
-            {editing ? (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full text-xl font-bold border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={2}
-                  placeholder="Description (optional)"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                />
-                {saveError && <p className="text-sm text-red-600">{saveError}</p>}
-              </div>
-            ) : (
-              <h1 className="text-xl font-bold text-gray-900 truncate">{project.title}</h1>
-            )}
-          </div>
-          <div className="flex flex-wrap items-start gap-2 xl:max-w-[72%] xl:justify-end xl:pt-6">
-            {editing ? (
-              <>
-                <Button variant="secondary" onClick={cancelEdit} disabled={saving}>
-                  Cancel
-                </Button>
-                <Button variant="primary" onClick={handleSave} loading={saving} disabled={saving || !editTitle.trim()}>
-                  Save
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
-                  History
-                </Button>
-                <Button variant="secondary" onClick={() => setActivityOpen(true)}>
-                  Activity
-                </Button>
-                <Button variant="secondary" onClick={() => setShareOpen(true)}>
-                  Share
-                </Button>
-                <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      onClick={handleExportImage}
-                      loading={exportingImage}
-                      disabled={roomCount === 0 || exportingImage || exportingPdf}
-                    >
-                      Export PNG
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={handleExportPdf}
-                      loading={exportingPdf}
-                      disabled={roomCount === 0 || exportingImage || exportingPdf}
-                    >
-                      Export PDF
-                    </Button>
-                  </div>
-                  {exportError && <p className="mt-1 text-sm text-red-600">{exportError}</p>}
-                </div>
-                <div className="flex flex-col items-end">
-                  <div className="mb-2 grid w-56 gap-1">
-                    <input
-                      type="text"
-                      value={versionName}
-                      onChange={(e) => setVersionName(e.target.value)}
-                      placeholder="Version name (optional)"
-                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    />
-                    <input
-                      type="text"
-                      value={changeSummary}
-                      onChange={(e) => setChangeSummary(e.target.value)}
-                      placeholder="Change summary (optional)"
-                      className="h-8 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    />
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={handleSaveLayout}
-                    loading={layoutSaving}
-                    disabled={!designId || layoutSaving}
-                  >
-                    Save Layout
-                  </Button>
-                  {layoutSaveError && <p className="text-sm text-red-600 mt-1">{layoutSaveError}</p>}
-                </div>
-                <div className="flex flex-col items-end">
-                  <Button variant="secondary" onClick={handleDuplicate} loading={duplicating} disabled={duplicating}>
-                    Duplicate
-                  </Button>
-                  {duplicateError && <p className="text-sm text-red-600 mt-1">{duplicateError}</p>}
-                </div>
-                <Button variant="secondary" onClick={enterEditMode}>
-                  Edit
-                </Button>
-                <div className="flex flex-col items-end">
-                  <Button
-                    variant="secondary"
-                    onClick={handleDelete}
-                    loading={deleting}
-                    className="text-red-600 border-red-300 hover:bg-red-50"
-                  >
-                    Delete
-                  </Button>
-                  {deleteError && <p className="text-sm text-red-600 mt-1">{deleteError}</p>}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        {/* Canvas + Inspector row */}
+        <div className="flex-1 flex overflow-hidden">
+          <div className="relative flex-1 h-full">
+            <Canvas3D className="h-full" />
 
-        {/* Canvas + Inspector + Prompt bar */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {draftToRecover && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="border-b border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-3"
-            >
-              <p className="text-sm text-amber-800">
-                Unsaved draft found. You can recover your last auto-saved changes.
-              </p>
-              <div className="flex items-center gap-2">
+            <EditorTopBar
+              projectTitle={project.title}
+              onBackToDashboard={() => navigate('/dashboard')}
+              editing={editing}
+              editTitle={editTitle}
+              setEditTitle={setEditTitle}
+              editDescription={editDescription}
+              setEditDescription={setEditDescription}
+              saveError={saveError}
+              savingTitle={saving}
+              onEnterEdit={enterEditMode}
+              onCancelEdit={cancelEdit}
+              onSaveTitle={handleSave}
+              onShare={() => setShareOpen(true)}
+              avatarName={user?.name ?? user?.email ?? ''}
+              designId={designId}
+              layoutSaving={layoutSaving}
+              layoutSaveError={layoutSaveError}
+              versionName={versionName}
+              setVersionName={setVersionName}
+              changeSummary={changeSummary}
+              setChangeSummary={setChangeSummary}
+              onSaveLayout={handleSaveLayout}
+              onHistory={() => setHistoryOpen(true)}
+              onActivity={() => setActivityOpen(true)}
+              onExportImage={handleExportImage}
+              onExportPdf={handleExportPdf}
+              onDuplicate={handleDuplicate}
+              onEditProject={enterEditMode}
+              onDelete={handleDelete}
+              exportingImage={exportingImage}
+              exportingPdf={exportingPdf}
+              duplicating={duplicating}
+              deleting={deleting}
+              roomCount={roomCount}
+              exportError={exportError}
+              duplicateError={duplicateError}
+              deleteError={deleteError}
+            />
+
+            <DraftToast
+              visible={Boolean(draftToRecover)}
+              onRecover={handleRecoverDraft}
+              onDismiss={handleDismissDraft}
+            />
+
+            <ToolRail />
+            <SelectionGizmo />
+            <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
+            <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
+
+            {refinementSummary && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-200 bg-emerald-50/95 backdrop-blur px-4 py-2 shadow-sm"
+              >
+                <span className="text-xs font-medium text-emerald-800">{refinementSummary}</span>
                 <button
                   type="button"
-                  onClick={handleRecoverDraft}
-                  className="rounded border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                  aria-label="Dismiss"
+                  className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                  onClick={() => setRefinementSummary(null)}
                 >
-                  Recover draft
+                  ✕
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDismissDraft}
-                  className="px-2 py-1.5 text-xs font-medium text-amber-700 hover:text-amber-900"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Canvas + Inspector row */}
-          <div className="flex-1 flex overflow-hidden">
-            <div className="relative flex-1 h-full">
-              <Canvas3D className="h-full" />
-              <EditorToolbar />
-              <MetricsHud />
-              {!hasSavedLayout && roomCount === 0 && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="rounded border border-dashed border-gray-300 bg-white/90 px-4 py-3 text-sm text-gray-500 shadow-sm">
-                    No saved layout yet. Generate a layout from the prompt below.
-                  </div>
-                </div>
-              )}
-            </div>
-            <Inspector />
-          </div>
-
-          <GenerationInsights />
-
-          <OptionGallery
-            options={alternatives}
-            activeScore={activeScore}
-            onPick={handlePickOption}
-            onDismiss={() => setAlternatives([])}
-          />
-
-          {refinementSummary && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="border-t border-emerald-200 bg-emerald-50 px-3 py-2 flex items-start gap-2"
-            >
-              <span className="text-xs text-emerald-700 flex-1">{refinementSummary}</span>
-              <button
-                type="button"
-                aria-label="Dismiss"
-                className="text-xs text-emerald-700 hover:text-emerald-900"
-                onClick={() => setRefinementSummary(null)}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* Prompt bar */}
-          <div className="border-t border-gray-200 bg-white p-3 flex flex-col gap-2">
-            <div
-              role="tablist"
-              aria-label="Prompt mode"
-              className="inline-flex w-fit rounded border border-gray-300 text-xs overflow-hidden"
-            >
-              <button
-                role="tab"
-                aria-selected={mode === 'generate'}
-                className={`px-3 py-1 ${mode === 'generate' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'}`}
-                onClick={() => {
-                  userPickedModeRef.current = true
-                  setMode('generate')
-                }}
-              >
-                Generate
-              </button>
-              <button
-                role="tab"
-                aria-selected={mode === 'refine'}
-                disabled={!designId}
-                title={designId ? '' : 'Generate a layout first'}
-                className={`px-3 py-1 ${mode === 'refine' ? 'bg-indigo-500 text-white' : 'bg-white text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                onClick={() => {
-                  userPickedModeRef.current = true
-                  setMode('refine')
-                }}
-              >
-                Refine
-              </button>
-              {mode === 'generate' && (
-                <button
-                  type="button"
-                  className="px-3 py-1 bg-white text-gray-500 hover:text-gray-700 border-l border-gray-300"
-                  onClick={() => setShowParams((value) => !value)}
-                  aria-expanded={showParams}
-                >
-                  {showParams ? 'Hide params' : 'Plot params'}
-                </button>
-              )}
-            </div>
-            {mode === 'generate' && showParams && (
-              <div className="flex gap-3 items-end text-xs text-gray-600">
-                <label className="flex flex-col gap-1">
-                  Plot width (m)
-                  <input
-                    type="number"
-                    min={4}
-                    max={40}
-                    step={0.5}
-                    placeholder="auto"
-                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    value={plotWidthM}
-                    onChange={(e) => setPlotWidthM(e.target.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  Floors
-                  <input
-                    type="number"
-                    min={1}
-                    max={6}
-                    placeholder="auto"
-                    className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    value={floorsOverride}
-                    onChange={(e) => setFloorsOverride(e.target.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  Entry faces
-                  <select
-                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    value={orientation}
-                    onChange={(e) => setOrientation(e.target.value as typeof orientation)}
-                  >
-                    <option value="">auto</option>
-                    <option value="S">South</option>
-                    <option value="N">North</option>
-                    <option value="E">East</option>
-                    <option value="W">West</option>
-                  </select>
-                </label>
-                <span className="text-gray-400 pb-1">Leave blank to infer from the prompt</span>
               </div>
             )}
-            <div className="flex gap-2 items-end">
-              <textarea
-                aria-label="Layout prompt"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                rows={2}
-                placeholder={
-                  mode === 'refine'
-                    ? "Refine your layout… e.g. 'add a bedroom', 'remove the office', 'make the kitchen bigger'"
-                    : 'Describe your layout… e.g. 3 bedroom apartment with open kitchen and living room'
-                }
-                value={prompt}
-                onChange={(e) => {
-                  setPrompt(e.target.value)
-                  setRefinementSummary(null)
-                }}
-                disabled={generating}
-              />
-              <button
-                aria-busy={generating}
-                className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
-                onClick={handleSubmit}
-                disabled={generating || !prompt.trim()}
-              >
-                {generating
-                  ? mode === 'refine' ? 'Refining…' : 'Generating…'
-                  : mode === 'refine' ? 'Refine' : 'Generate'}
-              </button>
-            </div>
-            {generateError && <p className="text-xs text-red-500">{generateError}</p>}
+
+            <CommandBar
+              roomCount={roomCount}
+              mode={mode}
+              onModeChange={handleModeChange}
+              designId={designId}
+              showParams={showParams}
+              setShowParams={setShowParams}
+              plotWidthM={plotWidthM}
+              setPlotWidthM={setPlotWidthM}
+              floorsOverride={floorsOverride}
+              setFloorsOverride={setFloorsOverride}
+              orientation={orientation}
+              setOrientation={setOrientation}
+              prompt={prompt}
+              setPrompt={handlePromptChange}
+              generating={generating}
+              generateError={generateError}
+              onSubmit={handleSubmit}
+            />
           </div>
+          <Inspector />
         </div>
       </main>
 
