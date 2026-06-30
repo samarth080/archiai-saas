@@ -24,7 +24,6 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
     try {
       const project = await projectService.create({
         title: data.title.trim(),
-        description: data.description?.trim() || undefined,
         ...(workspaceId ? { workspace_id: workspaceId } : {}),
       })
       onCreated(project)
@@ -46,19 +45,9 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
               minLength: { value: 1, message: 'Title is required' },
             })}
           />
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-ink/80 mb-1">
-              Description{' '}
-              <span className="text-muted-light font-normal">(optional)</span>
-            </label>
-            <textarea
-              id="description"
-              {...register('description')}
-              rows={3}
-              className="w-full border border-ink/15 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
-              placeholder="Describe your project..."
-            />
-          </div>
+          <p className="text-xs text-muted-light -mt-2">
+            You'll describe what to build next, on the project's own page.
+          </p>
           {submitError && (
             <p className="text-sm text-red-600">{submitError}</p>
           )}
