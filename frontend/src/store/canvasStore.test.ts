@@ -31,6 +31,9 @@ beforeEach(() => {
     recoveredDraftAvailable: false,
     latestDraftVersionId: null,
     activityLog: [],
+    past: [],
+    future: [],
+    placementMode: null,
   })
 })
 
@@ -472,5 +475,181 @@ describe('loadLayout and serializeLayout', () => {
 
     expect(useCanvasStore.getState().generationInsights).toEqual(insights)
     expect(useCanvasStore.getState().serializeLayout().insights).toEqual(insights)
+  })
+})
+
+// ── Phase 1 — direct-manipulation ────────────────────────────────────────────
+
+function loadFootprintFloor() {
+  // Ground floor with an 8x8 footprint anchored at (0,0).
+  useCanvasStore.getState().loadLayout({
+    version: '1.0',
+    building: { floorHeight: 3.2 },
+    rooms: [],
+    floors: [
+      {
+        id: 'floor_0',
+        name: 'Ground Floor',
+        level: 0,
+        elevation: 0,
+        footprint: { x: 0, z: 0, w: 8, d: 8 },
+        rooms: [
+          {
+            id: 'r1',
+            label: 'Room',
+            objectType: 'room',
+            position: { x: 4, y: 1.5, z: 4 },
+            size: { w: 4, h: 3, d: 4 },
+            rotation: { x: 0, y: 0, z: 0 },
+            color: '#b3b8e9',
+          },
+        ],
+      },
+    ],
+  })
+}
+
+describe('drag clamp to footprint', () => {
+  it('keeps a dragged room fully inside the floor footprint', () => {
+    loadFootprintFloor()
+    // Try to drag far outside the 8x8 footprint.
+    useCanvasStore.getState().updateRoom('r1', { position: { x: 100, y: 1.5, z: -100 } }, { log: false })
+
+    const room = useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!
+    // Room is 4 wide/deep -> centre must stay within [2, 6] on both axes.
+    expect(room.position.x).toBeGreaterThanOrEqual(2)
+    expect(room.position.x).toBeLessThanOrEqual(6)
+    expect(room.position.z).toBeGreaterThanOrEqual(2)
+    expect(room.position.z).toBeLessThanOrEqual(6)
+  })
+
+  it('leaves an in-bounds position unchanged', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().updateRoom('r1', { position: { x: 5, y: 1.5, z: 3 } }, { log: false })
+    const room = useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!
+    expect(room.position.x).toBe(5)
+    expect(room.position.z).toBe(3)
+  })
+})
+
+describe('resizeRoom', () => {
+  it('enforces the minimum dimension and writes exactly one resized log entry', () => {
+    loadFootprintFloor()
+    const before = useCanvasStore.getState().activityLog.length
+    useCanvasStore.getState().resizeRoom('r1', { w: 0.01, h: 3, d: 0.01 })
+
+    const state = useCanvasStore.getState()
+    const room = state.rooms.find((r) => r.id === 'r1')!
+    expect(room.size.w).toBe(0.5)
+    expect(room.size.d).toBe(0.5)
+    expect(state.activityLog.length).toBe(before + 1)
+    expect(state.activityLog[0].action).toBe('object.resized')
+  })
+
+  it('recomputes elevation-aligned y from the new height', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().resizeRoom('r1', { w: 4, h: 5, d: 4 })
+    const room = useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!
+    expect(room.position.y).toBe(2.5) // elevation 0 + height/2
+  })
+})
+
+describe('new object types', () => {
+  it('adds each new object type with its defaults', () => {
+    for (const type of ['corridor', 'lift', 'shaft', 'furniture', 'column', 'generic'] as const) {
+      useCanvasStore.getState().addObject(type)
+      const obj = useCanvasStore.getState().rooms.find((r) => r.objectType === type)
+      expect(obj, `expected a ${type} object`).toBeDefined()
+    }
+  })
+
+  it('round-trips new object types through serialize/deserialize', () => {
+    useCanvasStore.getState().clearLayout()
+    useCanvasStore.getState().addObject('corridor')
+    useCanvasStore.getState().addObject('lift')
+
+    const serialized = useCanvasStore.getState().serializeLayout()
+    useCanvasStore.getState().loadLayout(serialized)
+
+    const types = useCanvasStore.getState().rooms.map((r) => r.objectType).sort()
+    expect(types).toEqual(['corridor', 'lift'])
+  })
+
+  it('normalizes an unknown object type gracefully to room', () => {
+    useCanvasStore.getState().loadRooms([
+      {
+        id: 'weird',
+        label: 'Weird',
+        // @ts-expect-error deliberately unknown type from an old/foreign payload
+        objectType: 'teleporter',
+        position: { x: 0, y: 1.5, z: 0 },
+        size: { w: 3, h: 3, d: 3 },
+        rotation: { x: 0, y: 0, z: 0 },
+        color: '#ccc',
+      },
+    ])
+    expect(useCanvasStore.getState().rooms[0].objectType).toBe('room')
+  })
+})
+
+describe('click-to-place', () => {
+  it('places an object at the given coordinates and clears placement mode', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().setPlacementMode('furniture')
+    useCanvasStore.getState().addObjectAt('furniture', 5, 3)
+
+    const state = useCanvasStore.getState()
+    const obj = state.rooms.find((r) => r.objectType === 'furniture')!
+    expect(obj.position.x).toBe(5)
+    expect(obj.position.z).toBe(3)
+    expect(state.placementMode).toBeNull()
+  })
+})
+
+describe('undo/redo', () => {
+  it('reverts an add', () => {
+    const start = useCanvasStore.getState().rooms.length
+    useCanvasStore.getState().addObject('wall')
+    expect(useCanvasStore.getState().rooms.length).toBe(start + 1)
+
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.length).toBe(start)
+  })
+
+  it('reverts a move', () => {
+    useCanvasStore.getState().updateRoom('room-1', { position: { x: 3, y: 1.5, z: 4 } })
+    useCanvasStore.getState().undo()
+    const room = useCanvasStore.getState().rooms.find((r) => r.id === 'room-1')!
+    expect(room.position).toEqual({ x: 0, y: 1.5, z: 0 })
+  })
+
+  it('reverts a resize', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().resizeRoom('r1', { w: 7, h: 3, d: 7 })
+    useCanvasStore.getState().undo()
+    const room = useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!
+    expect(room.size).toEqual({ w: 4, h: 3, d: 4 })
+  })
+
+  it('reverts a delete', () => {
+    useCanvasStore.getState().deleteRoom('room-1')
+    expect(useCanvasStore.getState().rooms.find((r) => r.id === 'room-1')).toBeUndefined()
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.find((r) => r.id === 'room-1')).toBeDefined()
+  })
+
+  it('redo re-applies an undone change', () => {
+    const start = useCanvasStore.getState().rooms.length
+    useCanvasStore.getState().addObject('wall')
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.length).toBe(start)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms.length).toBe(start + 1)
+  })
+
+  it('undo is a no-op with empty history', () => {
+    const before = useCanvasStore.getState().rooms.length
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.length).toBe(before)
   })
 })

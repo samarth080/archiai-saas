@@ -1,5 +1,5 @@
 import { type RefObject } from 'react'
-import { OrbitControls, Grid } from '@react-three/drei'
+import { OrbitControls, Grid, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
 
@@ -17,6 +17,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
   const deselectAll = useCanvasStore((s) => s.deselectAll)
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
+  const measurePoints = useCanvasStore((s) => s.measurePoints)
   const visibleFloors =
     selectedFloor === 'all'
       ? floors
@@ -100,18 +101,65 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         enableRotate={!isPlanView}
       />
 
-      {/* Invisible plane — deselects when clicking empty canvas */}
+      {/* Invisible ground plane — click-to-place when a tool is armed,
+          otherwise deselects when clicking empty canvas. */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.01, 0]}
         onPointerDown={(event) => {
           event.stopPropagation()
-          if (!readOnly) deselectAll()
+          if (readOnly) return
+          const { placementMode, measureMode, addObjectAt, addMeasurePoint } =
+            useCanvasStore.getState()
+          if (measureMode) {
+            addMeasurePoint(event.point.x, event.point.z)
+          } else if (placementMode) {
+            addObjectAt(placementMode, event.point.x, event.point.z)
+          } else {
+            deselectAll()
+          }
         }}
       >
         <planeGeometry args={[200, 200]} />
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
+
+      {/* Tape measure — points, connecting line, and a distance label. */}
+      {measurePoints.map((point, index) => (
+        <mesh key={index} position={[point.x, 0.05, point.z]} raycast={() => null}>
+          <sphereGeometry args={[0.18, 12, 12]} />
+          <meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.4} />
+        </mesh>
+      ))}
+      {measurePoints.length === 2 && (
+        <>
+          <Line
+            points={[
+              [measurePoints[0].x, 0.05, measurePoints[0].z],
+              [measurePoints[1].x, 0.05, measurePoints[1].z],
+            ]}
+            color="#dc2626"
+            lineWidth={2}
+          />
+          <Html
+            position={[
+              (measurePoints[0].x + measurePoints[1].x) / 2,
+              0.3,
+              (measurePoints[0].z + measurePoints[1].z) / 2,
+            ]}
+            center
+            style={{ pointerEvents: 'none' }}
+          >
+            <div className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow">
+              {Math.hypot(
+                measurePoints[1].x - measurePoints[0].x,
+                measurePoints[1].z - measurePoints[0].z,
+              ).toFixed(2)}
+              {' m'}
+            </div>
+          </Html>
+        </>
+      )}
     </>
   )
 }
