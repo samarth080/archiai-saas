@@ -6,6 +6,18 @@ from app.models.layout_pattern import LayoutPattern
 from app.models.scraper_run import ScraperRun
 from app.models.scraper_source import ScraperSource
 from app.schemas.scraper import ScraperSourceCreate, ScraperSourceUpdate
+from app.utils.ssrf import UnsafeURLError, assert_public_url_async
+
+
+async def _assert_safe_source_urls(*urls: str | None) -> None:
+    """Reject any URL that resolves to a non-public address (SSRF guard)."""
+    for url in urls:
+        if url is None:
+            continue
+        try:
+            await assert_public_url_async(url)
+        except UnsafeURLError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 async def create_scraper_source(
@@ -13,6 +25,7 @@ async def create_scraper_source(
     user_id: str,
     data: ScraperSourceCreate,
 ) -> ScraperSource:
+    await _assert_safe_source_urls(data.base_url, data.robots_txt_url)
     source = ScraperSource(created_by=user_id, **data.model_dump())
     db.add(source)
     await db.commit()
@@ -38,7 +51,9 @@ async def update_scraper_source(
     data: ScraperSourceUpdate,
 ) -> ScraperSource:
     source = await get_scraper_source(db, source_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    await _assert_safe_source_urls(updates.get("base_url"), updates.get("robots_txt_url"))
+    for field, value in updates.items():
         setattr(source, field, value)
     await db.commit()
     await db.refresh(source)

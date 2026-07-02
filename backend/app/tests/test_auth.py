@@ -1,4 +1,19 @@
+from datetime import datetime, timedelta, timezone
+
 from httpx import AsyncClient
+from jose import jwt
+
+from app.config.settings import settings
+from app.utils.jwt import ALGORITHM, TOKEN_TYPE_ACCESS
+
+
+async def _register(client: AsyncClient, email: str) -> dict:
+    response = await client.post(
+        "/api/auth/register",
+        json={"name": "Token User", "email": email, "password": "password123"},
+    )
+    assert response.status_code == 201
+    return response.json()
 
 
 async def test_register_success(client: AsyncClient):
@@ -94,3 +109,73 @@ async def test_me_invalid_token(client: AsyncClient):
     data = response.json()
     assert data["error"] == "Not authenticated"
     assert data["code"] == "UNAUTHORIZED"
+
+
+# ── Token lifecycle (Phase 0 C2) ─────────────────────────────────────────────
+
+
+async def test_register_and_login_return_refresh_token(client: AsyncClient):
+    data = await _register(client, "refresh-issued@example.com")
+    assert data["refresh_token"]
+    assert data["access_token"] != data["refresh_token"]
+
+
+async def test_refresh_issues_new_access_token_and_rotates(client: AsyncClient):
+    data = await _register(client, "rotate@example.com")
+    old_refresh = data["refresh_token"]
+
+    refreshed = await client.post("/api/auth/refresh", json={"refresh_token": old_refresh})
+    assert refreshed.status_code == 200
+    body = refreshed.json()
+    assert body["access_token"]
+    assert body["refresh_token"] != old_refresh
+
+    # The rotated-out (old) refresh token can no longer be used.
+    reused = await client.post("/api/auth/refresh", json={"refresh_token": old_refresh})
+    assert reused.status_code == 401
+
+    # The new refresh token works.
+    again = await client.post("/api/auth/refresh", json={"refresh_token": body["refresh_token"]})
+    assert again.status_code == 200
+
+
+async def test_refresh_rejects_access_token(client: AsyncClient):
+    data = await _register(client, "wrongtype@example.com")
+    response = await client.post("/api/auth/refresh", json={"refresh_token": data["access_token"]})
+    assert response.status_code == 401
+
+
+async def test_access_route_rejects_refresh_token(client: AsyncClient):
+    data = await _register(client, "refresh-on-access@example.com")
+    response = await client.get(
+        "/api/auth/me", headers={"Authorization": f"Bearer {data['refresh_token']}"}
+    )
+    assert response.status_code == 401
+
+
+async def test_logout_revokes_refresh_token(client: AsyncClient):
+    data = await _register(client, "logout@example.com")
+    headers = {"Authorization": f"Bearer {data['access_token']}"}
+
+    logout = await client.post(
+        "/api/auth/logout", json={"refresh_token": data["refresh_token"]}, headers=headers
+    )
+    assert logout.status_code == 200
+
+    reused = await client.post("/api/auth/refresh", json={"refresh_token": data["refresh_token"]})
+    assert reused.status_code == 401
+
+
+async def test_expired_access_token_rejected(client: AsyncClient):
+    await _register(client, "expired@example.com")
+    expired = jwt.encode(
+        {
+            "sub": "some-user",
+            "type": TOKEN_TYPE_ACCESS,
+            "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+        },
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert response.status_code == 401

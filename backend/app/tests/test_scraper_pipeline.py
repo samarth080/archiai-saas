@@ -3,8 +3,9 @@ from importlib import import_module
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from app.models.user import User
 from app.tests.conftest import TestSessionLocal
 
 
@@ -28,11 +29,22 @@ Bedrooms and living rooms should have windows on external walls for natural ligh
 
 
 async def _register_and_token(client: AsyncClient, email: str) -> str:
+    """Register a user and promote them to admin.
+
+    The scraper/data-pipeline API is admin-only (Phase 0 C1 lockdown), so the
+    pipeline tests below exercise it as an operator. Admin status is read from
+    the DB per request, so promoting after the token is issued is sufficient.
+    """
     response = await client.post(
         "/api/auth/register",
         json={"name": "Pipeline User", "email": email, "password": "password123"},
     )
     assert response.status_code == 201
+    async with TestSessionLocal() as session:
+        await session.execute(
+            update(User).where(User.email == email).values(is_admin=True)
+        )
+        await session.commit()
     return response.json()["access_token"]
 
 
@@ -479,7 +491,51 @@ async def test_scraper_run_is_logged_and_latest_status_is_available(client: Asyn
     assert status.json()["status"] == "completed"
 
 
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://localhost/private",
+        "http://10.0.0.1/internal",
+    ],
+)
+async def test_scraper_source_create_rejects_ssrf_urls(client: AsyncClient, bad_url):
+    token = await _register_and_token(client, f"ssrf-{abs(hash(bad_url))}@example.com")
+    payload = {**SOURCE_PAYLOAD, "base_url": bad_url}
+
+    response = await client.post("/api/scraper/sources", json=payload, headers=_headers(token))
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "UNPROCESSABLE_ENTITY"
+
+
 async def test_scraper_api_requires_authentication(client: AsyncClient):
     response = await client.get("/api/scraper/sources")
 
     assert response.status_code == 401
+
+
+async def test_scraper_api_forbids_non_admin(client: AsyncClient):
+    """A regular (non-admin) authenticated user is rejected on every route."""
+    register = await client.post(
+        "/api/auth/register",
+        json={"name": "Regular User", "email": "not-admin@example.com", "password": "password123"},
+    )
+    token = register.json()["access_token"]
+    headers = _headers(token)
+
+    read_routes = [
+        ("get", "/api/scraper/sources"),
+        ("get", "/api/scraper/runs"),
+        ("get", "/api/scraper/status"),
+        ("get", "/api/scraper/patterns"),
+    ]
+    for method, path in read_routes:
+        response = await getattr(client, method)(path, headers=headers)
+        assert response.status_code == 403, f"{method} {path} should be admin-only"
+
+    created = await client.post("/api/scraper/sources", json=SOURCE_PAYLOAD, headers=headers)
+    assert created.status_code == 403
+
+    ran = await client.post("/api/scraper/run", json={"source_id": "any"}, headers=headers)
+    assert ran.status_code == 403
