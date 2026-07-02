@@ -4,11 +4,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.connection import get_db
 from app.schemas.project import PublicProjectSummary, PublicSharedProjectOut
 from app.services.export_share_service import get_shared_project_by_token
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/share", tags=["shares"])
 
 
-@router.get("/{token}", response_model=PublicSharedProjectOut)
+@router.get(
+    "/{token}",
+    response_model=PublicSharedProjectOut,
+    dependencies=[Depends(rate_limit("share_view", limit=30, window_seconds=60))],
+)
 async def get_shared_project(
     token: str,
     db: AsyncSession = Depends(get_db),

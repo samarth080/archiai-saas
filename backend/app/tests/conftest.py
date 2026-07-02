@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.connection import Base, get_db
 from app.main import app
+from app.utils.rate_limit import rate_limiter
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -18,6 +19,9 @@ TestSessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
+    # Each test starts with a clean rate-limiter so cumulative API calls across
+    # tests don't spuriously trip the limits (the state is process-global).
+    rate_limiter.reset()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield

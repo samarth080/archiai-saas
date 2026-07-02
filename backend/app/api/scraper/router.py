@@ -25,6 +25,7 @@ from app.services.scraper_management_service import (
 )
 from app.services.scraper_service import run_source_scraper
 from app.utils.activity import log_activity
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/scraper", tags=["scraper"])
 bearer = HTTPBearer(auto_error=False)
@@ -91,7 +92,11 @@ async def delete_source(
     await delete_scraper_source(db, source_id)
 
 
-@router.post("/run", response_model=ScraperRunOut)
+@router.post(
+    "/run",
+    response_model=ScraperRunOut,
+    dependencies=[Depends(rate_limit("scraper_run", limit=10, window_seconds=60))],
+)
 async def run(
     data: ScraperRunRequest,
     user_id: str = Depends(_current_admin_id),

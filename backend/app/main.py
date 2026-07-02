@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.config.settings import settings
 from app.api.auth.router import router as auth_router
 from app.api.designs.router import router as designs_router
 from app.api.projects.router import router as projects_router
@@ -12,12 +13,55 @@ from app.api.workspaces.router import router as workspaces_router
 
 app = FastAPI(title="ArchiAI API", version="0.1.0")
 
+# Reject oversize request bodies up front (Phase 0 H4), before any handler or
+# body parsing runs. Sits above the 2 MB layout-JSON cap with headroom for
+# framing/other fields.
+MAX_REQUEST_BODY_BYTES = 3 * 1024 * 1024
+
+
+@app.middleware("http")
+async def limit_request_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared = int(content_length)
+        except ValueError:
+            declared = None
+        if declared is not None and declared > MAX_REQUEST_BODY_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "error": "Request body too large",
+                    "code": "PAYLOAD_TOO_LARGE",
+                    "status": 413,
+                },
+            )
+    return await call_next(request)
+
+
+# Security response headers (Phase 0 M2) — emitted in production, where the API
+# is served over HTTPS behind the real frontend origin.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if settings.is_production:
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,7 +73,9 @@ STATUS_CODES = {
     403: "FORBIDDEN",
     404: "NOT_FOUND",
     409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
     422: "UNPROCESSABLE_ENTITY",
+    429: "TOO_MANY_REQUESTS",
     500: "INTERNAL_SERVER_ERROR",
 }
 

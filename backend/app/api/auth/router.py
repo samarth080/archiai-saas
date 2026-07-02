@@ -21,22 +21,36 @@ from app.services.auth_service import (
     register_user,
     revoke_refresh_token,
 )
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
 
 
-@router.post("/register", response_model=AuthResponse, status_code=201)
+@router.post(
+    "/register",
+    response_model=AuthResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("auth_register", limit=5, window_seconds=60))],
+)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return await register_user(db, data)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    dependencies=[Depends(rate_limit("auth_login", limit=10, window_seconds=60))],
+)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await login_user(db, data)
 
 
-@router.post("/refresh", response_model=RefreshResponse)
+@router.post(
+    "/refresh",
+    response_model=RefreshResponse,
+    dependencies=[Depends(rate_limit("auth_refresh", limit=30, window_seconds=60))],
+)
 async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     return await refresh_access_token(db, data.refresh_token)
 

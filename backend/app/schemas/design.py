@@ -1,7 +1,20 @@
+import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Payload caps (Phase 0 H4) — bound untrusted input so a single request can't
+# exhaust memory/DB. A prompt is a short brief; a serialized layout of hundreds
+# of rooms is still well under this.
+MAX_PROMPT_LENGTH = 2000
+MAX_LAYOUT_JSON_BYTES = 2_000_000
+
+
+def _validate_layout_size(value: dict[str, Any]) -> dict[str, Any]:
+    if len(json.dumps(value).encode("utf-8")) > MAX_LAYOUT_JSON_BYTES:
+        raise ValueError("Layout payload is too large")
+    return value
 
 
 class DesignParams(BaseModel):
@@ -25,7 +38,7 @@ class DesignParams(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    prompt: str = Field(..., min_length=5)
+    prompt: str = Field(..., min_length=5, max_length=MAX_PROMPT_LENGTH)
     project_id: str | None = Field(default=None, alias="projectId")
     design_params: DesignParams | None = Field(default=None, alias="designParams")
 
@@ -40,14 +53,18 @@ class SaveDesignRequest(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    _check_layout_size = field_validator("layout")(_validate_layout_size)
+
 
 class DesignDraftSaveRequest(BaseModel):
     layout: dict[str, Any]
 
+    _check_layout_size = field_validator("layout")(_validate_layout_size)
+
 
 class RefineRequest(BaseModel):
     design_id: str = Field(..., alias="designId")
-    prompt: str = Field(..., min_length=3)
+    prompt: str = Field(..., min_length=3, max_length=MAX_PROMPT_LENGTH)
 
     model_config = {"populate_by_name": True}
 

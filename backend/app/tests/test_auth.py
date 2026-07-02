@@ -166,6 +166,20 @@ async def test_logout_revokes_refresh_token(client: AsyncClient):
     assert reused.status_code == 401
 
 
+async def test_login_is_rate_limited(client: AsyncClient):
+    creds = {"email": "nobody-rl@example.com", "password": "whatever12"}
+    # Login limit is 10/min per IP; the 11th attempt within the window is 429.
+    statuses = []
+    for _ in range(11):
+        response = await client.post("/api/auth/login", json=creds)
+        statuses.append(response.status_code)
+
+    assert statuses[:10] == [401] * 10
+    assert statuses[10] == 429
+    blocked = await client.post("/api/auth/login", json=creds)
+    assert blocked.json()["code"] == "TOO_MANY_REQUESTS"
+
+
 async def test_expired_access_token_rejected(client: AsyncClient):
     await _register(client, "expired@example.com")
     expired = jwt.encode(
