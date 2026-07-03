@@ -1,11 +1,45 @@
+import hashlib
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserOut
+from app.schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    RefreshResponse,
+    RegisterRequest,
+    UserOut,
+)
 from app.utils.hashing import hash_password, verify_password
-from app.utils.jwt import create_access_token, decode_access_token
+from app.utils.jwt import (
+    TOKEN_TYPE_REFRESH,
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    decode_token,
+)
+
+
+def _hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def _issue_refresh_token(db: AsyncSession, user_id: str) -> str:
+    """Mint a refresh token and persist only its hash (revocable grant)."""
+    token, expires_at = create_refresh_token(user_id)
+    db.add(
+        RefreshToken(
+            user_id=user_id,
+            token_hash=_hash_refresh_token(token),
+            expires_at=expires_at,
+        )
+    )
+    await db.commit()
+    return token
 
 
 async def register_user(db: AsyncSession, data: RegisterRequest) -> AuthResponse:
@@ -23,7 +57,12 @@ async def register_user(db: AsyncSession, data: RegisterRequest) -> AuthResponse
     await db.refresh(user)
 
     token = create_access_token(user.id)
-    return AuthResponse(access_token=token, user=UserOut.model_validate(user))
+    refresh = await _issue_refresh_token(db, user.id)
+    return AuthResponse(
+        access_token=token,
+        refresh_token=refresh,
+        user=UserOut.model_validate(user),
+    )
 
 
 async def login_user(db: AsyncSession, data: LoginRequest) -> AuthResponse:
@@ -34,7 +73,61 @@ async def login_user(db: AsyncSession, data: LoginRequest) -> AuthResponse:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_access_token(user.id)
-    return AuthResponse(access_token=token, user=UserOut.model_validate(user))
+    refresh = await _issue_refresh_token(db, user.id)
+    return AuthResponse(
+        access_token=token,
+        refresh_token=refresh,
+        user=UserOut.model_validate(user),
+    )
+
+
+async def _get_active_refresh_token(db: AsyncSession, token: str) -> RefreshToken:
+    """Decode + look up a refresh token, rejecting invalid/expired/revoked ones."""
+    try:
+        decode_token(token, expected_type=TOKEN_TYPE_REFRESH)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == _hash_refresh_token(token))
+    )
+    record = result.scalar_one_or_none()
+    if record is None or record.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # SQLite (tests) round-trips DateTime as tz-naive; treat naive as UTC so the
+    # comparison works on both SQLite and Postgres.
+    expires_at = record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    return record
+
+
+async def refresh_access_token(db: AsyncSession, token: str) -> RefreshResponse:
+    """Rotate a refresh token: revoke the presented one, issue a fresh pair."""
+    record = await _get_active_refresh_token(db, token)
+    record.revoked_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    access = create_access_token(record.user_id)
+    new_refresh = await _issue_refresh_token(db, record.user_id)
+    return RefreshResponse(access_token=access, refresh_token=new_refresh)
+
+
+async def revoke_refresh_token(db: AsyncSession, token: str | None) -> None:
+    """Best-effort revoke on logout. A missing/already-invalid token is a no-op
+    so logout is always safe to call."""
+    if not token:
+        return
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == _hash_refresh_token(token))
+    )
+    record = result.scalar_one_or_none()
+    if record is not None and record.revoked_at is None:
+        record.revoked_at = datetime.now(timezone.utc)
+        await db.commit()
 
 
 async def get_current_user(db: AsyncSession, token: str) -> UserOut:
@@ -50,3 +143,16 @@ async def get_current_user(db: AsyncSession, token: str) -> UserOut:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     return UserOut.model_validate(user)
+
+
+async def get_current_admin_user(db: AsyncSession, token: str) -> UserOut:
+    """Like get_current_user, but rejects non-admins with 403.
+
+    Used to gate operator-only surfaces (the scraper/data pipeline). Admin
+    status is read from the database on every request, never encoded in the
+    token, so revoking a user's admin flag takes effect immediately.
+    """
+    user = await get_current_user(db, token)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

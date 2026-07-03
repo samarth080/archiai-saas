@@ -33,6 +33,7 @@ from app.services.prompt_service import extract_total_area_sqm, parse_prompt, pa
 from app.services.refinement_service import apply_refinement, parse_refinement
 from app.services.workspace_service import require_project_read_access
 from app.utils.activity import log_activity
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/design", tags=["design"])
 _bearer = HTTPBearer(auto_error=False)
@@ -55,7 +56,11 @@ async def _current_user_id(
     return str(user.id)
 
 
-@router.post("/generate", response_model=GenerateResponse)
+@router.post(
+    "/generate",
+    response_model=GenerateResponse,
+    dependencies=[Depends(rate_limit("design_generate", limit=20, window_seconds=60))],
+)
 async def generate(
     request: GenerateRequest,
     user_id: str = Depends(_current_user_id),

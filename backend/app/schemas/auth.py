@@ -25,6 +25,7 @@ class UserOut(BaseModel):
     id: str
     name: str
     email: str
+    is_admin: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -32,5 +33,20 @@ class UserOut(BaseModel):
 
 class AuthResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None

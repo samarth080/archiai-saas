@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 from scrapling import AsyncFetcher
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from app.services.robots_txt_checker import (
     default_robots_checker,
 )
 from app.services.scraper_cleaning_service import extract_layout_metadata
+from app.utils.ssrf import assert_public_url_async
 
 
 class ScraperBlockedError(ValueError):
@@ -74,6 +76,10 @@ def _looks_blocked(status: int, html_content: str) -> bool:
     return any(marker in html_content[:2000].lower() for marker in _BLOCKED_MARKERS)
 
 
+_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+_MAX_REDIRECTS = 5
+
+
 async def fetch_public_page(url: str) -> str:
     """
     Fetch a public page's HTML. Tries a plain (fast, no-browser) request first;
@@ -83,13 +89,35 @@ async def fetch_public_page(url: str) -> str:
     `scrapling install` to have downloaded its browser binaries; if that
     hasn't been run, StealthyFetcher import fails at module load and this
     function simply skips the escalation rather than crashing.
+
+    Every URL is SSRF-checked before it is fetched (assert_public_url_async),
+    and redirects are followed manually so each hop is re-validated — an
+    attacker cannot register a public URL that 3xx-redirects to an internal /
+    cloud-metadata address. Known limitation: the StealthyFetcher browser
+    escalation follows in-browser redirects itself, which we can't intercept;
+    the initial URL is still validated, and the surface is admin-only.
     """
     headers = {"User-Agent": f"{ROBOTS_USER_AGENT}/0.1 (+public-text-reference-pipeline)"}
-    response = await AsyncFetcher.get(url, timeout=15, headers=headers, follow_redirects=True)
+
+    current_url = await assert_public_url_async(url)
+    response = None
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = await AsyncFetcher.get(
+            current_url, timeout=15, headers=headers, follow_redirects=False
+        )
+        if response.status not in _REDIRECT_STATUS_CODES:
+            break
+        location = (response.headers or {}).get("location")
+        if not location:
+            break
+        current_url = await assert_public_url_async(urljoin(current_url, location))
+    else:
+        raise ScraperFetchError(f"Too many redirects fetching {url}")
+
     html_content = str(response.html_content)
 
     if (response.status >= 400 or _looks_blocked(response.status, html_content)) and StealthyFetcher is not None:
-        response = await StealthyFetcher.async_fetch(url, headless=True, network_idle=True, timeout=20000)
+        response = await StealthyFetcher.async_fetch(current_url, headless=True, network_idle=True, timeout=20000)
         html_content = str(response.html_content)
 
     if response.status >= 400:

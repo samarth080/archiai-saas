@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.schemas.scraper import (
     ScraperSourceOut,
     ScraperSourceUpdate,
 )
-from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_admin_user
 from app.services.scraper_management_service import (
     create_scraper_source,
     delete_scraper_source,
@@ -25,27 +25,32 @@ from app.services.scraper_management_service import (
 )
 from app.services.scraper_service import run_source_scraper
 from app.utils.activity import log_activity
+from app.utils.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/scraper", tags=["scraper"])
 bearer = HTTPBearer(auto_error=False)
 
 
-async def _current_user_id(
+async def _current_admin_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> str:
-    if credentials is None:
-        from fastapi import HTTPException
+    """Scraper/data-pipeline is an operator-only surface: require an admin.
 
+    Phase 0 (C1) lockdown — before this, any authenticated user could list
+    every source, create arbitrary-URL sources, and trigger server-side
+    fetches (SSRF). Every route below now depends on this.
+    """
+    if credentials is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    user = await get_current_user(db, credentials.credentials)
+    user = await get_current_admin_user(db, credentials.credentials)
     return str(user.id)
 
 
 @router.post("/sources", response_model=ScraperSourceOut, status_code=201)
 async def create_source(
     data: ScraperSourceCreate,
-    user_id: str = Depends(_current_user_id),
+    user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await create_scraper_source(db, user_id, data)
@@ -53,7 +58,7 @@ async def create_source(
 
 @router.get("/sources", response_model=list[ScraperSourceOut])
 async def sources(
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await list_scraper_sources(db)
@@ -62,7 +67,7 @@ async def sources(
 @router.get("/sources/{source_id}", response_model=ScraperSourceOut)
 async def source(
     source_id: str,
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_scraper_source(db, source_id)
@@ -72,7 +77,7 @@ async def source(
 async def update_source(
     source_id: str,
     data: ScraperSourceUpdate,
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await update_scraper_source(db, source_id, data)
@@ -81,16 +86,20 @@ async def update_source(
 @router.delete("/sources/{source_id}", status_code=204)
 async def delete_source(
     source_id: str,
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     await delete_scraper_source(db, source_id)
 
 
-@router.post("/run", response_model=ScraperRunOut)
+@router.post(
+    "/run",
+    response_model=ScraperRunOut,
+    dependencies=[Depends(rate_limit("scraper_run", limit=10, window_seconds=60))],
+)
 async def run(
     data: ScraperRunRequest,
-    user_id: str = Depends(_current_user_id),
+    user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     source_record = await get_scraper_source(db, data.source_id)
@@ -101,7 +110,7 @@ async def run(
 
 @router.get("/runs", response_model=list[ScraperRunOut])
 async def runs(
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await list_scraper_runs(db)
@@ -110,7 +119,7 @@ async def runs(
 @router.get("/runs/{run_id}", response_model=ScraperRunOut)
 async def run_detail(
     run_id: str,
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_scraper_run(db, run_id)
@@ -118,7 +127,7 @@ async def run_detail(
 
 @router.get("/status", response_model=ScraperRunOut)
 async def status(
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_latest_scraper_run(db)
@@ -126,7 +135,7 @@ async def status(
 
 @router.get("/patterns", response_model=list[LayoutPatternOut])
 async def patterns(
-    _user_id: str = Depends(_current_user_id),
+    _user_id: str = Depends(_current_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await list_layout_patterns(db)
