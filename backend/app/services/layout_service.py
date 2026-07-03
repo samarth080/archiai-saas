@@ -1681,6 +1681,49 @@ def _build_layout_candidate(
 
 # ── Public entrypoint ────────────────────────────────────────────────────────
 
+def _rooms_share_wall(a: dict, b: dict) -> bool:
+    """AABB shared-wall test between two placed-room dicts on the same floor."""
+    if a.get("floorLevel") != b.get("floorLevel"):
+        return False
+    ax, az = a["position"]["x"], a["position"]["z"]
+    aw, ad = a["size"]["w"], a["size"]["d"]
+    bx, bz = b["position"]["x"], b["position"]["z"]
+    bw, bd = b["size"]["w"], b["size"]["d"]
+    x_overlap = min(ax + aw / 2, bx + bw / 2) - max(ax - aw / 2, bx - bw / 2)
+    z_overlap = min(az + ad / 2, bz + bd / 2) - max(az - ad / 2, bz - bd / 2)
+    return (x_overlap >= 0.5 and -z_overlap <= 0.8) or (z_overlap >= 0.5 and -x_overlap <= 0.8)
+
+
+def _candidate_adjacency_bonus(
+    candidate: dict,
+    must_pairs: set[frozenset] | None,
+    should_pairs: set[frozenset] | None,
+) -> float:
+    """How many requested MUST/SHOULD adjacencies a candidate actually realises
+    (matched by room_type). Used only as a *secondary* selection key — quality
+    stays primary — so a graph-satisfying layout wins ties without ever letting
+    a lower-quality layout through (Sprint 18 Phase 4)."""
+    if not must_pairs and not should_pairs:
+        return 0.0
+    by_type: dict[str, list[dict]] = {}
+    for room in candidate.get("rooms") or []:
+        by_type.setdefault(room.get("roomType"), []).append(room)
+
+    def _pair_realised(pair: frozenset) -> bool:
+        types = list(pair)
+        if len(types) == 1:
+            types = [types[0], types[0]]
+        for x in by_type.get(types[0], []):
+            for y in by_type.get(types[1], []):
+                if x is not y and _rooms_share_wall(x, y):
+                    return True
+        return False
+
+    must_ok = sum(1 for pair in (must_pairs or set()) if _pair_realised(pair))
+    should_ok = sum(1 for pair in (should_pairs or set()) if _pair_realised(pair))
+    return must_ok + 0.4 * should_ok
+
+
 def generate_layout(
     room_specs: list[RoomSpec],
     prompt: str = "",
@@ -1744,7 +1787,16 @@ def generate_layout(
         )
         for offset, style in variants
     ]
-    best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
+    # Primary: quality score. Secondary (tiebreak): how many requested MUST/
+    # SHOULD adjacencies the candidate realises — so the generator prefers the
+    # layout that best honours the program graph without ever overriding quality.
+    best = max(
+        candidates,
+        key=lambda candidate: (
+            candidate["insights"]["score"],
+            _candidate_adjacency_bonus(candidate, must_pairs, should_pairs),
+        ),
+    )
     best["metadata"]["candidateCount"] = len(candidates)
 
     design_params_echo: dict = {}

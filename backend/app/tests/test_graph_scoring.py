@@ -122,3 +122,41 @@ def test_scores_a_generated_layout(prompt):
     assert 0.0 <= sat.score <= 1.0
     assert sat.must_satisfied <= sat.must_total
     assert isinstance(sat.as_dict()["unsatisfiedMust"], list)
+
+
+# ── Graph-aware candidate selection (secondary key in generate_layout) ────────
+
+
+def _typed_room(room_type, x, z, w=4.0, d=4.0, floor=0):
+    return {
+        "roomType": room_type,
+        "floorLevel": floor,
+        "position": {"x": x, "y": 1.5, "z": z},
+        "size": {"w": w, "h": 3.0, "d": d},
+    }
+
+
+def test_candidate_adjacency_bonus_counts_realised_pairs():
+    from app.services.layout_service import _candidate_adjacency_bonus
+
+    must = {frozenset({"reception", "waiting_room"})}
+    adjacent = {"rooms": [_typed_room("reception", 0, 0), _typed_room("waiting_room", 4, 0)]}
+    far = {"rooms": [_typed_room("reception", 0, 0), _typed_room("waiting_room", 40, 0)]}
+
+    assert _candidate_adjacency_bonus(adjacent, must, None) == 1.0
+    assert _candidate_adjacency_bonus(far, must, None) == 0.0
+
+
+def test_candidate_adjacency_bonus_weights_should_below_must():
+    from app.services.layout_service import _candidate_adjacency_bonus
+
+    should = {frozenset({"office", "meeting_room"})}
+    adjacent = {"rooms": [_typed_room("office", 0, 0), _typed_room("meeting_room", 4, 0)]}
+    assert _candidate_adjacency_bonus(adjacent, None, should) == pytest.approx(0.4)
+
+
+def test_candidate_adjacency_bonus_zero_without_constraints():
+    from app.services.layout_service import _candidate_adjacency_bonus
+
+    cand = {"rooms": [_typed_room("office", 0, 0)]}
+    assert _candidate_adjacency_bonus(cand, None, None) == 0.0

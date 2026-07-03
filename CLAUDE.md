@@ -614,9 +614,14 @@ Not yet started: the rest of Phase 4 (command palette, plan-view door swings, pa
 
 > Per the user, further master-brief roadmap work moves to `sprint-18/...` branches rather than piling onto Sprint 17.
 
-**Phase 4 (graph-driven layout) — slice 1: graph-satisfaction scoring** (`sprint-18/phase4-graph-scoring`, off `sprint-17/phase2-program-graph` since it needs the ProgramGraph): `planning/graph_scoring.py` measures how well a *generated* layout honours its ProgramGraph's MUST/SHOULD `adjacent` edges — deterministic AABB shared-wall geometry, weighted score, and the human-readable list of unmet MUST adjacencies. Wired additively into `/api/design/generate` as `metadata.graphSatisfaction` (schema field added so it isn't dropped). No change to any generated layout; nothing removed. 11 new tests (adjacency geometry, satisfied/unsatisfied/weighted scoring, integration on clinic/office/apartment prompts with real adjacency language). Full backend suite 504 passed.
+**Phase 4 (graph-driven layout)** (`sprint-18/phase4-graph-scoring`, off `sprint-17/phase2-program-graph` since it needs the ProgramGraph):
 
-Deferred (Phase 4 remainder): the actual graph-*driven placement engine* (cluster MUST-adjacency nodes, slice the footprint by area honouring `preferred_relative_position`/`requires_external_wall`, generate graph-aware candidates scored by the above and competed against the tiler). This slice delivers the scoring/measurement half first — per the brief's own guidance to lean on explainable scoring rather than promising a perfect solver.
+- *Slice 1 — graph-satisfaction scoring:* `planning/graph_scoring.py` measures how well a *generated* layout honours its ProgramGraph's MUST/SHOULD `adjacent` edges — deterministic AABB shared-wall geometry, weighted score, and the human-readable list of unmet MUST adjacencies. Wired additively into `/api/design/generate` as `metadata.graphSatisfaction` (schema field added so it isn't dropped).
+- *Slice 2 — graph-aware candidate selection:* `generate_layout` already builds several candidates (tile/bsp/x-offset variants) and kept the highest quality score. The winner key is now `(quality_score, adjacency_bonus)` — quality stays primary, and how many requested MUST/SHOULD adjacencies a candidate actually realises breaks ties, so the generator prefers the layout that best honours the program graph **without ever letting a lower-quality layout through**. Purely additive selection change; no candidate is built differently and none removed.
+
+No change to how any single candidate is generated. 14 new tests; full backend suite 507 passed, zero regressions.
+
+Deferred (Phase 4 remainder): a true graph-*driven placement engine* that builds new candidates by slicing the footprint along adjacency clusters honouring `preferred_relative_position`/`requires_external_wall` (rather than only re-ranking the existing tiler/BSP candidates). Per the brief's guidance, the scoring + selection halves land first; the bespoke solver is the larger follow-up.
 
 ---
 
