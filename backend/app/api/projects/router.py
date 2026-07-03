@@ -13,6 +13,7 @@ from app.schemas.project import (
     ProjectVersionOut,
 )
 from app.services.auth_service import get_current_user
+from app.services.entitlement_service import require_within_project_limit
 from app.services.export_share_service import create_export_record, create_share_link, revoke_share_link
 from app.services.project_service import (
     create_project,
@@ -45,6 +46,7 @@ async def create(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_within_project_limit(db, user_id)
     return await create_project(db, user_id, data)
 
 

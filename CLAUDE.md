@@ -538,6 +538,24 @@ Deferred beyond Sprint 16:
 - True internal wall topology (shared-wall dedup, openings)
 - Paid AI / model-based generation, CAD/BIM, structural validation
 
+### Sprint 17+ — 10× Master-Brief Vertical Slice ✅ Phases 0–3 complete (2026-07)
+
+> A second, independent pass on the 10x roadmap driven by the master
+> implementation brief. **Do not confuse these Phase numbers with the older
+> "Sprint 17 Phase 0–4" DesignParams/dimensions numbering below** — this is a
+> separate initiative delivered as four focused branches off `main`'s current
+> tip (`sprint-17/phase0-design-params`), one per concern (per the user's
+> branch-per-task preference). None pushed yet (local only until asked).
+
+- **Phase 0 — Security & hardening** (`sprint-17/phase0-security-hardening`, 2 commits): scraper is admin-only (`User.is_admin`, mig 012); `utils/ssrf.py` blocks private/loopback/link-local/metadata targets (v4+v6, per-redirect); access tokens cut 7d→45m with `jti`/`type`, revocable refresh tokens (mig 013, `POST /auth/refresh` rotation, `/logout` revoke); `utils/rate_limit.py` per-user/IP limiter; prompt/layout/body payload caps; env-driven `ENV`/`ALLOWED_ORIGINS` + security headers + prod SECRET_KEY gate. 512 backend tests.
+- **Phase 1 — Canvas direct-manipulation** (`sprint-17/phase1-canvas-ux`): footprint-clamped drag, 8-point `ResizeHandles` (min-dim + single log entry), click-to-place, 6 new object types (corridor/lift/shaft/furniture/column/generic), `MeasurePanel` + tape tool, bounded undo/redo + Cmd/Ctrl+Z. 106 frontend tests, tsc + build clean.
+- **Phase 2 — ProgramGraph** (`sprint-17/phase2-program-graph`): `backend/app/services/planning/` — building-type-agnostic typed Node/Edge graph + adapters (`from_parser_output`/`from_building_template`/`from_user_objects`/`merge`) + lossless `to_room_specs`/`from_room_specs` bridge + explainable `validate()`. Additive: golden tests pin byte-identical layout vs. the direct path across residential + office/clinic/warehouse/restaurant. 493 backend tests.
+- **Phase 3 — Billing & entitlements** (`sprint-17/phase3-billing`, stacked on Phase 0): Plan/Subscription/PaymentOrder/PaymentEvent/Entitlement/UsageCounter (mig 014); `entitlement_service` (backend-verified free-tier limits, feature gates → 402/403, metered generations, admin bypass); `billing_service` (Razorpay order via httpx, signature-verified idempotent webhook, no SDK); `/api/billing/*`; gates wired into project-create + generate. No card/bank/UPI/PAN stored. 520 backend tests.
+
+New reference docs: [`docs/NON_ML_GRAPH_LAYOUT_ENGINE.md`](docs/NON_ML_GRAPH_LAYOUT_ENGINE.md), [`docs/SAAS_HARDENING_AND_MONETIZATION.md`](docs/SAAS_HARDENING_AND_MONETIZATION.md), [`docs/EXPORT_AND_BIM_ROADMAP.md`](docs/EXPORT_AND_BIM_ROADMAP.md), [`docs/HYPAR_INSPIRED_PRODUCT_STRATEGY.md`](docs/HYPAR_INSPIRED_PRODUCT_STRATEGY.md).
+
+Hard constraints held throughout: no ML / no paid-AI layout generation; every change additive and backward-compatible with the existing layout JSON + `RoomSpec → generate_layout` path; no new runtime dependencies (rate-limiter and Razorpay both stdlib). Migration chain across branches is linear (Phase 0 adds 012+013, Phase 3 adds 014 on top; Phases 1–2 add none), so merge order is Phase 1 & Phase 2 (independent, off base) then Phase 3 (brings Phase 0). Deferred: graph-driven placement (Phase 4), circulation/doors (Phase 5), furniture (Phase 6), CAD/BIM export (Phases 7–8), frontend token→cookie migration, full cross-user authz matrix.
+
 ### Sprint 17+ — 10× Roadmap 🚧 In Progress (Phases 0-3 core complete, Phase 4 underway)
 
 > Full roadmap: [`docs/superpowers/plans/2026-06-22-10x-roadmap.md`](docs/superpowers/plans/2026-06-22-10x-roadmap.md)

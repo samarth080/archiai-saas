@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.config.settings import settings
 from app.api.auth.router import router as auth_router
+from app.api.billing.router import router as billing_router
 from app.api.designs.router import router as designs_router
 from app.api.projects.router import router as projects_router
 from app.api.scraper.router import router as scraper_router
@@ -70,6 +71,7 @@ app.add_middleware(
 STATUS_CODES = {
     400: "BAD_REQUEST",
     401: "UNAUTHORIZED",
+    402: "PAYMENT_REQUIRED",
     403: "FORBIDDEN",
     404: "NOT_FOUND",
     409: "CONFLICT",
@@ -119,6 +121,7 @@ app.include_router(workspaces_router)
 app.include_router(designs_router)
 app.include_router(scraper_router)
 app.include_router(shares_router)
+app.include_router(billing_router)
 
 
 @app.get("/api/health")

@@ -19,6 +19,7 @@ from app.schemas.design import (
     SaveDesignRequest,
 )
 from app.services.auth_service import get_current_user
+from app.services.entitlement_service import METRIC_GENERATIONS, enforce_and_increment_usage
 from app.services.design_service import (
     get_design_draft,
     get_owned_design,
@@ -73,6 +74,11 @@ async def generate(
             status_code=422,
             detail="No rooms detected. Try: '2 bedroom apartment with kitchen'",
         )
+    # Meter generations against the plan quota (402 when exhausted). Charged only
+    # for a valid prompt, before the expensive layout work runs.
+    await enforce_and_increment_usage(
+        db, user_id, METRIC_GENERATIONS, "max_generations_per_period"
+    )
     total_area_sqm = extract_total_area_sqm(request.prompt)
     pattern_rules = await get_layout_pattern_rules(
         db,

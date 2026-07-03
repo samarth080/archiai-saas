@@ -38,7 +38,17 @@ class Settings(BaseSettings):
     # credentials.
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # Razorpay (Phase 3). All optional so dev/tests run without them; order
+    # creation is disabled and the webhook rejects everything until set.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    @property
+    def razorpay_configured(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
 
     @property
     def is_production(self) -> bool:

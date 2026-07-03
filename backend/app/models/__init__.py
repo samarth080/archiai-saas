@@ -1,4 +1,12 @@
 from app.models.activity_log import ActivityLog  # noqa: F401
+from app.models.billing import (  # noqa: F401
+    Entitlement,
+    PaymentEvent,
+    PaymentOrder,
+    Plan,
+    Subscription,
+    UsageCounter,
+)
 from app.models.design import Design  # noqa: F401
 from app.models.design_version import DesignVersion  # noqa: F401
 from app.models.export_record import ExportRecord  # noqa: F401
@@ -28,4 +36,10 @@ __all__ = [
     "ExportRecord",
     "ProjectShare",
     "RefreshToken",
+    "Plan",
+    "Subscription",
+    "PaymentOrder",
+    "PaymentEvent",
+    "Entitlement",
+    "UsageCounter",
 ]
