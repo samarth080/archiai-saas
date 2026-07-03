@@ -14,6 +14,11 @@ from app.services.planning.program_graph import (
     merge,
     to_room_specs,
 )
+from app.services.planning.graph_scoring import (
+    GraphSatisfaction,
+    graph_satisfaction_dict,
+    score_graph_satisfaction,
+)
 from app.services.planning.validation import Warning, validate
 
 __all__ = [
@@ -28,4 +33,7 @@ __all__ = [
     "to_room_specs",
     "validate",
     "Warning",
+    "GraphSatisfaction",
+    "score_graph_satisfaction",
+    "graph_satisfaction_dict",
 ]

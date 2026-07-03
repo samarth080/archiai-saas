@@ -610,6 +610,14 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 
 Not yet started: the rest of Phase 4 (command palette, plan-view door swings, parameter-sweep optioneering, Pillar E export/hardening), Phase 5 (optional ML/IFC), Pillar F (3D modeling fidelity — see the roadmap doc's section 7a, flagged by the user but not yet phased).
 
+### Sprint 18 — Master-brief roadmap continued 🚧 (new sprint line; Sprint 17 was getting overloaded)
+
+> Per the user, further master-brief roadmap work moves to `sprint-18/...` branches rather than piling onto Sprint 17.
+
+**Phase 4 (graph-driven layout) — slice 1: graph-satisfaction scoring** (`sprint-18/phase4-graph-scoring`, off `sprint-17/phase2-program-graph` since it needs the ProgramGraph): `planning/graph_scoring.py` measures how well a *generated* layout honours its ProgramGraph's MUST/SHOULD `adjacent` edges — deterministic AABB shared-wall geometry, weighted score, and the human-readable list of unmet MUST adjacencies. Wired additively into `/api/design/generate` as `metadata.graphSatisfaction` (schema field added so it isn't dropped). No change to any generated layout; nothing removed. 11 new tests (adjacency geometry, satisfied/unsatisfied/weighted scoring, integration on clinic/office/apartment prompts with real adjacency language). Full backend suite 504 passed.
+
+Deferred (Phase 4 remainder): the actual graph-*driven placement engine* (cluster MUST-adjacency nodes, slice the footprint by area honouring `preferred_relative_position`/`requires_external_wall`, generate graph-aware candidates scored by the above and competed against the tiler). This slice delivers the scoring/measurement half first — per the brief's own guidance to lean on explainable scoring rather than promising a perfect solver.
+
 ---
 
 ## Development Rules

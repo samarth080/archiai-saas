@@ -29,6 +29,7 @@ from app.services.design_service import (
 )
 from app.services.layout_service import generate_layout
 from app.services.layout_pattern_service import get_layout_pattern_rules
+from app.services.planning import from_parser_output, score_graph_satisfaction
 from app.services.prompt_service import extract_total_area_sqm, parse_prompt, parsed_to_room_specs
 from app.services.refinement_service import apply_refinement, parse_refinement
 from app.services.workspace_service import require_project_read_access
@@ -89,6 +90,14 @@ async def generate(
         orientation=design_params.orientation if design_params else None,
         return_all_candidates=True,
     )
+    # Score how well the winning layout honours the parsed adjacency graph
+    # (Sprint 18 Phase 4). Additive, explainable, deterministic — recorded in
+    # metadata so it is persisted with the design and shown to the user.
+    graph = from_parser_output(parsed, room_specs)
+    layout.setdefault("metadata", {})["graphSatisfaction"] = score_graph_satisfaction(
+        graph, layout
+    ).as_dict()
+
     if request.project_id:
         design, version = await save_generated_design(
             db,
