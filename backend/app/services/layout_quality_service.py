@@ -2,6 +2,16 @@ from dataclasses import asdict, dataclass
 
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
 
+# Room types that genuinely need an exterior wall for daylight — a landlocked
+# (fully interior) instance of one of these is an architectural defect. Service /
+# circulation rooms (bathroom, storage, corridor, …) are deliberately absent:
+# they are the rooms that *should* take the interior when a plan runs deep.
+_DAYLIGHT_ROOM_TYPES: frozenset[str] = frozenset({
+    "bedroom", "master_bedroom", "kids_room", "living_room", "open_plan_living",
+    "office", "classroom", "consultation_room", "workspace", "dining_room",
+    "study", "reception", "waiting_room", "meeting_room",
+})
+
 # Minimum room sets expected per building type — absence of these rooms is penalised
 _BUILDING_EXPECTED_ROOMS: dict[str, set[str]] = {
     "apartment":       {"living_room", "kitchen", "bathroom", "dining_room"},
@@ -91,6 +101,22 @@ def _outside_footprint(room: dict, footprint: dict) -> bool:
 
 def _near_any(source_rooms: list[dict], target_rooms: list[dict], max_gap: float = 1.0) -> bool:
     return any(_edge_gap(source, target) <= max_gap for source in source_rooms for target in target_rooms)
+
+
+def _reaches_perimeter(room: dict, footprint: dict, eps: float = 0.6) -> bool:
+    """True if any edge of the room reaches the floor footprint boundary (so it
+    can take an exterior window)."""
+    if not footprint:
+        return True  # no footprint to judge against — don't penalise
+    min_x, max_x, min_z, max_z = _room_bounds(room)
+    fx0, fx1 = footprint["x"], footprint["x"] + footprint["w"]
+    fz0, fz1 = footprint["z"], footprint["z"] + footprint["d"]
+    return (
+        abs(min_x - fx0) <= eps
+        or abs(max_x - fx1) <= eps
+        or abs(min_z - fz0) <= eps
+        or abs(max_z - fz1) <= eps
+    )
 
 
 def _floor_unreachable_rooms(rooms: list[dict]) -> list[str]:
@@ -256,6 +282,24 @@ def score_layout_quality(
         suggestions.append("Keep rooms inside the visible floor plate")
     elif footprints:
         reasons.append("Rooms stay inside floor footprints")
+
+    # Daylight: a room that needs an exterior wall but is fully landlocked
+    # (interior on all sides) has no window. Deep plans should push service /
+    # circulation rooms to the interior instead — so this steers the candidate
+    # competition away from layouts that strand a bedroom/office in the middle.
+    landlocked = [
+        room.get("label", room.get("roomType", "room"))
+        for room in architectural_rooms
+        if room.get("roomType") in _DAYLIGHT_ROOM_TYPES
+        and room.get("floorLevel") in footprints
+        and not _reaches_perimeter(room, footprints[room.get("floorLevel")])
+    ]
+    if landlocked:
+        score -= min(15, len(landlocked) * 4)
+        warnings.append(f"Rooms with no exterior wall for daylight: {', '.join(landlocked)}")
+        suggestions.append("Move interior daylight rooms to the perimeter and put service rooms inside")
+    elif footprints:
+        reasons.append("Daylight rooms reach an exterior wall")
 
     missing_rooms = sorted(required_room_types - room_types)
     if missing_rooms:

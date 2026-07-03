@@ -1771,6 +1771,12 @@ def _build_layout_candidate(
 
 # ── Public entrypoint ────────────────────────────────────────────────────────
 
+# How much quality a graph candidate may trade to realise more MUST adjacencies.
+# ~one landlocked room's daylight penalty (4) plus noise — so honouring an
+# explicit adjacency can cost at most one interior room, not strand several.
+_GRAPH_MUST_QUALITY_TOLERANCE = 6
+
+
 def _rooms_share_wall(a: dict, b: dict) -> bool:
     """AABB shared-wall test between two placed-room dicts on the same floor."""
     if a.get("floorLevel") != b.get("floorLevel"):
@@ -1916,14 +1922,18 @@ def generate_layout(
             _candidate_adjacency_bonus(candidate, must_pairs, should_pairs),
         ),
     )
-    # A graph-driven candidate replaces the baseline only when it realises
-    # strictly more MUST adjacencies AND scores no lower on quality — a
-    # guaranteed improvement, never a quality regression (Phase 4 slice 3).
+    # A graph-driven candidate replaces the baseline when it realises strictly
+    # more MUST adjacencies and scores within a small quality tolerance of it
+    # (Phase 4 slice 3/5). An explicit MUST is a user requirement, so it wins over
+    # a modest quality dip — e.g. honouring "reception next to consultation" is
+    # worth landlocking one other room (the daylight cost is still surfaced as a
+    # warning). The tolerance is tight enough that a badly-scoring layout can't
+    # ride in on a single adjacency.
     best_must = _candidate_must_satisfied(best, must_pairs)
     for candidate in graph_candidates:
         if (
             _candidate_must_satisfied(candidate, must_pairs) > best_must
-            and candidate["insights"]["score"] >= best["insights"]["score"]
+            and candidate["insights"]["score"] >= best["insights"]["score"] - _GRAPH_MUST_QUALITY_TOLERANCE
         ):
             best = candidate
             best_must = _candidate_must_satisfied(candidate, must_pairs)

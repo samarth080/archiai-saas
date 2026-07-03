@@ -58,6 +58,23 @@ def test_quality_score_reports_missing_multifloor_stairs():
     assert any("missing consistent stair" in warning.lower() for warning in result.warnings)
 
 
+def test_quality_score_penalises_landlocked_daylight_room():
+    layout = deepcopy(generate_layout(_residential_specs()))
+    baseline = score_layout_quality(layout).score
+
+    # Strand the bedroom in the centre of the floor plate, touching no wall.
+    footprint = layout["floors"][0]["footprint"]
+    bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")
+    bedroom["position"]["x"] = footprint["x"] + footprint["w"] / 2
+    bedroom["position"]["z"] = footprint["z"] + footprint["d"] / 2
+    bedroom["size"]["w"] = 2.0
+    bedroom["size"]["d"] = 2.0
+
+    result = score_layout_quality(layout)
+    assert result.score < baseline
+    assert any("daylight" in warning.lower() for warning in result.warnings)
+
+
 def test_quality_score_reports_room_overlap():
     layout = deepcopy(generate_layout(_residential_specs()))
     bedroom = next(room for room in layout["rooms"] if room["roomType"] == "bedroom")

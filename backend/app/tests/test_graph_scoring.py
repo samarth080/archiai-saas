@@ -113,6 +113,24 @@ def test_daylight_flags_a_landlocked_room():
     assert sat.daylight_missing == ["Bedroom 1"]
 
 
+def test_generator_avoids_landlocking_daylight_rooms():
+    """A deep house program where the BSP candidate strands interior rooms — the
+    daylight penalty steers the competition to a perimeter-friendly winner."""
+    parsed = parse_prompt("3 bedroom house with living room, kitchen, 2 bathrooms and a study")
+    specs = parsed_to_room_specs(parsed)
+    layout = generate_layout(
+        specs,
+        prompt=parsed.raw_prompt,
+        building_type=parsed.building_type,
+        total_floors=parsed.total_floors,
+        adjacency_constraints=parsed.adjacency_constraints,
+        zone_assignments=parsed.zone_assignments,
+    )
+    sat = score_graph_satisfaction(from_parser_output(parsed, specs), layout)
+    assert sat.daylight_total > 0
+    assert sat.daylight_satisfied == sat.daylight_total  # winner strands no daylight room
+
+
 def test_daylight_satisfied_when_on_perimeter():
     from app.services.planning import from_room_specs
     from app.services.prompt_service import RoomSpec
