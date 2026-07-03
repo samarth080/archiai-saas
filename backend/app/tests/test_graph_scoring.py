@@ -160,3 +160,69 @@ def test_candidate_adjacency_bonus_zero_without_constraints():
 
     cand = {"rooms": [_typed_room("office", 0, 0)]}
     assert _candidate_adjacency_bonus(cand, None, None) == 0.0
+
+
+# ── Graph-driven candidate (Phase 4 slice 3) ─────────────────────────────────
+
+
+def test_graph_candidate_realises_a_cross_zone_must_the_tiler_cannot():
+    """A front room (reception) MUST-adjacent to a back room (consultation) can't
+    share a wall in the zone tiler; the graph packer clusters them into one row,
+    and the competing generator selects it."""
+    from app.services.building_template_service import apply_template_defaults, get_building_template
+    from app.services.layout_pattern_service import fallback_layout_rules
+    from app.services.layout_service import (
+        _build_layout_candidate,
+        _candidate_must_satisfied,
+        generate_layout,
+    )
+
+    prompt = "clinic where the reception is next to the consultation room"
+    parsed = parse_prompt(prompt)
+    must_pairs = {
+        frozenset({c.room_a, c.room_b})
+        for c in parsed.adjacency_constraints
+        if c.strength == "MUST"
+    }
+    assert must_pairs, "test prompt must yield a MUST adjacency"
+
+    specs = apply_template_defaults(parsed_to_room_specs(parsed), "clinic")
+    rules = fallback_layout_rules("clinic", {s.room_type for s in specs})
+    kw = dict(
+        room_specs=specs, prompt=prompt, building_type="clinic", total_floors=1,
+        pattern_rules=rules, total_area_sqm=None, template=get_building_template("clinic"),
+        x_offset=0.0, must_adjacency_pairs=must_pairs,
+    )
+    tile = _build_layout_candidate(**kw, placement_style="tile")
+    graph = _build_layout_candidate(**kw, placement_style="graph")
+    assert _candidate_must_satisfied(graph, must_pairs) > _candidate_must_satisfied(tile, must_pairs)
+
+    # End-to-end the competing generator selects the graph candidate here.
+    layout = generate_layout(
+        parsed_to_room_specs(parsed),
+        prompt=prompt,
+        building_type="clinic",
+        total_floors=1,
+        adjacency_constraints=parsed.adjacency_constraints,
+        zone_assignments=parsed.zone_assignments,
+    )
+    assert layout["metadata"]["placementEngine"] == "graph"
+    assert layout["metadata"]["candidateCount"] == 3
+
+
+def test_graph_candidate_absent_without_must_constraints():
+    """A SHOULD-only (or constraint-free) program keeps the 2-candidate tiler/BSP
+    competition — no graph candidate is spawned."""
+    from app.services.layout_service import generate_layout
+
+    parsed = parse_prompt("apartment with living room, kitchen, dining room and bathroom")
+    layout = generate_layout(
+        parsed_to_room_specs(parsed),
+        prompt=parsed.raw_prompt,
+        building_type=parsed.building_type,
+        total_floors=parsed.total_floors,
+        adjacency_constraints=parsed.adjacency_constraints,
+        zone_assignments=parsed.zone_assignments,
+    )
+    assert layout["metadata"]["candidateCount"] == 2
+    assert layout["metadata"]["placementEngine"] in ("tile", "bsp")
