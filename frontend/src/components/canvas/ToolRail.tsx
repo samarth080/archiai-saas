@@ -23,6 +23,20 @@ const ICONS: Record<string, JSX.Element> = {
     </>
   ),
   stair: <path d="M3 20v-4h4v-4h4v-4h4V4h6" />,
+  corridor: <path d="M5 3v18M19 3v18M5 12h14" />,
+  lift: (
+    <>
+      <rect x="5" y="3" width="14" height="18" rx="1" />
+      <path d="M12 7l-2 3h4zM12 17l-2-3h4z" />
+    </>
+  ),
+  furniture: (
+    <>
+      <rect x="4" y="10" width="16" height="6" rx="1" />
+      <path d="M6 16v3M18 16v3M6 10V8h12v2" />
+    </>
+  ),
+  column: <rect x="9" y="3" width="6" height="18" rx="1" />,
   measure: (
     <>
       <path d="M3 8l5-5 13 13-5 5z" />
@@ -35,26 +49,44 @@ interface ToolDef {
   key: keyof typeof ICONS
   label: string
   shortcut?: string
+  type?: CanvasObjectType
   onClick?: () => void
   active?: boolean
 }
 
 export function ToolRail() {
   const [hovered, setHovered] = useState<string | null>(null)
-  const addObject = useCanvasStore((s) => s.addObject)
+  const placementMode = useCanvasStore((s) => s.placementMode)
+  const setPlacementMode = useCanvasStore((s) => s.setPlacementMode)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
   const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
 
-  const addType = (type: CanvasObjectType) => () => addObject(type)
+  // Arm a placement tool: the next canvas click drops the object there.
+  const arm = (type: CanvasObjectType) => () =>
+    setPlacementMode(placementMode === type ? null : type)
+
+  const placementTools: Array<{ key: keyof typeof ICONS; label: string; shortcut?: string; type: CanvasObjectType }> = [
+    { key: 'room', label: 'Room', shortcut: 'R', type: 'room' },
+    { key: 'wall', label: 'Wall', shortcut: 'W', type: 'wall' },
+    { key: 'door', label: 'Door', type: 'door' },
+    { key: 'window', label: 'Window', type: 'window' },
+    { key: 'stair', label: 'Stair', type: 'stair' },
+    { key: 'corridor', label: 'Corridor', type: 'corridor' },
+    { key: 'lift', label: 'Lift', type: 'lift' },
+    { key: 'furniture', label: 'Furniture', type: 'furniture' },
+    { key: 'column', label: 'Column', type: 'column' },
+  ]
 
   const tools: ToolDef[] = [
-    { key: 'select', label: 'Select', active: true },
-    { key: 'room', label: 'Room', shortcut: 'R', onClick: addType('room') },
-    { key: 'wall', label: 'Wall', shortcut: 'W', onClick: addType('wall') },
-    { key: 'door', label: 'Door', onClick: addType('door') },
-    { key: 'window', label: 'Window', onClick: addType('window') },
-    { key: 'stair', label: 'Stair', onClick: addType('stair') },
-    { key: 'measure', label: 'Measure', shortcut: '⌥', active: showDimensions, onClick: () => setShowDimensions(!showDimensions) },
+    { key: 'select', label: 'Select', active: placementMode === null, onClick: () => setPlacementMode(null) },
+    ...placementTools.map((tool) => ({
+      key: tool.key,
+      label: tool.label,
+      shortcut: tool.shortcut,
+      active: placementMode === tool.type,
+      onClick: arm(tool.type),
+    })),
+    { key: 'measure', label: 'Dimensions', shortcut: '⌥', active: showDimensions, onClick: () => setShowDimensions(!showDimensions) },
   ]
 
   return (

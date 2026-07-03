@@ -7,6 +7,7 @@ import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorTopBar } from '../../components/canvas/EditorTopBar'
 import { ToolRail } from '../../components/canvas/ToolRail'
+import { MeasurePanel } from '../../components/canvas/MeasurePanel'
 import { SelectionGizmo } from '../../components/canvas/SelectionGizmo'
 import { ProgramPanel } from '../../components/canvas/ProgramPanel'
 import { InsightsStrip } from '../../components/canvas/InsightsStrip'
@@ -602,6 +603,7 @@ export default function ProjectPage() {
             />
 
             <ToolRail />
+            <MeasurePanel />
             <SelectionGizmo />
             <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
             <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />

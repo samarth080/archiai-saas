@@ -1,6 +1,20 @@
 import { create } from 'zustand'
 
-export type CanvasObjectType = 'room' | 'wall' | 'door' | 'window' | 'stair' | 'floor' | 'open_space'
+export type CanvasObjectType =
+  | 'room'
+  | 'wall'
+  | 'door'
+  | 'window'
+  | 'stair'
+  | 'floor'
+  | 'open_space'
+  // Phase 1 additions — spatial-planning vocabulary beyond residential rooms.
+  | 'corridor'
+  | 'lift'
+  | 'shaft'
+  | 'furniture'
+  | 'column'
+  | 'generic'
 export type CanvasViewMode = '3d' | 'top' | 'floor_plan'
 
 export type CanvasEditAction =
@@ -99,8 +113,16 @@ interface CanvasState {
   recoveredDraftAvailable: boolean
   latestDraftVersionId: string | null
   activityLog: CanvasActivityLogEntry[]
+  past: HistorySnapshot[]
+  future: HistorySnapshot[]
+  placementMode: CanvasObjectType | null
+  measureMode: boolean
+  measurePoints: { x: number; z: number }[]
   selectRoom: (id: string) => void
   deselectAll: () => void
+  toggleMeasureMode: () => void
+  addMeasurePoint: (x: number, z: number) => void
+  clearMeasure: () => void
   setSelectedFloor: (floor: number | 'all') => void
   setViewMode: (mode: CanvasViewMode) => void
   setSnapToGrid: (enabled: boolean) => void
@@ -113,10 +135,19 @@ interface CanvasState {
   setLastSavedAt: (timestamp: string | null) => void
   setRecoveredDraftAvailable: (available: boolean) => void
   updateRoom: (id: string, patch: Partial<Omit<Room, 'id'>>, options?: UpdateOptions) => void
+  resizeRoom: (
+    id: string,
+    size: { w: number; h: number; d: number },
+    position?: { x: number; y: number; z: number },
+  ) => void
   deleteRoom: (id: string) => void
   duplicateRoom: (id: string) => void
   duplicateSelected: () => void
   addObject: (objectType: CanvasObjectType) => void
+  addObjectAt: (objectType: CanvasObjectType, x: number, z: number) => void
+  setPlacementMode: (objectType: CanvasObjectType | null) => void
+  undo: () => void
+  redo: () => void
   addFloorAbove: () => void
   addFloorBelow: () => void
   removeFloor: (level: number) => void
@@ -137,7 +168,20 @@ const OBJECT_DEFAULTS: Record<CanvasObjectType, Pick<Room, 'label' | 'size' | 'c
   stair: { label: 'Stair', size: { w: 2.5, h: 1, d: 4 }, color: '#d58f5d' },
   floor: { label: 'Floor', size: { w: 8, h: 0.15, d: 8 }, color: '#7d8795' },
   open_space: { label: 'Open Space', size: { w: 5, h: 0.1, d: 5 }, color: '#50bb77' },
+  corridor: { label: 'Corridor', size: { w: 6, h: 3, d: 1.5 }, color: '#afb6c1' },
+  lift: { label: 'Lift', size: { w: 2, h: 3, d: 2 }, color: '#b3b6bc' },
+  shaft: { label: 'Shaft', size: { w: 1.5, h: 3, d: 1.5 }, color: '#9a9ea6' },
+  furniture: { label: 'Furniture', size: { w: 1.5, h: 0.8, d: 1.5 }, color: '#c8a98a' },
+  column: { label: 'Column', size: { w: 0.4, h: 3, d: 0.4 }, color: '#8b8f96' },
+  generic: { label: 'Object', size: { w: 3, h: 3, d: 3 }, color: '#b8bcc4' },
 }
+
+const OBJECT_TYPES = Object.keys(OBJECT_DEFAULTS) as CanvasObjectType[]
+
+// Minimum edge length (metres) a resize handle may shrink an object to — keeps
+// rooms from collapsing to zero/negative. Inspector numeric edits bypass this so
+// thin markers (walls/doors) can still be set precisely.
+export const MIN_RESIZE_DIMENSION = 0.5
 
 export const INITIAL_ROOMS: Room[] = [
   {
@@ -224,18 +268,66 @@ function snapValue(value: number, gridSize: number) {
 
 function normalizeObjectType(value?: string): CanvasObjectType {
   if (value === 'stairs') return 'stair'
-  if (
-    value === 'room' ||
-    value === 'wall' ||
-    value === 'door' ||
-    value === 'window' ||
-    value === 'stair' ||
-    value === 'floor' ||
-    value === 'open_space'
-  ) {
-    return value
+  if (value && (OBJECT_TYPES as string[]).includes(value)) {
+    return value as CanvasObjectType
   }
   return 'room'
+}
+
+// Clamp a room's centre so its full extent stays inside the floor footprint
+// (footprint {x,z} is the min corner; room.position is the centre). If the room
+// is wider/deeper than the footprint the range inverts — centre it instead.
+function clampToFootprint(
+  position: { x: number; y: number; z: number },
+  size: { w: number; d: number },
+  footprint?: { x: number; z: number; w: number; d: number },
+) {
+  if (!footprint) return position
+  const clampAxis = (center: number, half: number, min: number, span: number) => {
+    const lo = min + half
+    const hi = min + span - half
+    if (lo > hi) return min + span / 2
+    return Math.min(hi, Math.max(lo, center))
+  }
+  return {
+    ...position,
+    x: clampAxis(position.x, size.w / 2, footprint.x, footprint.w),
+    z: clampAxis(position.z, size.d / 2, footprint.z, footprint.d),
+  }
+}
+
+function footprintForLevel(floors: CanvasFloor[], level: number | undefined) {
+  return floors.find((floor) => floor.level === level)?.footprint
+}
+
+const HISTORY_LIMIT = 50
+
+interface HistorySnapshot {
+  rooms: Room[]
+  floors: CanvasFloor[]
+  selectedId: string | null
+}
+
+function snapshotOf(state: {
+  rooms: Room[]
+  floors: CanvasFloor[]
+  selectedId: string | null
+}): HistorySnapshot {
+  // rooms/floors are replaced immutably by every mutation, so storing the
+  // references is a safe point-in-time snapshot.
+  return { rooms: state.rooms, floors: state.floors, selectedId: state.selectedId }
+}
+
+function pushHistory(state: {
+  rooms: Room[]
+  floors: CanvasFloor[]
+  selectedId: string | null
+  past: HistorySnapshot[]
+}) {
+  return {
+    past: [...state.past, snapshotOf(state)].slice(-HISTORY_LIMIT),
+    future: [] as HistorySnapshot[],
+  }
 }
 
 function floorName(level: number) {
@@ -327,8 +419,26 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   lastSavedAt: null,
   ...CLEAN_DRAFT_STATE,
   activityLog: [],
+  past: [],
+  future: [],
+  placementMode: null,
+  measureMode: false,
+  measurePoints: [],
   selectRoom: (id) => set({ selectedId: id }),
   deselectAll: () => set({ selectedId: null }),
+  toggleMeasureMode: () =>
+    set((state) => ({
+      measureMode: !state.measureMode,
+      measurePoints: [],
+      placementMode: null,
+    })),
+  addMeasurePoint: (x, z) =>
+    set((state) => {
+      // Start a fresh segment once two points are already placed.
+      const base = state.measurePoints.length >= 2 ? [] : state.measurePoints
+      return { measurePoints: [...base, { x, z }] }
+    }),
+  clearMeasure: () => set({ measurePoints: [] }),
   setSelectedFloor: (floor) =>
     set((state) => ({
       selectedFloor: floor,
@@ -383,6 +493,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           z: snapValue(nextPatch.position.z, state.gridSize),
         }
       }
+      // Keep the object inside its floor footprint (drag/move clamp).
+      if (nextPatch.position) {
+        nextPatch.position = clampToFootprint(
+          nextPatch.position,
+          nextPatch.size ?? room.size,
+          footprintForLevel(state.floors, room.floorLevel),
+        )
+      }
 
       let updated: Room = { ...room, ...nextPatch }
       if (nextPatch.size) {
@@ -417,6 +535,55 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         activityLog: logEntry ? [logEntry, ...state.activityLog] : state.activityLog,
         saveStatus: shouldLog ? 'unsaved' : state.saveStatus,
         ...(shouldLog ? DIRTY_DRAFT_STATE : {}),
+        ...(shouldLog ? pushHistory(state) : {}),
+      }
+    }),
+  resizeRoom: (id, size, position) =>
+    set((state) => {
+      const room = state.rooms.find((r) => r.id === id)
+      if (!room) return state
+
+      // Enforce a minimum edge length so a handle can't collapse the object.
+      const clampedSize = {
+        w: Math.max(MIN_RESIZE_DIMENSION, size.w),
+        h: Math.max(MIN_RESIZE_DIMENSION, size.h),
+        d: Math.max(MIN_RESIZE_DIMENSION, size.d),
+      }
+      let nextPosition = position ?? room.position
+      if (state.snapToGrid) {
+        nextPosition = {
+          ...nextPosition,
+          x: snapValue(nextPosition.x, state.gridSize),
+          z: snapValue(nextPosition.z, state.gridSize),
+        }
+      }
+      const elevation = floorElevation(state.floors, room.floorLevel)
+      const footprint = footprintForLevel(state.floors, room.floorLevel)
+      const clampedPosition = clampToFootprint(
+        { ...nextPosition, y: elevation + clampedSize.h / 2 },
+        clampedSize,
+        footprint,
+      )
+      const updated: Room = { ...room, size: clampedSize, position: clampedPosition }
+
+      queueAutoSave()
+      return {
+        rooms: state.rooms.map((r) => (r.id === id ? updated : r)),
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
+        activityLog: [
+          {
+            id: nextId('activity'),
+            action: 'object.resized' as CanvasEditAction,
+            objectId: room.id,
+            objectLabel: updated.label,
+            previousValue: room,
+            newValue: updated,
+            createdAt: new Date().toISOString(),
+          },
+          ...state.activityLog,
+        ],
       }
     }),
   deleteRoom: (id) =>
@@ -429,6 +596,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         selectedId: state.selectedId === id ? null : state.selectedId,
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
         activityLog: [
           {
             id: nextId('activity'),
@@ -463,6 +631,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         selectedId: copy.id,
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
         activityLog: [
           {
             id: nextId('activity'),
@@ -481,11 +650,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const selectedId = get().selectedId
     if (selectedId) get().duplicateRoom(selectedId)
   },
-  addObject: (objectType) =>
+  addObject: (objectType) => get().addObjectAt(objectType, 0, 0),
+  addObjectAt: (objectType, x, z) =>
     set((state) => {
       const defaults = OBJECT_DEFAULTS[objectType]
       const floorLevel = state.selectedFloor === 'all' ? 0 : state.selectedFloor
       const floor = state.floors.find((f) => f.level === floorLevel) ?? DEFAULT_FLOOR
+      const position = clampToFootprint(
+        { x, y: floor.elevation + defaults.size.h / 2, z },
+        defaults.size,
+        floor.footprint,
+      )
       const newObject: Room = {
         id: nextId(objectType),
         label: defaults.label,
@@ -493,7 +668,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         objectType,
         floorId: floor.id,
         floorLevel: floor.level,
-        position: { x: 0, y: floor.elevation + defaults.size.h / 2, z: 0 },
+        position,
         size: defaults.size,
         rotation: { x: 0, y: 0, z: 0 },
         color: defaults.color,
@@ -502,8 +677,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: [...state.rooms, newObject],
         selectedId: newObject.id,
+        placementMode: null,
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
         activityLog: [
           {
             id: nextId('activity'),
@@ -518,6 +695,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ],
       }
     }),
+  setPlacementMode: (objectType) => set({ placementMode: objectType }),
   addFloorAbove: () =>
     set((state) => {
       const level = Math.max(...state.floors.map((f) => f.level)) + 1
@@ -534,6 +712,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         selectedId: null,
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
       }
     }),
   addFloorBelow: () =>
@@ -552,6 +731,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         selectedId: null,
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
       }
     }),
   removeFloor: (level) =>
@@ -566,6 +746,37 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         rooms,
         selectedFloor: state.selectedFloor === level ? fallbackLevel : state.selectedFloor,
         selectedId: null,
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
+        ...pushHistory(state),
+      }
+    }),
+  undo: () =>
+    set((state) => {
+      if (state.past.length === 0) return state
+      const previous = state.past[state.past.length - 1]
+      queueAutoSave()
+      return {
+        rooms: previous.rooms,
+        floors: previous.floors,
+        selectedId: previous.selectedId,
+        past: state.past.slice(0, -1),
+        future: [snapshotOf(state), ...state.future].slice(0, HISTORY_LIMIT),
+        saveStatus: 'unsaved',
+        ...DIRTY_DRAFT_STATE,
+      }
+    }),
+  redo: () =>
+    set((state) => {
+      if (state.future.length === 0) return state
+      const next = state.future[0]
+      queueAutoSave()
+      return {
+        rooms: next.rooms,
+        floors: next.floors,
+        selectedId: next.selectedId,
+        past: [...state.past, snapshotOf(state)].slice(-HISTORY_LIMIT),
+        future: state.future.slice(1),
         saveStatus: 'unsaved',
         ...DIRTY_DRAFT_STATE,
       }
@@ -595,6 +806,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       lastSavedAt: new Date().toISOString(),
       ...CLEAN_DRAFT_STATE,
       activityLog: [],
+      past: [],
+      future: [],
+      placementMode: null,
     })
   },
   clearLayout: () =>
@@ -613,6 +827,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       lastSavedAt: null,
       ...CLEAN_DRAFT_STATE,
       activityLog: [],
+      past: [],
+      future: [],
+      placementMode: null,
     }),
   serializeLayout: () => {
     const state = get()
