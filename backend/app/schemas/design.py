@@ -119,6 +119,7 @@ class GenerateMetadata(BaseModel):
     designParams: dict[str, Any] | None = None
     placementEngine: str | None = None
     candidateCount: int | None = None
+    graphSatisfaction: dict[str, Any] | None = None
 
 
 class BuildingResponse(BaseModel):

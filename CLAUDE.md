@@ -628,6 +628,20 @@ Phased rollout: Phase 0 (pipeline refactor + `DesignParams`) → Phase 1 (dimens
 
 Not yet started: the rest of Phase 4 (command palette, plan-view door swings, parameter-sweep optioneering, Pillar E export/hardening), Phase 5 (optional ML/IFC), Pillar F (3D modeling fidelity — see the roadmap doc's section 7a, flagged by the user but not yet phased).
 
+### Sprint 18 — Master-brief roadmap continued 🚧 (new sprint line; Sprint 17 was getting overloaded)
+
+> Per the user, further master-brief roadmap work moves to `sprint-18/...` branches rather than piling onto Sprint 17.
+
+**Phase 4 (graph-driven layout)** (`sprint-18/phase4-graph-scoring`, off `sprint-17/phase2-program-graph` since it needs the ProgramGraph):
+
+- *Slice 1 — graph-satisfaction scoring:* `planning/graph_scoring.py` measures how well a *generated* layout honours its ProgramGraph's MUST/SHOULD `adjacent` edges — deterministic AABB shared-wall geometry, weighted score, and the human-readable list of unmet MUST adjacencies. Wired additively into `/api/design/generate` as `metadata.graphSatisfaction` (schema field added so it isn't dropped).
+- *Slice 2 — graph-aware candidate selection:* `generate_layout` already builds several candidates (tile/bsp/x-offset variants) and kept the highest quality score. Among the tiler/BSP candidates the winner key is now `(quality_score, adjacency_bonus)` — quality stays primary, adjacency realised breaks ties.
+- *Slice 3 — a real graph-driven placement engine:* `_graph_pack_rooms` is a genuinely new engine (not a re-rank): the zone tiler honours adjacency only *within* a front/back row, so a MUST pair split across zones can never share a wall. The graph packer orders the **whole** room set by the adjacency graph (MUST-linked rooms consecutive, regardless of zone) and flows them into width-filling rows, keeping a MUST pair in one row — realising cross-zone adjacencies the tiler structurally can't, still zero-gap. It's added as an **extra competing candidate only when hard MUST constraints exist**, and it **replaces the tiler winner only when it realises strictly more MUST adjacencies at no quality cost** (a guaranteed improvement, never a quality regression). Demonstrated: `clinic where the reception is next to the consultation room` → tiler MUST 0/1 (q81), graph MUST 1/1 (q86), graph wins.
+
+No existing candidate is generated differently and none removed. 18 new tests total; full backend suite 509 passed, zero regressions.
+
+Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred_relative_position`/`requires_external_wall` and true BSP footprint slicing by adjacency cluster (the current packer clusters into rows). The scoring + selection + row-clustering engine land first; the full spatial solver is the larger follow-up.
+
 ---
 
 ## Development Rules

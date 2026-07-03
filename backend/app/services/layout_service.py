@@ -1270,6 +1270,83 @@ def _tile_rooms(
     return placed, footprint
 
 
+def _graph_pack_rooms(
+    specs: list[RoomSpec],
+    rules: LayoutPatternRules,
+    building_type: str,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    target_width: float | None = None,
+    stair_reserve: float = 0.0,
+    must_pairs: set[frozenset] | None = None,
+    should_pairs: set[frozenset] | None = None,
+) -> tuple[list[dict], dict]:
+    """Graph-driven flow pack (Sprint 18 Phase 4 — real graph-driven candidate).
+
+    _tile_rooms honours adjacency only *within* a fixed front/back zone row, so a
+    MUST pair whose rooms fall in different zones can never share a wall. This
+    engine instead orders the whole room set by the adjacency graph (MUST-linked
+    rooms consecutive, regardless of zone) and flows them into width-filling rows,
+    keeping a MUST pair together in one row — so cross-zone adjacencies can
+    actually be realised. Rows still fill the building width exactly (zero gaps).
+
+    It's added only as an *extra* competing candidate when adjacency constraints
+    exist, and the selection key keeps quality primary, so it only wins when it
+    scores at least as well as the tiler while satisfying more adjacencies.
+    """
+    must_pairs = {_normalise_pair_types(pair) for pair in (must_pairs or set())}
+    should_pairs = {_normalise_pair_types(pair) for pair in (should_pairs or set())}
+
+    total_area = sum(s.w * s.d for s in specs)
+    if not total_area:
+        return [], {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    if target_width is not None:
+        building_width = target_width
+    else:
+        building_width = round(sqrt(total_area * 1.6), 1)
+        building_width = max(_MIN_BUILDING_WIDTH, min(building_width, _MAX_BUILDING_WIDTH))
+    fill_width = max(building_width - stair_reserve, 5.0)
+
+    ordered = _order_zone_rooms(list(specs), building_type, must_pairs, should_pairs)
+
+    # Flow the adjacency-ordered sequence into rows that fill the width, never
+    # splitting a MUST pair across a row boundary (bounded overflow keeps it whole).
+    rows: list[list[RoomSpec]] = []
+    current: list[RoomSpec] = []
+    current_w = 0.0
+    for spec in ordered:
+        if current and current_w + spec.w > fill_width:
+            must_linked = frozenset({spec.room_type, current[-1].room_type}) in must_pairs
+            if not (must_linked and current_w + spec.w <= fill_width * 1.5):
+                rows.append(current)
+                current, current_w = [], 0.0
+        current.append(spec)
+        current_w += spec.w
+    if current:
+        rows.append(current)
+
+    def _row_depth(row: list[RoomSpec]) -> float:
+        avg = sum(s.d for s in row) / len(row)
+        return round(max(2.5, min(avg, 6.5)), 2)
+
+    placed: list[dict] = []
+    current_z = 0.0
+    for row in rows:
+        depth = _row_depth(row)
+        placed.extend(
+            _fill_row(
+                row, current_z, depth, fill_width,
+                floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
+            )
+        )
+        current_z += depth
+
+    footprint = {"x": 0.0, "z": 0.0, "w": round(building_width, 2), "d": round(current_z, 2)}
+    return placed, footprint
+
+
 # ── Adjacency-aware room ordering (Sprint 16 Phase 2) ────────────────────────
 
 def _chain_by_adjacency(
@@ -1549,7 +1626,20 @@ def _build_layout_candidate(
         floor_id = f"floor_{level}"
         elevation = round(level * _FLOOR_HEIGHT, 2)
 
-        if use_tiler:
+        if use_tiler and placement_style == "graph":
+            rooms, tiled_footprint = _graph_pack_rooms(
+                specs,
+                pattern_rules,
+                building_type,
+                floor_id,
+                level,
+                elevation,
+                target_width=tiled_target_width,
+                stair_reserve=tiled_stair_reserve,
+                must_pairs=must_adjacency_pairs,
+                should_pairs=should_adjacency_pairs,
+            )
+        elif use_tiler:
             rooms, tiled_footprint = _tile_rooms(
                 specs,
                 pattern_rules,
@@ -1681,6 +1771,70 @@ def _build_layout_candidate(
 
 # ── Public entrypoint ────────────────────────────────────────────────────────
 
+def _rooms_share_wall(a: dict, b: dict) -> bool:
+    """AABB shared-wall test between two placed-room dicts on the same floor."""
+    if a.get("floorLevel") != b.get("floorLevel"):
+        return False
+    ax, az = a["position"]["x"], a["position"]["z"]
+    aw, ad = a["size"]["w"], a["size"]["d"]
+    bx, bz = b["position"]["x"], b["position"]["z"]
+    bw, bd = b["size"]["w"], b["size"]["d"]
+    x_overlap = min(ax + aw / 2, bx + bw / 2) - max(ax - aw / 2, bx - bw / 2)
+    z_overlap = min(az + ad / 2, bz + bd / 2) - max(az - ad / 2, bz - bd / 2)
+    return (x_overlap >= 0.5 and -z_overlap <= 0.8) or (z_overlap >= 0.5 and -x_overlap <= 0.8)
+
+
+def _candidate_adjacency_bonus(
+    candidate: dict,
+    must_pairs: set[frozenset] | None,
+    should_pairs: set[frozenset] | None,
+) -> float:
+    """How many requested MUST/SHOULD adjacencies a candidate actually realises
+    (matched by room_type). Used only as a *secondary* selection key — quality
+    stays primary — so a graph-satisfying layout wins ties without ever letting
+    a lower-quality layout through (Sprint 18 Phase 4)."""
+    if not must_pairs and not should_pairs:
+        return 0.0
+    by_type: dict[str, list[dict]] = {}
+    for room in candidate.get("rooms") or []:
+        by_type.setdefault(room.get("roomType"), []).append(room)
+
+    def _pair_realised(pair: frozenset) -> bool:
+        types = list(pair)
+        if len(types) == 1:
+            types = [types[0], types[0]]
+        for x in by_type.get(types[0], []):
+            for y in by_type.get(types[1], []):
+                if x is not y and _rooms_share_wall(x, y):
+                    return True
+        return False
+
+    must_ok = sum(1 for pair in (must_pairs or set()) if _pair_realised(pair))
+    should_ok = sum(1 for pair in (should_pairs or set()) if _pair_realised(pair))
+    return must_ok + 0.4 * should_ok
+
+
+def _candidate_must_satisfied(candidate: dict, must_pairs: set[frozenset] | None) -> int:
+    """Count of MUST adjacency pairs the candidate actually realises."""
+    if not must_pairs:
+        return 0
+    by_type: dict[str, list[dict]] = {}
+    for room in candidate.get("rooms") or []:
+        by_type.setdefault(room.get("roomType"), []).append(room)
+
+    def _pair_realised(pair: frozenset) -> bool:
+        types = list(pair)
+        if len(types) == 1:
+            types = [types[0], types[0]]
+        for x in by_type.get(types[0], []):
+            for y in by_type.get(types[1], []):
+                if x is not y and _rooms_share_wall(x, y):
+                    return True
+        return False
+
+    return sum(1 for pair in must_pairs if _pair_realised(pair))
+
+
 def generate_layout(
     room_specs: list[RoomSpec],
     prompt: str = "",
@@ -1725,6 +1879,13 @@ def generate_layout(
     variants = (
         [(0.0, "tile"), (0.0, "bsp")] if use_tiler_type else [(o, "tile") for o in (0.0, 0.5, 1.0)]
     )
+    # When the program has hard MUST adjacencies, add a graph-driven candidate
+    # that clusters MUST-linked rooms into a shared row (Sprint 18 Phase 4) — its
+    # value is realising cross-zone MUST pairs the zone tiler can't. It only
+    # competes, and (see selection below) replaces the tiler winner solely when it
+    # satisfies strictly more MUST adjacencies at no quality cost.
+    if use_tiler_type and must_pairs:
+        variants = variants + [(0.0, "graph")]
     candidates = [
         _build_layout_candidate(
             room_specs=room_specs,
@@ -1744,7 +1905,28 @@ def generate_layout(
         )
         for offset, style in variants
     ]
-    best = max(candidates, key=lambda candidate: candidate["insights"]["score"])
+    # Baseline winner among the tiler/BSP (row-fallback) candidates: quality
+    # primary, adjacency realised as a tiebreak (Sprint 18 Phase 4 slice 2).
+    graph_candidates = [c for c in candidates if c["metadata"].get("placementEngine") == "graph"]
+    base_candidates = [c for c in candidates if c["metadata"].get("placementEngine") != "graph"]
+    best = max(
+        base_candidates,
+        key=lambda candidate: (
+            candidate["insights"]["score"],
+            _candidate_adjacency_bonus(candidate, must_pairs, should_pairs),
+        ),
+    )
+    # A graph-driven candidate replaces the baseline only when it realises
+    # strictly more MUST adjacencies AND scores no lower on quality — a
+    # guaranteed improvement, never a quality regression (Phase 4 slice 3).
+    best_must = _candidate_must_satisfied(best, must_pairs)
+    for candidate in graph_candidates:
+        if (
+            _candidate_must_satisfied(candidate, must_pairs) > best_must
+            and candidate["insights"]["score"] >= best["insights"]["score"]
+        ):
+            best = candidate
+            best_must = _candidate_must_satisfied(candidate, must_pairs)
     best["metadata"]["candidateCount"] = len(candidates)
 
     design_params_echo: dict = {}
