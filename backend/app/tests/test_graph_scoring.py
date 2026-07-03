@@ -80,6 +80,61 @@ def test_unsatisfied_must_scores_zero_and_is_reported():
     assert sat.unsatisfied_must == ["A ↔ B"]
 
 
+def test_room_on_perimeter_detects_boundary_vs_interior():
+    from app.services.planning.graph_scoring import _room_on_perimeter
+
+    footprint = {"x": 0.0, "z": 0.0, "w": 10.0, "d": 10.0}
+    on_front = {"position": {"x": 2, "z": 2}, "size": {"w": 4, "d": 4}}  # z0 = 0
+    interior = {"position": {"x": 5, "z": 5}, "size": {"w": 2, "d": 2}}  # x,z in [4,6]
+    assert _room_on_perimeter(on_front, footprint) is True
+    assert _room_on_perimeter(interior, footprint) is False
+
+
+def test_daylight_flags_a_landlocked_room():
+    from app.services.planning import from_room_specs
+    from app.services.prompt_service import RoomSpec
+
+    graph = from_room_specs([RoomSpec("Bedroom 1", "bedroom", 3, 3, 3)])
+    assert graph.nodes[0].requires_external_wall is True  # sanity: bedroom needs daylight
+    layout = {
+        "rooms": [],
+        "floors": [{
+            "level": 0,
+            "footprint": {"x": 0.0, "z": 0.0, "w": 10.0, "d": 10.0},
+            "rooms": [{
+                "label": "Bedroom 1", "floorLevel": 0,
+                "position": {"x": 5, "y": 1.5, "z": 5}, "size": {"w": 2, "h": 3, "d": 2},
+            }],
+        }],
+    }
+    sat = score_graph_satisfaction(graph, layout)
+    assert sat.daylight_total == 1
+    assert sat.daylight_satisfied == 0
+    assert sat.daylight_missing == ["Bedroom 1"]
+
+
+def test_daylight_satisfied_when_on_perimeter():
+    from app.services.planning import from_room_specs
+    from app.services.prompt_service import RoomSpec
+
+    graph = from_room_specs([RoomSpec("Bedroom 1", "bedroom", 4, 3, 4)])
+    layout = {
+        "rooms": [],
+        "floors": [{
+            "level": 0,
+            "footprint": {"x": 0.0, "z": 0.0, "w": 10.0, "d": 10.0},
+            "rooms": [{
+                "label": "Bedroom 1", "floorLevel": 0,
+                "position": {"x": 2, "y": 1.5, "z": 2}, "size": {"w": 4, "h": 3, "d": 4},
+            }],
+        }],
+    }
+    sat = score_graph_satisfaction(graph, layout)
+    assert sat.daylight_total == 1
+    assert sat.daylight_satisfied == 1
+    assert sat.daylight_missing == []
+
+
 def test_no_constraints_scores_one():
     graph = ProgramGraph()
     graph.add_node(Node(id="a", label="A"))

@@ -25,6 +25,12 @@ _GAP_TOLERANCE_M = 0.8
 _SHOULD_WEIGHT = 0.4
 
 
+# A room counts as reaching an exterior wall (daylight) if any of its footprint
+# edges sits within this distance of the building boundary (absorbs boundary-wall
+# thickness + float drift at shared walls).
+_PERIMETER_TOLERANCE_M = 0.6
+
+
 @dataclass
 class GraphSatisfaction:
     must_total: int = 0
@@ -33,6 +39,11 @@ class GraphSatisfaction:
     should_satisfied: int = 0
     score: float = 1.0  # weighted 0..1; 1.0 when there are no constraints
     unsatisfied_must: list[str] = field(default_factory=list)
+    # Daylight / external-wall: spaces that need an exterior wall vs. how many
+    # actually reach the building perimeter in the layout.
+    daylight_total: int = 0
+    daylight_satisfied: int = 0
+    daylight_missing: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -42,6 +53,9 @@ class GraphSatisfaction:
             "shouldSatisfied": self.should_satisfied,
             "score": round(self.score, 3),
             "unsatisfiedMust": list(self.unsatisfied_must),
+            "daylightTotal": self.daylight_total,
+            "daylightSatisfied": self.daylight_satisfied,
+            "daylightMissing": list(self.daylight_missing),
         }
 
 
@@ -69,6 +83,34 @@ def _rooms_adjacent(a: dict, b: dict) -> bool:
     shares_x_wall = x_overlap >= _MIN_SHARED_SPAN_M and (-z_overlap) <= _GAP_TOLERANCE_M
     shares_z_wall = z_overlap >= _MIN_SHARED_SPAN_M and (-x_overlap) <= _GAP_TOLERANCE_M
     return shares_x_wall or shares_z_wall
+
+
+def _floor_footprints(layout: dict) -> dict[int, dict]:
+    """Map floor level -> footprint, falling back to the building footprint."""
+    footprints: dict[int, dict] = {}
+    for floor in layout.get("floors") or []:
+        fp = floor.get("footprint")
+        if fp:
+            footprints[floor.get("level", 0)] = fp
+    return footprints
+
+
+def _room_on_perimeter(room: dict, footprint: dict) -> bool:
+    """True if any edge of the room's footprint reaches the building boundary."""
+    try:
+        x, z = room["position"]["x"], room["position"]["z"]
+        w, d = room["size"]["w"], room["size"]["d"]
+    except (KeyError, TypeError):
+        return False
+    eps = _PERIMETER_TOLERANCE_M
+    fx0, fx1 = footprint["x"], footprint["x"] + footprint["w"]
+    fz0, fz1 = footprint["z"], footprint["z"] + footprint["d"]
+    return (
+        abs((x - w / 2) - fx0) <= eps
+        or abs((x + w / 2) - fx1) <= eps
+        or abs((z - d / 2) - fz0) <= eps
+        or abs((z + d / 2) - fz1) <= eps
+    )
 
 
 def _layout_rooms_by_label(layout: dict) -> dict[str, dict]:
@@ -120,6 +162,25 @@ def score_graph_satisfaction(graph: ProgramGraph, layout: dict) -> GraphSatisfac
             result.should_total += 1
             if satisfied:
                 result.should_satisfied += 1
+
+    # Daylight / external-wall: every space that needs an exterior wall should
+    # reach the building perimeter (else it's a windowless interior room).
+    footprints = _floor_footprints(layout)
+    if footprints:
+        for node in graph.nodes:
+            if not node.requires_external_wall:
+                continue
+            room = rooms_by_label.get(node.label)
+            if room is None:
+                continue
+            footprint = footprints.get(room.get("floorLevel", 0))
+            if footprint is None:
+                continue
+            result.daylight_total += 1
+            if _room_on_perimeter(room, footprint):
+                result.daylight_satisfied += 1
+            else:
+                result.daylight_missing.append(node.label)
 
     denom = result.must_total + _SHOULD_WEIGHT * result.should_total
     if denom > 0:
