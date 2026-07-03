@@ -1,0 +1,367 @@
+"""ProgramGraph — a building-type-agnostic spatial program representation.
+
+This is the spine the roadmap's later phases (graph-driven placement,
+circulation, furniture) build on. It models a building as typed **spaces**
+(and circulation / service / object / furniture / structural / opening nodes)
+connected by **relationship edges** (adjacency, separation, circulation,
+service dependency, …), independent of any residential vocabulary — an office,
+clinic, or warehouse program is expressed exactly like a house.
+
+Crucially it is *additive*: it sits alongside the existing
+``parse_prompt -> RoomSpec -> generate_layout`` path via a lossless bridge
+(:func:`from_parser_output` / :func:`to_room_specs`), so wiring it in does not
+change any generated layout. See ``docs/NON_ML_GRAPH_LAYOUT_ENGINE.md``.
+
+No ML anywhere — this is plain typed data + deterministic classification rules.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Iterable, Optional
+
+from app.services.prompt_service import RoomSpec
+
+if TYPE_CHECKING:  # avoid any import cost / cycles at runtime
+    from app.services.building_template_service import BuildingTemplate
+    from app.services.parser.constraint_extractor import AdjacencyConstraint
+    from app.services.prompt_service import ParsedRequirements
+
+# ── Vocabularies (building-type-agnostic classification) ─────────────────────
+
+NodeType = str      # space | circulation | service | object | furniture | structural | opening
+Zone = str          # public | private | semi_private | service | circulation | outdoor | technical
+
+_CIRCULATION_TYPES = frozenset({
+    "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "passage", "passageway", "landing", "atrium",
+})
+_SERVICE_TYPES = frozenset({
+    "bathroom", "ensuite", "toilet", "washroom", "wc", "laundry", "storage",
+    "utility", "garage", "mudroom", "pantry", "mechanical", "plant", "shaft",
+    "store_room", "stock_room",
+})
+_WET_TYPES = frozenset({
+    "bathroom", "ensuite", "toilet", "washroom", "wc", "kitchen", "kitchenette",
+    "laundry", "utility", "pantry",
+})
+# Spaces that genuinely want an exterior wall / daylight.
+_DAYLIGHT_TYPES = frozenset({
+    "bedroom", "master_bedroom", "kids_room", "living_room", "open_plan_living",
+    "office", "classroom", "consultation_room", "workspace", "dining_room",
+    "study", "reception", "waiting_room", "meeting_room",
+})
+_OPEN_PLAN_TYPES = frozenset({
+    "living_room", "open_plan_living", "kitchen", "dining_room", "dining_area",
+    "workspace", "retail_display", "sales_floor",
+})
+_PUBLIC_TYPES = frozenset({
+    "living_room", "open_plan_living", "kitchen", "dining_room", "dining_area",
+    "foyer", "reception", "waiting_room", "retail_display", "checkout", "bar",
+    "sales_floor", "classroom", "lobby",
+})
+_PRIVATE_TYPES = frozenset({
+    "master_bedroom", "bedroom", "kids_room", "ensuite", "office",
+    "consultation_room", "workspace", "meeting_room", "pooja_room",
+    "meditation_room", "study",
+})
+
+
+def _classify_node_type(space_type: str) -> NodeType:
+    if space_type in _CIRCULATION_TYPES:
+        return "circulation"
+    if space_type in _SERVICE_TYPES:
+        return "service"
+    return "space"
+
+
+def _classify_zone(space_type: str) -> Zone:
+    if space_type in _CIRCULATION_TYPES:
+        return "circulation"
+    if space_type in _SERVICE_TYPES:
+        return "service"
+    if space_type in _PUBLIC_TYPES:
+        return "public"
+    if space_type in _PRIVATE_TYPES:
+        return "private"
+    return "semi_private"
+
+
+# ── Node / Edge / Graph ──────────────────────────────────────────────────────
+
+
+@dataclass
+class Node:
+    """A typed element of the building program. All fields default so partial
+    construction (e.g. from an incomplete imported program) is always safe."""
+
+    id: str = ""
+    type: NodeType = "space"
+    space_type: str = "generic"
+    label: str = ""
+    zone: Zone = "semi_private"
+    target_area_sqm: Optional[float] = None
+    min_area_sqm: Optional[float] = None
+    max_area_sqm: Optional[float] = None
+    width: Optional[float] = None
+    depth: Optional[float] = None
+    height: Optional[float] = None
+    min_width_m: Optional[float] = None
+    min_depth_m: Optional[float] = None
+    preferred_aspect_ratio: Optional[float] = None
+    floor_preference: str = "any"  # ground | upper | basement | any
+    privacy_level: int = 0  # 0 public … 3 most private
+    daylight_need: str = "none"  # none | low | medium | high
+    acoustic_need: str = "none"
+    wet_room: bool = False
+    public_access: bool = True
+    staff_only: bool = False
+    requires_external_wall: bool = False
+    can_be_open_plan: bool = False
+    furniture_requirements: list[str] = field(default_factory=list)
+    accessibility_requirements: list[str] = field(default_factory=list)
+    source: str = "prompt"  # prompt | template | user_added | imported_program | inferred_rule
+
+
+@dataclass
+class Edge:
+    node_a: str
+    node_b: str
+    relation_type: str = "adjacent"  # adjacent | near | separated | connected_by_door | ...
+    strength: str = "SHOULD"  # MUST | SHOULD | AVOID
+    preferred_relative_position: str = "any"
+    min_shared_wall_m: float = 0.0
+    door_required: bool = False
+    access_required: bool = False
+    visibility_required: bool = False
+    reason: str = ""
+
+
+@dataclass
+class ProgramGraph:
+    nodes: list[Node] = field(default_factory=list)
+    edges: list[Edge] = field(default_factory=list)
+
+    def add_node(self, node: Node) -> Node:
+        if not node.id:
+            node.id = f"node-{len(self.nodes)}"
+        self.nodes.append(node)
+        return node
+
+    def add_edge(self, edge: Edge) -> Edge:
+        self.edges.append(edge)
+        return edge
+
+    def get_node(self, node_id: str) -> Optional[Node]:
+        return next((n for n in self.nodes if n.id == node_id), None)
+
+    def nodes_of_type(self, node_type: NodeType) -> list[Node]:
+        return [n for n in self.nodes if n.type == node_type]
+
+    def first_of_space_type(self, space_type: str) -> Optional[Node]:
+        return next((n for n in self.nodes if n.space_type == space_type), None)
+
+    def buildable_nodes(self) -> list[Node]:
+        """Nodes that occupy real floor area (everything except pure openings /
+        structural markers) — the ones the bridge turns back into RoomSpecs."""
+        return [n for n in self.nodes if n.type not in ("opening", "structural")]
+
+
+def _apply_type_semantics(node: Node) -> Node:
+    """Fill the derived boolean/daylight fields from the space_type."""
+    st = node.space_type
+    node.wet_room = st in _WET_TYPES
+    node.can_be_open_plan = st in _OPEN_PLAN_TYPES
+    if st in _DAYLIGHT_TYPES:
+        node.requires_external_wall = True
+        node.daylight_need = "high" if st in _PRIVATE_TYPES or st in _PUBLIC_TYPES else "medium"
+    if node.zone == "private":
+        node.privacy_level = 3
+        node.public_access = False
+    elif node.zone == "service":
+        node.privacy_level = 2
+    elif node.zone == "public":
+        node.privacy_level = 0
+    return node
+
+
+# ── Adapters ─────────────────────────────────────────────────────────────────
+
+
+def from_room_specs(room_specs: Iterable[RoomSpec], *, source: str = "prompt") -> ProgramGraph:
+    """Build a graph whose buildable nodes are 1:1 with the given RoomSpecs, in
+    order. This is the minimal, always-lossless construction."""
+    graph = ProgramGraph()
+    for spec in room_specs:
+        node = Node(
+            type=_classify_node_type(spec.room_type),
+            space_type=spec.room_type,
+            label=spec.label,
+            zone=_classify_zone(spec.room_type),
+            width=spec.w,
+            depth=spec.d,
+            height=spec.h,
+            target_area_sqm=round(spec.w * spec.d, 2),
+            source=source,
+        )
+        graph.add_node(_apply_type_semantics(node))
+    return graph
+
+
+def from_parser_output(parsed: "ParsedRequirements", room_specs: list[RoomSpec]) -> ProgramGraph:
+    """Build a graph from the parser output.
+
+    Buildable nodes are 1:1 with ``room_specs`` (preserving order/labels/dims),
+    which is what makes :func:`to_room_specs` a lossless inverse. The parser's
+    per-requirement zone/floor hints and adjacency constraints are attached as
+    node attributes and edges — richer information that the bridge ignores but
+    later graph-driven phases use.
+    """
+    graph = from_room_specs(room_specs, source="prompt")
+
+    # Enrich nodes with the parser's per-room-type zone & floor preference.
+    by_type: dict[str, object] = {}
+    for req in getattr(parsed, "rooms", []) or []:
+        by_type.setdefault(req.room_type, req)
+    for node in graph.nodes:
+        req = by_type.get(node.space_type)
+        if req is not None:
+            node.zone = getattr(req, "zone", node.zone) or node.zone
+            node.floor_preference = getattr(req, "floor_preference", node.floor_preference)
+            node.target_area_sqm = getattr(req, "area_m2", node.target_area_sqm)
+            _apply_type_semantics(node)
+
+    # Adjacency constraints -> edges (connect the first node of each type).
+    for constraint in getattr(parsed, "adjacency_constraints", []) or []:
+        a = graph.first_of_space_type(constraint.room_a)
+        b = graph.first_of_space_type(constraint.room_b)
+        if a is None or b is None or a.id == b.id:
+            continue
+        graph.add_edge(
+            Edge(
+                node_a=a.id,
+                node_b=b.id,
+                relation_type="adjacent",
+                strength=constraint.strength,
+                door_required=constraint.strength == "MUST",
+                reason=f"parser adjacency {constraint.room_a}~{constraint.room_b}",
+            )
+        )
+    return graph
+
+
+def from_building_template(template: "BuildingTemplate") -> ProgramGraph:
+    """Build a graph from a building template's default rooms + adjacency
+    priorities. Useful as a starting program when the prompt is sparse."""
+    graph = ProgramGraph()
+    for room in template.default_rooms:
+        for _ in range(max(1, room.minimum_count)):
+            node = Node(
+                type=_classify_node_type(room.room_type),
+                space_type=room.room_type,
+                label=room.label,
+                zone=_classify_zone(room.room_type),
+                width=room.w,
+                depth=room.d,
+                height=3.0,
+                target_area_sqm=round(room.w * room.d, 2),
+                source="template",
+            )
+            graph.add_node(_apply_type_semantics(node))
+    for a_type, b_type in template.adjacency_priorities:
+        a = graph.first_of_space_type(a_type)
+        b = graph.first_of_space_type(b_type)
+        if a is not None and b is not None and a.id != b.id:
+            graph.add_edge(
+                Edge(node_a=a.id, node_b=b.id, relation_type="adjacent", strength="SHOULD",
+                     reason=f"template adjacency {a_type}~{b_type}")
+            )
+    return graph
+
+
+def from_user_objects(canvas_objects: Iterable[dict]) -> ProgramGraph:
+    """Build a graph from canvas objects (the editor's serialized rooms). Each
+    object carries id/label/objectType/roomType/size."""
+    graph = ProgramGraph()
+    for obj in canvas_objects:
+        size = obj.get("size") or {}
+        space_type = obj.get("roomType") or obj.get("objectType") or "generic"
+        node = Node(
+            id=str(obj.get("id") or ""),
+            type=_classify_node_type(space_type),
+            space_type=space_type,
+            label=obj.get("label") or space_type.replace("_", " ").title(),
+            zone=_classify_zone(space_type),
+            width=size.get("w"),
+            depth=size.get("d"),
+            height=size.get("h"),
+            source="user_added",
+        )
+        if node.width and node.depth:
+            node.target_area_sqm = round(node.width * node.depth, 2)
+        graph.add_node(_apply_type_semantics(node))
+    return graph
+
+
+def merge(base: ProgramGraph, other: ProgramGraph) -> ProgramGraph:
+    """Merge two graphs, de-duplicating nodes by id and re-basing colliding ids
+    from ``other`` so no node is silently dropped."""
+    merged = ProgramGraph(nodes=list(base.nodes), edges=list(base.edges))
+    seen = {n.id for n in merged.nodes}
+    remap: dict[str, str] = {}
+    for node in other.nodes:
+        new_id = node.id
+        if not new_id or new_id in seen:
+            new_id = f"node-{len(merged.nodes)}"
+        if new_id != node.id:
+            remap[node.id] = new_id
+        node.id = new_id
+        seen.add(new_id)
+        merged.nodes.append(node)
+    for edge in other.edges:
+        merged.edges.append(
+            Edge(
+                node_a=remap.get(edge.node_a, edge.node_a),
+                node_b=remap.get(edge.node_b, edge.node_b),
+                relation_type=edge.relation_type,
+                strength=edge.strength,
+                preferred_relative_position=edge.preferred_relative_position,
+                min_shared_wall_m=edge.min_shared_wall_m,
+                door_required=edge.door_required,
+                access_required=edge.access_required,
+                visibility_required=edge.visibility_required,
+                reason=edge.reason,
+            )
+        )
+    return merged
+
+
+# ── Bridge back to RoomSpec (lossless for the prompt path) ───────────────────
+
+
+def to_room_specs(graph: ProgramGraph) -> list[RoomSpec]:
+    """Convert a graph's buildable nodes back into RoomSpecs, preserving order.
+
+    For a graph built via :func:`from_parser_output` / :func:`from_room_specs`
+    this reproduces the original RoomSpec list exactly, so
+    ``generate_layout(to_room_specs(from_parser_output(parsed, specs)))`` equals
+    ``generate_layout(specs)``.
+    """
+    specs: list[RoomSpec] = []
+    for node in graph.buildable_nodes():
+        width = node.width
+        depth = node.depth
+        if width is None or depth is None:
+            # Derive a square footprint from the target area when dims are absent.
+            side = (node.target_area_sqm ** 0.5) if node.target_area_sqm else 3.0
+            width = width if width is not None else round(side, 2)
+            depth = depth if depth is not None else round(side, 2)
+        specs.append(
+            RoomSpec(
+                label=node.label or node.space_type.replace("_", " ").title(),
+                room_type=node.space_type,
+                w=width,
+                h=node.height if node.height is not None else 3.0,
+                d=depth,
+            )
+        )
+    return specs

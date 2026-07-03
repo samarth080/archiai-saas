@@ -1,0 +1,31 @@
+"""Deterministic spatial-planning primitives (ProgramGraph + validation).
+
+Building-type-agnostic, no ML. See program_graph.py for the model and the
+lossless RoomSpec bridge, and validation.py for explainable warnings.
+"""
+from app.services.planning.program_graph import (
+    Edge,
+    Node,
+    ProgramGraph,
+    from_building_template,
+    from_parser_output,
+    from_room_specs,
+    from_user_objects,
+    merge,
+    to_room_specs,
+)
+from app.services.planning.validation import Warning, validate
+
+__all__ = [
+    "Node",
+    "Edge",
+    "ProgramGraph",
+    "from_parser_output",
+    "from_building_template",
+    "from_user_objects",
+    "from_room_specs",
+    "merge",
+    "to_room_specs",
+    "validate",
+    "Warning",
+]
