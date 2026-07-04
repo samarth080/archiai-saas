@@ -16,6 +16,7 @@ from math import sqrt
 from typing import Callable
 
 from app.services.layout_pattern_service import LayoutPatternRules
+from app.services.planning.alignment import align
 from app.services.planning.boundary import Rect
 from app.services.planning.program_graph import ProgramGraph
 from app.services.planning.slicing_tree import Item, SliceEdge, build_tree, leaves
@@ -24,9 +25,20 @@ from app.services.planning.validation import validate
 _MIN_DIM = 1.5
 _FLOOR_HEIGHT = 3.2  # mirror of layout_service._FLOOR_HEIGHT (avoid the import cycle)
 
-# Front-to-back band order (front = z=0). technical folds into service; other last.
-_BAND_ORDER = ("public", "semi_private", "circulation", "service", "private", "other")
+# Front-to-back band order (front = z=0), mirroring the tiler's proven structure:
+# the entrance sequence leads, public rooms follow, circulation threads the
+# middle, and private/service sit at the back (buffered from the entry).
+_BAND_ORDER = ("front", "public", "semi_private", "circulation", "service", "private", "other")
+# Entrance-sequence space types that lead the plan regardless of their raw zone
+# (entry is zoned "circulation" but architecturally belongs at the very front).
+_FRONT_BAND_TYPES = frozenset({"entry", "foyer", "lobby"})
 _CONTACT_EPS = 0.05
+
+
+def _band_bucket(cluster) -> str:
+    if any(m.space_type in _FRONT_BAND_TYPES for m in cluster.members):
+        return "front"
+    return cluster.zone
 
 # ProgramGraph relation → SliceEdge relation. Rank orders conflict resolution
 # (higher wins); AVOID is the odd one out (opposite intent) and ranks lowest so
@@ -212,10 +224,10 @@ def place_floor(
     building_depth = total_area / fill_width
     footprint = Rect(0.0, 0.0, round(target_width, 2), round(building_depth, 2))
 
-    # Stage 5 — bands by zone, front to back, each deep enough for its rooms.
+    # Stage 5 — bands front to back, each deep enough for its rooms.
     bands = [
-        [c for c in clusters if c.zone == zone]
-        for zone in _BAND_ORDER
+        [c for c in clusters if _band_bucket(c) == band]
+        for band in _BAND_ORDER
     ]
     bands = [b for b in bands if b]
     node_by_id = {m.id: m for c in clusters for m in c.members}
@@ -250,6 +262,11 @@ def place_floor(
                 for inner_leaf in leaves(inner):
                     placed.append((node_by_id[inner_leaf.item.id], inner_leaf.rect))
         current_z += band_depth
+
+    # Stage 7 alignment — snap + merge near-collinear cut lines (cleaner walls,
+    # fewer partition-wall segments), tiling preserved.
+    aligned, _align_warnings = align([(node.to_item(), rect) for node, rect in placed])
+    placed = [(node_by_id[item.id], rect) for item, rect in aligned]
 
     # Stage 8 — serialize to the legacy room schema (center-based, like the tiler).
     rooms = [
