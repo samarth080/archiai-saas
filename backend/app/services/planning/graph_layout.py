@@ -82,7 +82,7 @@ class PreparedGraph:
         return next((n for n in self.nodes if n.id == node_id), None)
 
 
-def _prepare_node(node) -> PreparedNode:
+def _prepare_node(node, pattern_rules: LayoutPatternRules | None) -> PreparedNode:
     width = node.width if node.width else None
     depth = node.depth if node.depth else None
     if width is None or depth is None:
@@ -90,11 +90,14 @@ def _prepare_node(node) -> PreparedNode:
         width = width or round(side, 2)
         depth = depth or round(side, 2)
     area = node.target_area_sqm or round(width * depth, 2)
+    # Use the pattern-rule zone so band assignment + the emitted room zone match
+    # what the quality scorer expects (its zone check compares against rule.zone).
+    zone = pattern_rules.zone_for(node.space_type) if pattern_rules else (node.zone or "other")
     return PreparedNode(
         id=node.id,
         space_type=node.space_type,
         label=node.label or node.space_type.replace("_", " ").title(),
-        zone=node.zone or "other",
+        zone=zone,
         area=area,
         width=width,
         depth=depth,
@@ -179,7 +182,7 @@ def prepare(
     pattern_rules: LayoutPatternRules | None = None,
 ) -> PreparedGraph:
     warnings = [w.message for w in validate(graph)]
-    nodes = [_prepare_node(node) for node in graph.buildable_nodes()]
+    nodes = [_prepare_node(node, pattern_rules) for node in graph.buildable_nodes()]
     edges = _unify_edges(graph, nodes, pattern_rules, warnings)
     return PreparedGraph(tuple(nodes), tuple(edges), tuple(warnings))
 

@@ -35,6 +35,11 @@ from app.services.layout_pattern_service import LayoutPatternRules, fallback_lay
 from app.services.layout_quality_service import score_layout_quality
 from app.services.prompt_service import RoomSpec
 from app.services.parser.constraint_extractor import AdjacencyConstraint
+from app.services.planning import from_room_specs
+from app.services.planning.boundary import compute_footprint as _graph_compute_footprint
+from app.services.planning.clustering import contract as _graph_contract
+from app.services.planning.graph_layout import place_floor as _graph_place, prepare as _graph_prepare
+from app.services.planning.program_graph import Edge as _GraphEdge
 
 # Muted architectural palette (Sprint 17 Phase 4) — each colour below is the
 # original bright Tailwind swatch run through a fixed HSL transform (saturation
@@ -1626,7 +1631,19 @@ def _build_layout_candidate(
         floor_id = f"floor_{level}"
         elevation = round(level * _FLOOR_HEIGHT, 2)
 
-        if use_tiler and placement_style == "graph":
+        if use_tiler and placement_style == "gtree":
+            rooms, tiled_footprint = _graph_tree_place_floor(
+                specs,
+                floor_id=floor_id,
+                floor_level=level,
+                elevation=elevation,
+                target_width=tiled_target_width,
+                stair_reserve=tiled_stair_reserve,
+                must_pairs=must_adjacency_pairs,
+                should_pairs=should_adjacency_pairs,
+                pattern_rules=pattern_rules,
+            )
+        elif use_tiler and placement_style == "graph":
             rooms, tiled_footprint = _graph_pack_rooms(
                 specs,
                 pattern_rules,
@@ -1776,6 +1793,69 @@ def _build_layout_candidate(
 # explicit adjacency can cost at most one interior room, not strand several.
 _GRAPH_MUST_QUALITY_TOLERANCE = 6
 
+# Placement styles produced by a graph-driven engine (row-packer + slicing tree).
+_GRAPH_ENGINES = ("graph", "gtree")
+
+_GRAPH_FALLBACK_PALETTE = ("#b3b8e9", "#6bc0a1", "#dea97d", "#e4a6c6", "#9abbe4", "#d6bd5d", "#c8bced")
+
+
+def _graph_fallback_color(space_type: str) -> str:
+    # Deterministic (stable) index — never `hash()`, which is per-process salted.
+    return _GRAPH_FALLBACK_PALETTE[sum(ord(c) for c in space_type) % len(_GRAPH_FALLBACK_PALETTE)]
+
+
+def _graph_tree_place_floor(
+    specs: list[RoomSpec],
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    target_width: float | None,
+    stair_reserve: float,
+    must_pairs: set[frozenset] | None,
+    should_pairs: set[frozenset] | None,
+    pattern_rules: LayoutPatternRules,
+) -> tuple[list[dict], dict]:
+    """Phase 4 guillotine slicing-tree engine (the "gtree" placement style):
+    build a ProgramGraph from this floor's specs + adjacency constraints, then
+    place it with the graph-driven slicing tree. Same (rooms, footprint) shape
+    as _tile_rooms."""
+    must_pairs = {_normalise_pair_types(p) for p in (must_pairs or set())}
+    should_pairs = {_normalise_pair_types(p) for p in (should_pairs or set())}
+
+    graph = from_room_specs(specs)
+    by_type: dict[str, list] = {}
+    for node in graph.nodes:
+        by_type.setdefault(node.space_type, []).append(node)
+
+    def _add_edges(pairs: set[frozenset], strength: str) -> None:
+        for pair in sorted(pairs, key=lambda p: tuple(sorted(p))):
+            types = sorted(pair)
+            if len(types) < 2:
+                continue
+            a = by_type.get(types[0])
+            b = by_type.get(types[1])
+            if a and b and a[0].id != b[0].id:
+                graph.add_edge(_GraphEdge(node_a=a[0].id, node_b=b[0].id, relation_type="adjacent", strength=strength))
+
+    _add_edges(must_pairs, "MUST")
+    _add_edges(should_pairs, "SHOULD")
+
+    cluster_graph = _graph_contract(_graph_prepare(graph, pattern_rules))
+    width = target_width or _graph_compute_footprint(
+        sum(c.item().area for c in cluster_graph.clusters)
+    ).w
+    return _graph_place(
+        cluster_graph.clusters,
+        list(cluster_graph.edges),
+        floor_id=floor_id,
+        floor_level=floor_level,
+        elevation=elevation,
+        target_width=width,
+        stair_reserve=stair_reserve,
+        color_for=lambda t: ROOM_COLORS.get(t, _graph_fallback_color(t)),
+    )
+
 
 def _rooms_share_wall(a: dict, b: dict) -> bool:
     """AABB shared-wall test between two placed-room dicts on the same floor."""
@@ -1891,30 +1971,41 @@ def generate_layout(
     # competes, and (see selection below) replaces the tiler winner solely when it
     # satisfies strictly more MUST adjacencies at no quality cost.
     if use_tiler_type and must_pairs:
-        variants = variants + [(0.0, "graph")]
-    candidates = [
-        _build_layout_candidate(
-            room_specs=room_specs,
-            prompt=prompt,
-            building_type=building_type,
-            total_floors=total_floors,
-            pattern_rules=pattern_rules,
-            total_area_sqm=total_area_sqm,
-            template=template,
-            x_offset=base_offset + offset,
-            zone_assignments=zone_assignments,
-            must_adjacency_pairs=must_pairs or None,
-            should_adjacency_pairs=should_pairs or None,
-            plot_width_m=plot_width_m,
-            orientation=orientation,
-            placement_style=style,
-        )
-        for offset, style in variants
-    ]
+        # The row-packer ("graph") and the guillotine slicing tree ("gtree") both
+        # cluster MUST-linked rooms; both compete, both gated on hard MUST.
+        variants = variants + [(0.0, "graph"), (0.0, "gtree")]
+    candidates: list[dict] = []
+    for offset, style in variants:
+        try:
+            candidates.append(
+                _build_layout_candidate(
+                    room_specs=room_specs,
+                    prompt=prompt,
+                    building_type=building_type,
+                    total_floors=total_floors,
+                    pattern_rules=pattern_rules,
+                    total_area_sqm=total_area_sqm,
+                    template=template,
+                    x_offset=base_offset + offset,
+                    zone_assignments=zone_assignments,
+                    must_adjacency_pairs=must_pairs or None,
+                    should_adjacency_pairs=should_pairs or None,
+                    plot_width_m=plot_width_m,
+                    orientation=orientation,
+                    placement_style=style,
+                )
+            )
+        except Exception:
+            # Fallback hardening: a graph-driven candidate must never break
+            # generation — omit it, the tiler/BSP candidates always exist. A
+            # failure from a base engine is a real bug, so re-raise it.
+            if style in _GRAPH_ENGINES:
+                continue
+            raise
     # Baseline winner among the tiler/BSP (row-fallback) candidates: quality
     # primary, adjacency realised as a tiebreak (Sprint 18 Phase 4 slice 2).
-    graph_candidates = [c for c in candidates if c["metadata"].get("placementEngine") == "graph"]
-    base_candidates = [c for c in candidates if c["metadata"].get("placementEngine") != "graph"]
+    graph_candidates = [c for c in candidates if c["metadata"].get("placementEngine") in _GRAPH_ENGINES]
+    base_candidates = [c for c in candidates if c["metadata"].get("placementEngine") not in _GRAPH_ENGINES]
     best = max(
         base_candidates,
         key=lambda candidate: (
@@ -1930,13 +2021,20 @@ def generate_layout(
     # warning). The tolerance is tight enough that a badly-scoring layout can't
     # ride in on a single adjacency.
     best_must = _candidate_must_satisfied(best, must_pairs)
-    for candidate in graph_candidates:
+    if graph_candidates:
+        # Among the graph engines (row-packer + slicing tree) pick the strongest:
+        # most MUST adjacencies realised, then highest quality. It replaces the
+        # baseline only if it realises strictly more MUST at no more than a small
+        # quality cost (an explicit user adjacency beats a modest quality dip).
+        graph_best = max(
+            graph_candidates,
+            key=lambda c: (_candidate_must_satisfied(c, must_pairs), c["insights"]["score"]),
+        )
         if (
-            _candidate_must_satisfied(candidate, must_pairs) > best_must
-            and candidate["insights"]["score"] >= best["insights"]["score"] - _GRAPH_MUST_QUALITY_TOLERANCE
+            _candidate_must_satisfied(graph_best, must_pairs) > best_must
+            and graph_best["insights"]["score"] >= best["insights"]["score"] - _GRAPH_MUST_QUALITY_TOLERANCE
         ):
-            best = candidate
-            best_must = _candidate_must_satisfied(candidate, must_pairs)
+            best = graph_best
     best["metadata"]["candidateCount"] = len(candidates)
 
     design_params_echo: dict = {}

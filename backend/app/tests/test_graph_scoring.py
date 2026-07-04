@@ -280,7 +280,27 @@ def test_graph_candidate_realises_a_cross_zone_must_the_tiler_cannot():
         zone_assignments=parsed.zone_assignments,
     )
     assert layout["metadata"]["placementEngine"] == "graph"
-    assert layout["metadata"]["candidateCount"] == 3
+    # tile + bsp + graph (row-packer) + gtree (slicing tree) all compete on a MUST program
+    assert layout["metadata"]["candidateCount"] == 4
+
+
+def test_slicing_tree_wins_when_it_produces_the_best_layout():
+    """The guillotine slicing tree ('gtree') competes alongside the row-packer
+    and wins when its 2D partitioning yields the best layout — here it beats
+    tile/BSP/row-packer while realising the MUST adjacency."""
+    from app.services.layout_service import generate_layout
+
+    prompt = "office where the workspace is next to the reception"
+    parsed = parse_prompt(prompt)
+    layout = generate_layout(
+        parsed_to_room_specs(parsed),
+        prompt=prompt,
+        building_type="office",
+        total_floors=1,
+        adjacency_constraints=parsed.adjacency_constraints,
+        zone_assignments=parsed.zone_assignments,
+    )
+    assert layout["metadata"]["placementEngine"] == "gtree"
 
 
 def test_graph_candidate_absent_without_must_constraints():
