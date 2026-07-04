@@ -626,6 +626,12 @@ No existing candidate is generated differently and none removed. Full backend su
 
 Deferred (Phase 4 remainder): `preferred_relative_position` honouring (needs the parser to capture direction, which it currently drops) and true 2D BSP footprint slicing by adjacency cluster. The scoring + selection + graph-packing engine + daylight measurement/selection land first; a full spatial solver is the larger follow-up.
 
+**Phase 4 full spec — guillotine slicing-tree engine** (`sprint-18/phase4-slicing-tree`, off `sprint-18/phase4-graph-scoring`): implementing the full "satisfy by construction" spec — a graph-driven guillotine partitioner where no-overlap / zero-gap / inside-footprint / MUST-adjacency / external-wall are structural properties, not scored hopes.
+
+- *Built + tested standalone (Stages 1-8, ~30 tests):* `planning/boundary.py` (footprint + oriented edges + `split_contact` deterministic contact routing), `planning/slicing_tree.py` (recursive balanced min-cut bipartition — the heart; property-tested: exact tiling/no-overlap, MUST pairs share a wall, AVOID pushed apart, external rooms reach a boundary, min-dims, determinism, large-k greedy), `planning/graph_layout.py::prepare` (edge unification + MUST-over-AVOID conflict rule) + `place_floor` (zone bands → tree per band → inner recursion → legacy room-dict serialization, injected colours/ids to stay acyclic), `planning/clustering.py` (MUST-cluster contraction). Cross-zone MUST proven end-to-end: reception (public) next-to consultation (private) becomes a shared wall the zone tiler structurally can't produce.
+- *Seam wiring (T4.7) deliberately deferred:* wiring the slicing tree in as the `graph` engine was attempted and reverted — it currently scores lower than the tuned tiler/BSP on the *domain* quality heuristics (its zone-band order buries the entry mid-plan and drags a MUST cluster forward, tripping "private-near-entry"/flow penalties), so the clinic case would regress from the row-packer's MUST-satisfying q86 winner to BSP (q84, MUST 0). Wiring waits on the quality-refinement tasks below so it competes without regressing generation. The engine is complete and correct; making it *win* is the remaining work.
+- *Remaining:* T4.5 alignment (snap/merge collinear cuts, sliver-absorb, aspect-repair), band-order tuning (entry leads, private to the back), T4.9 Stage-9 scoring reconcile (score every candidate on graph satisfaction so honouring MUST earns credit), T4.7 wiring once competitive, T4.8 candidate seeds, T4.11 benchmark fixtures, docs.
+
 ---
 
 ## Development Rules
