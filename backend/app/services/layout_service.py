@@ -2030,9 +2030,16 @@ def generate_layout(
             graph_candidates,
             key=lambda c: (_candidate_must_satisfied(c, must_pairs), c["insights"]["score"]),
         )
+        g_must = _candidate_must_satisfied(graph_best, must_pairs)
+        g_score = graph_best["insights"]["score"]
+        b_score = best["insights"]["score"]
+        # Win when genuinely better: (a) strictly more MUST at no more than a small
+        # quality cost — an explicit user adjacency beats a modest dip; or (b)
+        # equal-or-more MUST at strictly higher quality — just a better layout. A
+        # graph candidate never wins by dropping a MUST or on a quality tie.
         if (
-            _candidate_must_satisfied(graph_best, must_pairs) > best_must
-            and graph_best["insights"]["score"] >= best["insights"]["score"] - _GRAPH_MUST_QUALITY_TOLERANCE
+            (g_must > best_must and g_score >= b_score - _GRAPH_MUST_QUALITY_TOLERANCE)
+            or (g_must >= best_must and g_score > b_score)
         ):
             best = graph_best
     best["metadata"]["candidateCount"] = len(candidates)

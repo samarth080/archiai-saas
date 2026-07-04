@@ -271,6 +271,13 @@ def place_floor(
     aligned, _align_warnings = align([(node.to_item(), rect) for node, rect in placed])
     placed = [(node_by_id[item.id], rect) for item, rect in aligned]
 
+    # Recompute the footprint from the *aligned* room extents — grid-snapping can
+    # nudge an edge past the pre-alignment depth, so derive the footprint from the
+    # actual rooms to guarantee every room stays inside it.
+    max_x = max((rect.x + rect.w for _, rect in placed), default=footprint.w)
+    max_z = max((rect.z + rect.d for _, rect in placed), default=footprint.d)
+    footprint = Rect(0.0, 0.0, round(max(footprint.w, max_x), 2), round(max_z, 2))
+
     # Stage 8 — serialize to the legacy room schema (center-based, like the tiler).
     rooms = [
         {
