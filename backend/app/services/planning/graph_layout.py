@@ -10,15 +10,23 @@ boundary.py. The per-floor placement (`place_floor`, Stages 4-8) is added next.
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from math import sqrt
+from typing import Callable
 
 from app.services.layout_pattern_service import LayoutPatternRules
+from app.services.planning.boundary import Rect
 from app.services.planning.program_graph import ProgramGraph
-from app.services.planning.slicing_tree import Item, SliceEdge
+from app.services.planning.slicing_tree import Item, SliceEdge, build_tree, leaves
 from app.services.planning.validation import validate
 
 _MIN_DIM = 1.5
+_FLOOR_HEIGHT = 3.2  # mirror of layout_service._FLOOR_HEIGHT (avoid the import cycle)
+
+# Front-to-back band order (front = z=0). technical folds into service; other last.
+_BAND_ORDER = ("public", "semi_private", "circulation", "service", "private", "other")
+_CONTACT_EPS = 0.05
 
 # ProgramGraph relation → SliceEdge relation. Rank orders conflict resolution
 # (higher wins); AVOID is the odd one out (opposite intent) and ranks lowest so
@@ -162,3 +170,102 @@ def prepare(
     nodes = [_prepare_node(node) for node in graph.buildable_nodes()]
     edges = _unify_edges(graph, nodes, pattern_rules, warnings)
     return PreparedGraph(tuple(nodes), tuple(edges), tuple(warnings))
+
+
+# ── Stage 4-8: place one floor ────────────────────────────────────────────────
+
+
+def _contact_of(rect: Rect, footprint: Rect) -> frozenset[str]:
+    """Which footprint edges a rectangle touches (S=front z=0, N=back, W/E sides)."""
+    edges = set()
+    if abs(rect.x - footprint.x) < _CONTACT_EPS:
+        edges.add("W")
+    if abs((rect.x + rect.w) - (footprint.x + footprint.w)) < _CONTACT_EPS:
+        edges.add("E")
+    if abs(rect.z - footprint.z) < _CONTACT_EPS:
+        edges.add("S")
+    if abs((rect.z + rect.d) - (footprint.z + footprint.d)) < _CONTACT_EPS:
+        edges.add("N")
+    return frozenset(edges)
+
+
+def place_floor(
+    clusters,
+    inter_edges,
+    *,
+    floor_id: str,
+    floor_level: int,
+    elevation: float,
+    target_width: float,
+    stair_reserve: float = 0.0,
+    color_for: Callable[[str], str] = lambda _t: "#b3b8e9",
+    new_id: Callable[[], str] = lambda: str(uuid.uuid4()),
+) -> tuple[list[dict], dict]:
+    """Place one floor's clusters via zone bands + graph-aware slicing trees,
+    returning `(rooms, footprint)` in _tile_rooms' exact shape."""
+    clusters = sorted(clusters, key=lambda c: c.id)
+    total_area = sum(c.item().area for c in clusters)
+    if not clusters or total_area <= 0 or target_width <= 0:
+        return [], {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
+
+    fill_width = max(target_width - stair_reserve, 5.0)
+    building_depth = total_area / fill_width
+    footprint = Rect(0.0, 0.0, round(target_width, 2), round(building_depth, 2))
+
+    # Stage 5 — bands by zone, front to back, each deep enough for its rooms.
+    bands = [
+        [c for c in clusters if c.zone == zone]
+        for zone in _BAND_ORDER
+    ]
+    bands = [b for b in bands if b]
+    node_by_id = {m.id: m for c in clusters for m in c.members}
+    cluster_by_id = {c.id: c for c in clusters}
+
+    placed: list[tuple[PreparedNode, Rect]] = []
+    current_z = 0.0
+    for i, band_clusters in enumerate(bands):
+        band_area = sum(c.item().area for c in band_clusters)
+        band_depth = band_area / fill_width
+        band_rect = Rect(0.0, round(current_z, 4), fill_width, round(band_depth, 4))
+        contact = {"E", "W"}
+        if i == 0:
+            contact.add("S")
+        if i == len(bands) - 1:
+            contact.add("N")
+
+        band_ids = {c.id for c in band_clusters}
+        band_edges = [e for e in inter_edges if e.a in band_ids and e.b in band_ids]
+        items = [c.item() for c in band_clusters]
+        outer = build_tree(items, band_rect, frozenset(contact), band_edges)
+
+        # Stage 6 inner recursion + Stage 7 realization.
+        for leaf in leaves(outer):
+            cluster = cluster_by_id[leaf.item.id]
+            if len(cluster.members) == 1:
+                placed.append((cluster.members[0], leaf.rect))
+            else:
+                inner_items = [m.to_item() for m in cluster.members]
+                inner_contact = _contact_of(leaf.rect, footprint)
+                inner = build_tree(inner_items, leaf.rect, inner_contact, list(cluster.inner_edges))
+                for inner_leaf in leaves(inner):
+                    placed.append((node_by_id[inner_leaf.item.id], inner_leaf.rect))
+        current_z += band_depth
+
+    # Stage 8 — serialize to the legacy room schema (center-based, like the tiler).
+    rooms = [
+        {
+            "id": new_id(),
+            "label": node.label,
+            "roomType": node.space_type,
+            "objectType": "room",
+            "floorId": floor_id,
+            "floorLevel": floor_level,
+            "zone": node.zone,
+            "position": {"x": round(rect.cx, 2), "y": round(elevation + _FLOOR_HEIGHT / 2, 2), "z": round(rect.cz, 2)},
+            "size": {"w": round(rect.w, 2), "h": _FLOOR_HEIGHT, "d": round(rect.d, 2)},
+            "rotation": {"x": 0, "y": 0, "z": 0},
+            "color": color_for(node.space_type),
+        }
+        for node, rect in placed
+    ]
+    return rooms, {"x": 0.0, "z": 0.0, "w": footprint.w, "d": round(footprint.d, 2)}
