@@ -655,6 +655,16 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** frontend tests 120 passed, frontend TypeScript check passed, frontend production build passed, backend tests 551 passed. Local backend (`127.0.0.1:8000`) and frontend (`127.0.0.1:5173`) server smoke checks returned 200.
 - [ ] **Manual browser acceptance:** visual in-app browser verification was blocked in this Codex session because no browser backend was available (`agent.browsers.list()` returned `[]`). The servers were started and healthy; complete visual beginner/professional acceptance remains pending in an environment with browser control.
 
+### Sprint 20 - Reliable Sessions, Save Safety, and CI Protection
+
+- [x] **Refresh-token session continuity:** frontend auth state now persists both the short-lived access token and the refresh token returned by login/register. Startup keeps the user authenticated when only the access token has expired and a refresh token remains valid, so the next protected request can refresh instead of immediately clearing the session.
+- [x] **Single-flight Axios refresh flow:** protected 401 responses now share one in-flight `/api/auth/refresh` request, wait for rotation to finish, then retry each eligible original request once with the new access token. Auth endpoints, requests marked `skipAuthRefresh`, already-retried requests, and non-401 errors do not enter the refresh path.
+- [x] **Safe failure behavior:** refresh failure clears auth state and redirects to `/login`; 403 authorization failures, 422 validation failures, 429 rate limits, 402 entitlement/usage limits, network failures, and backend 5xx responses surface through the caller without being treated as logout.
+- [x] **Save/draft integrity:** manual layout saves and auto-save drafts resolve as saved only after the retried request succeeds. Failed refresh leaves manual saves in `error` while preserving unsaved canvas state, and draft failures leave `draftStatus: "error"` with recoverable in-memory work. Regression tests pin that a manual save after token refresh creates only one named version write and that draft saves remain separate from named versions.
+- [x] **CI protection:** `.github/workflows/ci.yml` added for pushes to `main` and pull requests. CI runs backend dependency install + `pytest`, then frontend `npm ci`, `npm test`, `npx tsc --noEmit`, and `npm run build` without deployment or secrets.
+- [x] **Verification:** frontend tests 153 passed, frontend TypeScript check passed, frontend production build passed, backend tests 558 passed. Focused session-expiry simulations cover concurrent 401s, refresh success/failure, retry limits, non-refresh status codes, autosave, manual save, and local input preservation.
+- [ ] **Live browser acceptance:** deterministic automated tests cover the Sprint 20 session-expiry scenario; full live browser acceptance with a running app session was not performed in this Codex environment.
+
 ---
 
 ## Development Rules
