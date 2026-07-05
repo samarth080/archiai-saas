@@ -1,8 +1,28 @@
-# ArchiAI TODO Return Checklist
+# ArchiAI Living TODO Backlog And Return Checklist
 
-Use this file when returning to the project after a pause. It rolls up the live TODOs from `CLAUDE.md` and `docs/SPRINT20_REMAINING_WORK.md`, then gives a repeatable checklist for picking work back up safely.
+Use this file as the project-wide place to track what needs to be fixed, improved, revisited, or picked back up later. It is not just for Sprint 20. As new TODOs come up in conversation, add them here under the right area, or drop them into the intake section first and triage later.
+
+This file also gives a repeatable checklist for returning to work safely after a pause.
 
 This file intentionally does not treat unchecked boxes inside old sprint specs/plans as live work unless the same item is also reflected in `CLAUDE.md` or the Sprint 20 remaining-work note. Many old spec checkboxes are historical implementation plans that have since been completed.
+
+## Ongoing Conversation Intake
+
+Use this section for fresh "get back to this" notes before they have been fully scoped. When an item is triaged, move it into one of the priority sections below.
+
+- [ ] New TODO from conversation: _(add summary, source/date, likely area, and why it matters)_.
+- [ ] New bug to investigate: _(add repro, affected files/screens, expected behavior, and current behavior)_.
+- [ ] New improvement idea: _(add desired outcome, user value, and whether it is frontend/backend/planning/product)_.
+- [ ] New cleanup/refactor candidate: _(add risk, blast radius, and tests needed before touching it)_.
+
+## How To Add A New TODO
+
+- [ ] Capture the exact user-facing problem or desired improvement.
+- [ ] Link the likely source file, branch, screenshot, PR, or conversation context if known.
+- [ ] Put it under one category below, or leave it in `Ongoing Conversation Intake` if uncertain.
+- [ ] Add a "resume checklist" if the item needs more than one sitting.
+- [ ] Mark priority honestly: P0 blocks current release, P1 is important reliability/product work, P2 improves core capability, P3 is future expansion.
+- [ ] When completed, update the checkbox and add the commit or PR reference.
 
 ## Before Starting Any TODO
 
@@ -18,6 +38,13 @@ This file intentionally does not treat unchecked boxes inside old sprint specs/p
 - [ ] Update `CLAUDE.md` and this checklist when a TODO is completed, deferred, or superseded.
 - [ ] Commit locally with a clear message.
 - [ ] Do not push or open a PR unless explicitly asked.
+
+## Current Local Branches And Notes
+
+- [ ] Sprint 19 PR branch exists remotely as `sprint-19/release-a-safe-editor`.
+- [ ] Sprint 20 work is local on `sprint-20/reliable-sessions-save-safety-ci`.
+- [ ] Sprint 20 has not been pushed or opened as a PR.
+- [ ] Unrelated local untracked files still exist and should not be accidentally committed: `.thumbnail`, `screenshots/`, `uploads/`.
 
 ## Priority 0 - Sprint 20 Closure
 
