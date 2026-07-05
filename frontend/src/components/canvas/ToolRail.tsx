@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { CanvasObjectType, useCanvasStore } from '../../store/canvasStore'
+import { useCanvasStore } from '../../store/canvasStore'
+import {
+  BEGINNER_COMPONENTS,
+  PROFESSIONAL_COMPONENTS,
+  type CanvasObjectType,
+  type ComponentDefinition,
+} from '../../store/componentRegistry'
 
 const ICONS: Record<string, JSX.Element> = {
   select: <path d="M5 3l14 7-6 2-2 6z" />,
@@ -23,68 +29,193 @@ const ICONS: Record<string, JSX.Element> = {
     </>
   ),
   stair: <path d="M3 20v-4h4v-4h4v-4h4V4h6" />,
+  corridor: (
+    <>
+      <path d="M5 4v16M19 4v16" />
+      <path d="M5 8h14M5 16h14" />
+    </>
+  ),
+  furniture: (
+    <>
+      <path d="M5 11h14v7H5z" />
+      <path d="M7 11V7h10v4M7 18v2M17 18v2" />
+    </>
+  ),
+  column: (
+    <>
+      <rect x="8" y="5" width="8" height="14" rx="1" />
+      <path d="M6 5h12M6 19h12" />
+    </>
+  ),
+  open_space: (
+    <>
+      <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
+      <path d="M8 12h8" />
+    </>
+  ),
+  lift: (
+    <>
+      <rect x="6" y="4" width="12" height="16" rx="1" />
+      <path d="M10 9l2-2 2 2M10 15l2 2 2-2" />
+    </>
+  ),
+  shaft: (
+    <>
+      <rect x="7" y="4" width="10" height="16" rx="1" />
+      <path d="M10 7h4M10 17h4" />
+    </>
+  ),
+  floor: (
+    <>
+      <path d="M4 17h16" />
+      <path d="M6 13h12M8 9h8" />
+    </>
+  ),
+  generic: (
+    <>
+      <rect x="5" y="5" width="14" height="14" rx="2" />
+      <path d="M9 12h6" />
+    </>
+  ),
   measure: (
     <>
       <path d="M3 8l5-5 13 13-5 5z" />
       <path d="M8 7l1.5 1.5M11 10l1.5 1.5M14 13l1.5 1.5" />
     </>
   ),
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="19" cy="12" r="1.5" />
+    </>
+  ),
 }
 
 interface ToolDef {
-  key: keyof typeof ICONS
+  key: string
   label: string
   shortcut?: string
   onClick?: () => void
   active?: boolean
 }
 
+function ToolButton({
+  tool,
+  hovered,
+  setHovered,
+}: {
+  tool: ToolDef
+  hovered: string | null
+  setHovered: (key: string | null) => void
+}) {
+  return (
+    <div
+      className="relative flex"
+      onMouseEnter={() => setHovered(tool.key)}
+      onMouseLeave={() => setHovered(null)}
+    >
+      <button
+        type="button"
+        aria-label={tool.label}
+        onClick={tool.onClick}
+        className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+          tool.active
+            ? 'bg-brand-600/10 text-brand-600'
+            : 'text-muted-light hover:bg-brand-600/10 hover:text-brand-600'
+        }`}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          {ICONS[tool.key] ?? ICONS.generic}
+        </svg>
+      </button>
+      {hovered === tool.key && (
+        <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-white shadow-lg">
+          <span className="text-xs font-semibold">{tool.label}</span>
+          {tool.shortcut && (
+            <span className="rounded bg-white px-1 py-0.5 font-mono text-[10px] font-semibold text-ink">
+              {tool.shortcut}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function componentTool(definition: ComponentDefinition, addObject: (type: CanvasObjectType) => void): ToolDef {
+  return {
+    key: definition.type,
+    label: definition.label,
+    onClick: () => addObject(definition.type),
+  }
+}
+
 export function ToolRail() {
   const [hovered, setHovered] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
   const addObject = useCanvasStore((s) => s.addObject)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
   const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
-
-  const addType = (type: CanvasObjectType) => () => addObject(type)
+  const interactionMode = useCanvasStore((s) => s.interactionMode)
+  const setInteractionMode = useCanvasStore((s) => s.setInteractionMode)
 
   const tools: ToolDef[] = [
-    { key: 'select', label: 'Select', active: true },
-    { key: 'room', label: 'Room', shortcut: 'R', onClick: addType('room') },
-    { key: 'wall', label: 'Wall', shortcut: 'W', onClick: addType('wall') },
-    { key: 'door', label: 'Door', onClick: addType('door') },
-    { key: 'window', label: 'Window', onClick: addType('window') },
-    { key: 'stair', label: 'Stair', onClick: addType('stair') },
-    { key: 'measure', label: 'Measure', shortcut: '⌥', active: showDimensions, onClick: () => setShowDimensions(!showDimensions) },
+    {
+      key: 'select',
+      label: 'Select',
+      active: interactionMode === 'select',
+      onClick: () => {
+        setInteractionMode('select')
+        setShowDimensions(false)
+      },
+    },
+    ...BEGINNER_COMPONENTS.map((definition) => componentTool(definition, addObject)),
+    {
+      key: 'measure',
+      label: 'Measure',
+      shortcut: 'Alt',
+      active: showDimensions,
+      onClick: () => {
+        const next = !showDimensions
+        setShowDimensions(next)
+        setInteractionMode(next ? 'measure' : 'select')
+      },
+    },
+    {
+      key: 'more',
+      label: 'More components',
+      active: moreOpen,
+      onClick: () => setMoreOpen((value) => !value),
+    },
   ]
 
   return (
     <div className="absolute left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5">
       {tools.map((tool) => (
-        <div key={tool.key} className="relative flex" onMouseEnter={() => setHovered(tool.key)} onMouseLeave={() => setHovered(null)}>
-          <button
-            type="button"
-            aria-label={tool.label}
-            onClick={tool.onClick}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-              tool.active ? 'bg-brand-600/10 text-brand-600' : 'text-muted-light hover:bg-brand-600/10 hover:text-brand-600'
-            }`}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              {ICONS[tool.key]}
-            </svg>
-          </button>
-          {hovered === tool.key && (
-            <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-white shadow-lg">
-              <span className="text-xs font-semibold">{tool.label}</span>
-              {tool.shortcut && (
-                <span className="rounded bg-white px-1 py-0.5 font-mono text-[10px] font-semibold text-ink">
-                  {tool.shortcut}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <ToolButton key={tool.key} tool={tool} hovered={hovered} setHovered={setHovered} />
       ))}
+
+      {moreOpen && (
+        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-white p-1.5 shadow-2xl">
+          {PROFESSIONAL_COMPONENTS.map((definition) => (
+            <button
+              key={definition.type}
+              type="button"
+              onClick={() => {
+                addObject(definition.type)
+                setMoreOpen(false)
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/80 hover:bg-brand-600/10 hover:text-brand-700"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                {ICONS[definition.type] ?? ICONS.generic}
+              </svg>
+              <span>{definition.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

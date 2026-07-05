@@ -2,6 +2,7 @@ import { type RefObject } from 'react'
 import { OrbitControls, Grid } from '@react-three/drei'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
+import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 
 interface OrbitHandle {
   enabled: boolean
@@ -15,6 +16,9 @@ interface SceneProps {
 
 export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProps) {
   const deselectAll = useCanvasStore((s) => s.deselectAll)
+  const interactionMode = useCanvasStore((s) => s.interactionMode)
+  const pointerIntent = useCanvasStore((s) => s.pointerIntent)
+  const showDimensions = useCanvasStore((s) => s.showDimensions)
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const visibleFloors =
@@ -22,6 +26,9 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       ? floors
       : floors.filter((floor) => floor.level === selectedFloor)
   const isPlanView = viewMode !== '3d'
+  const mouseButtons = isPlanView
+    ? { LEFT: undefined, MIDDLE: undefined, RIGHT: THREE.MOUSE.PAN }
+    : { LEFT: undefined, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN }
   // Floor slab: thin in plan view, thicker in 3D so multi-floor separation is visible
   const slabHeight = isPlanView ? 0.06 : 0.45
   const isMultiFloor = floors.length > 1
@@ -98,6 +105,10 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         ref={orbitRef as RefObject<any>}
         makeDefault
         enableRotate={!isPlanView}
+        enablePan
+        enableZoom
+        screenSpacePanning
+        mouseButtons={mouseButtons}
       />
 
       {/* Invisible plane — deselects when clicking empty canvas */}
@@ -105,8 +116,19 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.01, 0]}
         onPointerDown={(event) => {
-          event.stopPropagation()
-          if (!readOnly) deselectAll()
+          if (readOnly) return
+          const shouldClear = canClearSelectionFromEmptyCanvas({
+            interactionMode,
+            pointerIntent,
+            placementArmed: interactionMode === 'place',
+            measureActive: interactionMode === 'measure' || showDimensions,
+            cameraAction: event.button === 1 || event.button === 2,
+            button: event.button,
+          })
+          if (shouldClear) {
+            event.stopPropagation()
+            deselectAll()
+          }
         }}
       >
         <planeGeometry args={[200, 200]} />
