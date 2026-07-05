@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { DEFAULT_FLOOR, DEFAULT_FLOOR_HEIGHT, useCanvasStore, INITIAL_ROOMS, Room } from './canvasStore'
+import { COMPONENT_DEFINITIONS, COMPONENT_REGISTRY, type CanvasObjectType } from './componentRegistry'
 
 beforeEach(() => {
   useCanvasStore.setState({
@@ -22,6 +23,9 @@ beforeEach(() => {
     selectedId: null,
     snapToGrid: false,
     gridSize: 1,
+    showDimensions: false,
+    interactionMode: 'select',
+    pointerIntent: 'idle',
     saveStatus: 'saved',
     lastSavedAt: null,
     hasUnsavedChanges: false,
@@ -31,6 +35,10 @@ beforeEach(() => {
     recoveredDraftAvailable: false,
     latestDraftVersionId: null,
     activityLog: [],
+    historyPast: [],
+    historyFuture: [],
+    clipboard: null,
+    clipboardMessage: null,
   })
 })
 
@@ -472,5 +480,200 @@ describe('loadLayout and serializeLayout', () => {
 
     expect(useCanvasStore.getState().generationInsights).toEqual(insights)
     expect(useCanvasStore.getState().serializeLayout().insights).toEqual(insights)
+  })
+})
+
+describe('component registry lifecycle parity', () => {
+  it.each(COMPONENT_DEFINITIONS.filter((definition) => definition.canCreate))(
+    'creates, serializes, reloads, selects, copies, pastes, undoes, and redoes $type',
+    (definition) => {
+      const store = useCanvasStore.getState()
+      store.clearLayout()
+      store.addObject(definition.type)
+
+      let state = useCanvasStore.getState()
+      const created = state.rooms[0]
+      expect(created.objectType).toBe(definition.type)
+      expect(state.selectedId).toBe(created.id)
+      expect(COMPONENT_REGISTRY[created.objectType].canMove).toBe(true)
+      expect(typeof COMPONENT_REGISTRY[created.objectType].canResize).toBe('boolean')
+
+      const serialized = state.serializeLayout()
+      expect(serialized.rooms[0].objectType).toBe(definition.type)
+      expect(serialized.floors?.[0].rooms?.[0].objectType).toBe(definition.type)
+
+      store.loadLayout(serialized)
+      state = useCanvasStore.getState()
+      const reloaded = state.rooms[0]
+      expect(reloaded.objectType).toBe(definition.type)
+
+      state.selectRoom(reloaded.id)
+      state.copySelected()
+      state.pasteClipboard()
+
+      state = useCanvasStore.getState()
+      expect(state.rooms).toHaveLength(2)
+      expect(state.rooms[1].objectType).toBe(definition.type)
+      expect(state.rooms[1].id).not.toBe(reloaded.id)
+      expect(state.selectedId).toBe(state.rooms[1].id)
+
+      state.undo()
+      expect(useCanvasStore.getState().rooms).toHaveLength(1)
+
+      useCanvasStore.getState().redo()
+      expect(useCanvasStore.getState().rooms).toHaveLength(2)
+      expect(useCanvasStore.getState().rooms[1].objectType).toBe(definition.type)
+    },
+  )
+
+  it('keeps floor as an explicitly editable legacy object type', () => {
+    expect(COMPONENT_REGISTRY.floor.legacy).toBe(true)
+    expect(COMPONENT_REGISTRY.floor.canCreate).toBe(true)
+    expect(COMPONENT_REGISTRY.floor.canMove).toBe(true)
+    expect(COMPONENT_REGISTRY.floor.canResize).toBe(true)
+  })
+
+  it('normalizes unknown foreign object types to generic without losing the object', () => {
+    useCanvasStore.getState().loadLayout({
+      version: '1.0',
+      rooms: [
+        {
+          id: 'foreign-1',
+          label: 'Imported Symbol',
+          objectType: 'vendor_symbol' as CanvasObjectType,
+          roomType: 'vendor_symbol',
+          position: { x: 1, y: 1, z: 1 },
+          size: { w: 1, h: 1, d: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          color: '#999999',
+        },
+      ],
+    })
+
+    const [room] = useCanvasStore.getState().rooms
+    expect(room.id).toBe('foreign-1')
+    expect(room.objectType).toBe('generic')
+    expect(room.roomType).toBe('vendor_symbol')
+  })
+})
+
+describe('history, constraints, and clipboard operations', () => {
+  it('undoes and redoes move, resize, delete, duplicate, and add actions', () => {
+    const store = useCanvasStore.getState()
+
+    store.updateRoom('room-1', { position: { x: 2, y: 1.5, z: 2 } })
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.position.x).toBe(2)
+    store.undo()
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.position.x).toBe(0)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.position.x).toBe(2)
+
+    useCanvasStore.getState().updateRoom('room-1', { size: { w: 7, h: 3, d: 6 } })
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.size.w).toBe(7)
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.size.w).toBe(6)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms.find((room) => room.id === 'room-1')?.size.w).toBe(7)
+
+    useCanvasStore.getState().duplicateRoom('room-1')
+    expect(useCanvasStore.getState().rooms).toHaveLength(6)
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms).toHaveLength(5)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms).toHaveLength(6)
+
+    const duplicateId = useCanvasStore.getState().selectedId
+    expect(duplicateId).toBeTruthy()
+    useCanvasStore.getState().deleteRoom(duplicateId!)
+    expect(useCanvasStore.getState().rooms).toHaveLength(5)
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms).toHaveLength(6)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms).toHaveLength(5)
+
+    useCanvasStore.getState().addObject('column')
+    expect(useCanvasStore.getState().rooms.some((room) => room.objectType === 'column')).toBe(true)
+    useCanvasStore.getState().undo()
+    expect(useCanvasStore.getState().rooms.some((room) => room.objectType === 'column')).toBe(false)
+    useCanvasStore.getState().redo()
+    expect(useCanvasStore.getState().rooms.some((room) => room.objectType === 'column')).toBe(true)
+  })
+
+  it('uses type-specific minimum dimensions for thin components', () => {
+    const store = useCanvasStore.getState()
+    store.clearLayout()
+    store.addObject('wall')
+    const wall = useCanvasStore.getState().rooms[0]
+
+    useCanvasStore.getState().updateRoom(wall.id, { size: { w: 0, h: 0, d: 0 } })
+
+    const resized = useCanvasStore.getState().rooms[0]
+    expect(resized.size).toEqual(COMPONENT_REGISTRY.wall.minSize)
+    expect(resized.size.d).toBeLessThan(1)
+  })
+
+  it('clamps movement to the selected object floor footprint', () => {
+    const store = useCanvasStore.getState()
+    store.loadLayout({
+      version: '1.0',
+      rooms: [],
+      floors: [
+        {
+          id: 'floor_0',
+          name: 'Ground Floor',
+          level: 0,
+          elevation: 0,
+          footprint: { x: 0, z: 0, w: 4, d: 4 },
+          rooms: [
+            {
+              id: 'small-room',
+              label: 'Small Room',
+              objectType: 'room',
+              position: { x: 2, y: 1.5, z: 2 },
+              size: { w: 2, h: 3, d: 2 },
+              rotation: { x: 0, y: 0, z: 0 },
+              color: '#b3b8e9',
+            },
+          ],
+        },
+      ],
+    })
+
+    store.updateRoom('small-room', { position: { x: 99, y: 1.5, z: -99 } })
+
+    expect(useCanvasStore.getState().rooms[0].position).toEqual({ x: 3, y: 1.5, z: 1 })
+  })
+
+  it('pastes copied components onto the active floor with new ids and progressive offsets', () => {
+    const store = useCanvasStore.getState()
+    store.loadLayout({
+      version: '1.0',
+      rooms: [],
+      floors: [
+        { id: 'floor_0', name: 'Ground Floor', level: 0, elevation: 0, rooms: [] },
+        { id: 'floor_1', name: 'First Floor', level: 1, elevation: 3.2, rooms: [] },
+      ],
+    })
+    store.setSelectedFloor(0)
+    store.addObject('room')
+    const original = useCanvasStore.getState().rooms[0]
+    useCanvasStore.getState().selectRoom(original.id)
+    useCanvasStore.getState().copySelected()
+
+    useCanvasStore.getState().setSelectedFloor(1)
+    useCanvasStore.getState().pasteClipboard()
+    useCanvasStore.getState().pasteClipboard()
+
+    const state = useCanvasStore.getState()
+    const pasted = state.rooms.slice(1)
+    expect(pasted).toHaveLength(2)
+    expect(pasted[0].id).not.toBe(original.id)
+    expect(pasted[0].floorId).toBe('floor_1')
+    expect(pasted[0].floorLevel).toBe(1)
+    expect(pasted[0].position.y).toBe(4.7)
+    expect(pasted[0].position.x).toBe(original.position.x + 1)
+    expect(pasted[1].position.x).toBe(original.position.x + 2)
+    expect(state.selectedId).toBe(pasted[1].id)
+    expect(state.activityLog[0].action).toBe('object.pasted')
   })
 })
