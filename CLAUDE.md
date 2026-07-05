@@ -645,6 +645,19 @@ Deferred (Phase 4 remainder): `preferred_relative_position` honouring (needs the
 
 Full backend suite: **550 passed, 0 failed, 0 skipped** (`cd backend && python -m pytest -q`). Note: the dedicated `docs/NON_ML_GRAPH_LAYOUT_ENGINE.md` was authored on the `sprint-17/phase3-billing` branch and is **not present on this branch** — this CLAUDE.md section is the Phase 4 status record here.
 
+### Sprint 19 - Release A: Safe Editor Interaction, Component Parity, and Progressive Editing Foundation
+
+- [x] **Central component registry:** frontend component behavior now comes from `componentRegistry.ts` for all supported types: room, wall, door, window, stair, floor, open_space, corridor, lift, shaft, furniture, column, generic. The registry owns labels, defaults, create/select/move/resize/rotate policies, minimum dimensions, beginner/professional palette placement, inspector policy, and rendering treatment.
+- [x] **Floor object policy:** `CanvasFloor` remains the level/floor concept; `objectType: "floor"` remains a legacy editable canvas object with explicit full lifecycle support instead of being silently dropped or converted.
+- [x] **Safe selection and movement:** first left click on an unselected object selects only. Moving requires pressing an already selected object and crossing a 6px screen-space threshold. Active move uses transient store updates and commits one final history/activity/autosave action on release; pointer cancel/Escape restore a safe idle state.
+- [x] **Navigation rules:** left mouse is reserved for selection/editing, right drag pans, wheel zooms, and middle drag orbits only in 3D. Context-menu prevention is scoped to the canvas container.
+- [x] **Resize parity:** selected resizable objects show plan/top-view handles. Resize preserves type-specific minimums, floor elevation, footprint clamping, transient updates, and a single final history entry.
+- [x] **Clipboard and history:** Ctrl/Cmd+C, Ctrl/Cmd+V, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, Ctrl/Cmd+D, Delete/Backspace, and Escape share editable-target protection. Internal clipboard paste regenerates ids, targets the active floor, offsets progressively, selects the pasted object, and supports undo/redo.
+- [x] **Inspector and ToolRail parity:** Inspector type options and field policies are registry-driven. Beginner tools show common components; More components exposes open space, lift, shaft, generic object, and legacy floor object.
+- [x] **Persistence compatibility:** frontend serialization preserves all valid component types. Backend regression coverage verifies all 13 component types survive save, latest reload, version fetch, and public share.
+- [x] **Verification:** frontend tests 120 passed, frontend TypeScript check passed, frontend production build passed, backend tests 551 passed. Local backend (`127.0.0.1:8000`) and frontend (`127.0.0.1:5173`) server smoke checks returned 200.
+- [ ] **Manual browser acceptance:** visual in-app browser verification was blocked in this Codex session because no browser backend was available (`agent.browsers.list()` returned `[]`). The servers were started and healthy; complete visual beginner/professional acceptance remains pending in an environment with browser control.
+
 ---
 
 ## Development Rules
