@@ -10,13 +10,13 @@ export function useAuth() {
 
   async function register(data: RegisterRequest): Promise<void> {
     const response = await authService.register(data)
-    login(response.access_token, response.user)
+    login(response.access_token, response.refresh_token, response.user)
     navigate('/dashboard')
   }
 
   async function logIn(data: LoginRequest): Promise<void> {
     const response = await authService.login(data)
-    login(response.access_token, response.user)
+    login(response.access_token, response.refresh_token, response.user)
     navigate('/dashboard')
   }
 
