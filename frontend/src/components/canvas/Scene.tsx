@@ -2,6 +2,7 @@ import { type RefObject } from 'react'
 import { OrbitControls, Grid, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
+import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 
 interface OrbitHandle {
   enabled: boolean
@@ -14,7 +15,6 @@ interface SceneProps {
 }
 
 export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProps) {
-  const deselectAll = useCanvasStore((s) => s.deselectAll)
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const measurePoints = useCanvasStore((s) => s.measurePoints)
@@ -23,6 +23,9 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       ? floors
       : floors.filter((floor) => floor.level === selectedFloor)
   const isPlanView = viewMode !== '3d'
+  const mouseButtons = isPlanView
+    ? { LEFT: undefined, MIDDLE: undefined, RIGHT: THREE.MOUSE.PAN }
+    : { LEFT: undefined, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN }
   // Floor slab: thin in plan view, thicker in 3D so multi-floor separation is visible
   const slabHeight = isPlanView ? 0.06 : 0.45
   const isMultiFloor = floors.length > 1
@@ -99,6 +102,10 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         ref={orbitRef as RefObject<any>}
         makeDefault
         enableRotate={!isPlanView}
+        enablePan
+        enableZoom
+        screenSpacePanning
+        mouseButtons={mouseButtons}
       />
 
       {/* Invisible ground plane — click-to-place when a tool is armed,
@@ -107,16 +114,31 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.01, 0]}
         onPointerDown={(event) => {
-          event.stopPropagation()
           if (readOnly) return
-          const { placementMode, measureMode, addObjectAt, addMeasurePoint } =
-            useCanvasStore.getState()
-          if (measureMode) {
-            addMeasurePoint(event.point.x, event.point.z)
-          } else if (placementMode) {
-            addObjectAt(placementMode, event.point.x, event.point.z)
-          } else {
-            deselectAll()
+          const state = useCanvasStore.getState()
+          if (event.button === 0 && state.measureMode) {
+            event.stopPropagation()
+            state.addMeasurePoint(event.point.x, event.point.z)
+            return
+          }
+          if (event.button === 0 && state.placementMode) {
+            event.stopPropagation()
+            state.addObjectAt(state.placementMode, event.point.x, event.point.z)
+            return
+          }
+
+          const shouldClear = canClearSelectionFromEmptyCanvas({
+            interactionMode: state.interactionMode,
+            pointerIntent: state.pointerIntent,
+            placementArmed: state.placementMode !== null || state.interactionMode === 'place',
+            measureActive:
+              state.measureMode || state.interactionMode === 'measure' || state.showDimensions,
+            cameraAction: event.button === 1 || event.button === 2,
+            button: event.button,
+          })
+          if (shouldClear) {
+            event.stopPropagation()
+            state.deselectAll()
           }
         }}
       >

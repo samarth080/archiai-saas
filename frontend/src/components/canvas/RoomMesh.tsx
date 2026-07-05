@@ -1,10 +1,18 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Html } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
-import { CanvasViewMode, useCanvasStore, Room } from '../../store/canvasStore'
+import { CanvasHistorySnapshot, CanvasViewMode, Room, useCanvasStore } from '../../store/canvasStore'
+import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
+import {
+  hasCrossedMoveThreshold,
+  isPrimaryPointerButton,
+  objectPointerIntent,
+  type ScreenPoint,
+} from '../../store/interactionModel'
 import { DimensionAnnotations } from './DimensionAnnotations'
+import { ResizeHandles } from './ResizeHandles'
 
 interface OrbitHandle {
   enabled: boolean
@@ -17,116 +25,184 @@ interface RoomMeshProps {
   viewMode?: CanvasViewMode
 }
 
+interface PendingMove {
+  pointerId: number
+  startScreen: ScreenPoint
+  startRoom: Room
+  historySnapshot: CanvasHistorySnapshot
+  plane: THREE.Plane
+  offset: { x: number; z: number }
+  moving: boolean
+}
+
+function cloneRoomForInteraction(room: Room): Room {
+  return {
+    ...room,
+    position: { ...room.position },
+    size: { ...room.size },
+    rotation: { ...room.rotation },
+  }
+}
+
 export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: RoomMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null)
-  const dragStartRef = useRef<Room['position'] | null>(null)
-  const dragOffsetRef = useRef<{ x: number; z: number } | null>(null)
-  const dragPlaneRef = useRef<THREE.Plane | null>(null)
-  const dragPointerIdRef = useRef<number | null>(null)
+  const pendingMoveRef = useRef<PendingMove | null>(null)
   const selectedId = useCanvasStore((s) => s.selectedId)
   const selectRoom = useCanvasStore((s) => s.selectRoom)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
+  const setInteractionMode = useCanvasStore((s) => s.setInteractionMode)
+  const setPointerIntent = useCanvasStore((s) => s.setPointerIntent)
 
   const isSelected = selectedId === room.id
-  const isBoundaryMarker = room.objectType === 'wall' || room.objectType === 'door' || room.objectType === 'window'
-  const isDimensionable = room.objectType === 'room' || room.objectType === 'stair'
+  const definition = COMPONENT_REGISTRY[room.objectType]
+  const isThinComponent =
+    definition.renderingTreatment === 'thin' ||
+    definition.category === 'opening' ||
+    definition.category === 'structure'
+  const isDimensionable = definition.canResize
   const isPlanView = viewMode !== '3d'
   const materialOpacity =
     room.objectType === 'window'
       ? 0.48
       : room.objectType === 'door'
         ? 0.72
-        : room.objectType === 'wall'
-          ? 0.62    // partition walls more visible
-          : isSelected
-            ? 0.88
-            : isPlanView && room.objectType === 'room'
-              ? 0.62
-              : room.objectType === 'room' || room.objectType === 'stair'
-                ? 0.74
+        : definition.renderingTreatment === 'thin'
+          ? 0.66
+          : definition.renderingTreatment === 'slab'
+            ? 0.55
+            : isSelected
+              ? 0.9
+              : isPlanView && definition.category === 'space'
+                ? 0.64
                 : 0.76
 
-  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation()
-    selectRoom(room.id)
-    if (orbitRef.current) orbitRef.current.enabled = false
+  const resetMoveState = () => {
+    pendingMoveRef.current = null
+    setInteractionMode('select')
+    setPointerIntent('idle')
+    if (orbitRef.current) orbitRef.current.enabled = true
+  }
+
+  useEffect(() => {
+    if (readOnly) return
+    const cancelInteraction = () => {
+      const pending = pendingMoveRef.current
+      if (pending?.moving) {
+        updateRoom(room.id, { position: pending.startRoom.position }, { log: false })
+      }
+      resetMoveState()
+    }
+
+    window.addEventListener('archiai:cancel-canvas-interaction', cancelInteraction)
+    return () => window.removeEventListener('archiai:cancel-canvas-interaction', cancelInteraction)
+  }, [readOnly, room.id, updateRoom])
+
+  const handlePointerDown = (event: ThreeEvent<PointerEvent>) => {
+    if (readOnly) return
+    if (!isPrimaryPointerButton(event.button)) return
+
+    const intent = objectPointerIntent(event.button, isSelected, definition)
+    if (intent === 'idle') return
+
+    event.stopPropagation()
+
+    if (intent === 'selecting') {
+      selectRoom(room.id)
+      setPointerIntent('idle')
+      return
+    }
 
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -room.position.y)
     const hit = new THREE.Vector3()
-    if (!e.ray.intersectPlane(plane, hit)) {
-      if (orbitRef.current) orbitRef.current.enabled = true
+    if (!event.ray.intersectPlane(plane, hit)) {
+      setPointerIntent('idle')
       return
     }
 
-    dragStartRef.current = { ...room.position }
-    dragOffsetRef.current = {
-      x: hit.x - room.position.x,
-      z: hit.z - room.position.z,
+    pendingMoveRef.current = {
+      pointerId: event.pointerId,
+      startScreen: { x: event.clientX, y: event.clientY },
+      startRoom: cloneRoomForInteraction(room),
+      historySnapshot: useCanvasStore.getState().createHistorySnapshot(),
+      plane,
+      offset: {
+        x: hit.x - room.position.x,
+        z: hit.z - room.position.z,
+      },
+      moving: false,
     }
-    dragPlaneRef.current = plane
-    dragPointerIdRef.current = e.pointerId
-    const target = e.target as EventTarget & {
-      setPointerCapture?: (pointerId: number) => void
-    }
-    target.setPointerCapture?.(e.pointerId)
+    setPointerIntent('pendingMove')
   }
 
-  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    if (dragPointerIdRef.current !== e.pointerId || !dragPlaneRef.current || !dragOffsetRef.current) {
-      return
+  const handlePointerMove = (event: ThreeEvent<PointerEvent>) => {
+    const pending = pendingMoveRef.current
+    if (!pending || pending.pointerId !== event.pointerId) return
+    event.stopPropagation()
+
+    if (!pending.moving) {
+      if (!hasCrossedMoveThreshold(pending.startScreen, { x: event.clientX, y: event.clientY })) {
+        return
+      }
+      pending.moving = true
+      setInteractionMode('move')
+      setPointerIntent('moving')
+      if (orbitRef.current) orbitRef.current.enabled = false
+      const target = event.target as EventTarget & {
+        setPointerCapture?: (pointerId: number) => void
+      }
+      target.setPointerCapture?.(event.pointerId)
     }
-    e.stopPropagation()
 
     const hit = new THREE.Vector3()
-    if (!e.ray.intersectPlane(dragPlaneRef.current, hit)) return
+    if (!event.ray.intersectPlane(pending.plane, hit)) return
 
     updateRoom(
       room.id,
       {
         position: {
-          x: hit.x - dragOffsetRef.current.x,
-          y: room.position.y,
-          z: hit.z - dragOffsetRef.current.z,
+          x: hit.x - pending.offset.x,
+          y: pending.startRoom.position.y,
+          z: hit.z - pending.offset.z,
         },
       },
-      { log: false }
+      { log: false },
     )
   }
 
-  const finishPointerDrag = (e: ThreeEvent<PointerEvent>) => {
-    if (dragPointerIdRef.current !== e.pointerId) return
-    e.stopPropagation()
-    if (orbitRef.current) orbitRef.current.enabled = true
+  const finishPointerDrag = (event: ThreeEvent<PointerEvent>) => {
+    const pending = pendingMoveRef.current
+    if (!pending || pending.pointerId !== event.pointerId) return
+    event.stopPropagation()
 
-    const currentPosition = useCanvasStore
+    const current = useCanvasStore
       .getState()
-      .rooms.find((candidate) => candidate.id === room.id)?.position
-    const startPosition = dragStartRef.current
-    if (currentPosition && startPosition) {
+      .rooms.find((candidate) => candidate.id === room.id)
+    if (current && pending.moving) {
+      const cancelled = event.type === 'pointercancel'
       const moved =
-        Math.abs(currentPosition.x - startPosition.x) > 0.001 ||
-        Math.abs(currentPosition.z - startPosition.z) > 0.001
-      if (moved) {
+        Math.abs(current.position.x - pending.startRoom.position.x) > 0.001 ||
+        Math.abs(current.position.z - pending.startRoom.position.z) > 0.001
+      if (moved && cancelled) {
+        updateRoom(room.id, { position: pending.startRoom.position }, { log: false })
+      } else if (moved) {
         updateRoom(
           room.id,
-          { position: currentPosition },
+          { position: current.position },
           {
             action: 'object.moved',
-            previousValue: startPosition,
-          }
+            previousValue: pending.startRoom,
+            historySnapshot: pending.historySnapshot,
+          },
         )
       }
     }
 
-    const target = e.target as EventTarget & {
+    const target = event.target as EventTarget & {
       releasePointerCapture?: (pointerId: number) => void
     }
-    target.releasePointerCapture?.(e.pointerId)
-    dragStartRef.current = null
-    dragOffsetRef.current = null
-    dragPlaneRef.current = null
-    dragPointerIdRef.current = null
+    target.releasePointerCapture?.(event.pointerId)
+    resetMoveState()
   }
 
   const mesh = (
@@ -145,36 +221,49 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
       onPointerOut={
         readOnly
           ? undefined
-          : (e) => {
-              if (dragPointerIdRef.current === e.pointerId) e.stopPropagation()
+          : (event) => {
+              if (pendingMoveRef.current?.pointerId === event.pointerId) event.stopPropagation()
             }
       }
     >
       <boxGeometry args={[room.size.w, room.size.h, room.size.d]} />
       <meshStandardMaterial
         color={room.color}
-        emissive={isSelected ? '#312e81' : '#000000'}
-        emissiveIntensity={isSelected ? 0.35 : 0}
+        emissive={isSelected ? '#1d4ed8' : '#000000'}
+        emissiveIntensity={isSelected ? 0.28 : 0}
         transparent={materialOpacity < 1}
         opacity={materialOpacity}
         depthWrite={materialOpacity > 0.75}
         roughness={0.82}
         metalness={0.02}
       />
-      {/* Always show edges on rooms so adjacent rooms have visible separation */}
-      {(room.objectType === 'room' || room.objectType === 'stair') && (
+      {(isSelected || definition.category === 'space' || room.objectType === 'stair') && (
         <lineSegments>
           <edgesGeometry args={[new THREE.BoxGeometry(room.size.w, room.size.h, room.size.d)]} />
           <lineBasicMaterial
-            color={isSelected ? '#312e81' : '#475569'}
+            color={isSelected ? '#2563eb' : '#475569'}
             linewidth={isSelected ? 2 : 1}
           />
+        </lineSegments>
+      )}
+      {isSelected && (
+        <lineSegments>
+          <edgesGeometry
+            args={[
+              new THREE.BoxGeometry(
+                room.size.w + 0.08,
+                Math.max(room.size.h + 0.08, 0.12),
+                room.size.d + 0.08,
+              ),
+            ]}
+          />
+          <lineBasicMaterial color="#60a5fa" linewidth={2} depthTest={false} />
         </lineSegments>
       )}
     </mesh>
   )
 
-  const shouldShowLabel = !isBoundaryMarker || isSelected
+  const shouldShowLabel = !isThinComponent || isSelected
   const label = shouldShowLabel ? (
     <Html
       position={[room.position.x, room.position.y + room.size.h / 2 + 0.35, room.position.z]}
@@ -184,7 +273,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     >
       <div
         className={`rounded bg-white/90 px-2 py-1 text-[11px] font-medium shadow-sm border ${
-          isSelected ? 'border-indigo-400 text-indigo-700' : 'border-gray-200 text-gray-700'
+          isSelected ? 'border-blue-500 text-blue-700 ring-2 ring-blue-200' : 'border-gray-200 text-gray-700'
         }`}
       >
         {room.label}
@@ -192,11 +281,6 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     </Html>
   ) : null
 
-  // The "show all" toggle only renders in plan/top view: in a 3D perspective
-  // camera, dimension lines for every room overlap and become unreadable
-  // (each line sits a fixed offset outside its own room, which collides with
-  // neighbouring rooms' lines in a tightly tiled plan). The selected room's
-  // own dimensions are still shown in any view mode, since that's one room.
   const dimensions =
     isDimensionable && (isSelected || (showDimensions && isPlanView)) ? (
       <DimensionAnnotations room={room} emphasized={isSelected} />
@@ -205,6 +289,9 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   return (
     <>
       {mesh}
+      {isSelected && isPlanView && (
+        <ResizeHandles room={room} orbitRef={orbitRef} readOnly={readOnly} />
+      )}
       {label}
       {dimensions}
     </>

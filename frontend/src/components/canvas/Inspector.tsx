@@ -1,19 +1,11 @@
 import { CanvasObjectType, useCanvasStore } from '../../store/canvasStore'
-
-const OBJECT_TYPES: { value: CanvasObjectType; label: string }[] = [
-  { value: 'room', label: 'Room' },
-  { value: 'wall', label: 'Wall' },
-  { value: 'door', label: 'Door' },
-  { value: 'window', label: 'Window' },
-  { value: 'stair', label: 'Stair' },
-  { value: 'floor', label: 'Floor' },
-  { value: 'open_space', label: 'Open Space' },
-]
+import { COMPONENT_DEFINITIONS, COMPONENT_REGISTRY, componentTypeToRoomType } from '../../store/componentRegistry'
 
 const ACTION_LABELS = {
   'object.added': 'Added',
   'object.deleted': 'Deleted',
   'object.duplicated': 'Duplicated',
+  'object.pasted': 'Pasted',
   'object.moved': 'Moved',
   'object.resized': 'Resized',
   'object.rotated': 'Rotated',
@@ -36,7 +28,10 @@ export function Inspector() {
     return null
   }
 
+  const definition = COMPONENT_REGISTRY[room.objectType]
+
   const rotateY = (degrees: number) => {
+    if (!definition.canRotate) return
     const nextY = ((room.rotation.y + degrees) % 360 + 360) % 360
     updateRoom(
       room.id,
@@ -79,14 +74,14 @@ export function Inspector() {
                 room.id,
                 {
                   objectType,
-                  roomType: objectType === 'stair' ? 'stairs' : objectType,
+                  roomType: componentTypeToRoomType(objectType),
                 },
                 { action: 'object.updated', previousValue: room.objectType }
               )
             }}
           >
-            {OBJECT_TYPES.map((type) => (
-              <option key={type.value} value={type.value}>
+            {COMPONENT_DEFINITIONS.filter((type) => type.canCreate).map((type) => (
+              <option key={type.type} value={type.type}>
                 {type.label}
               </option>
             ))}
@@ -138,6 +133,7 @@ export function Inspector() {
             aria-label="Position X"
             className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.position.x}
+            disabled={!definition.canMove}
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) updateRoom(room.id, { position: { ...room.position, x: n } })
@@ -152,6 +148,7 @@ export function Inspector() {
             aria-label="Position Z"
             className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.position.z}
+            disabled={!definition.canMove}
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) updateRoom(room.id, { position: { ...room.position, z: n } })
@@ -168,13 +165,14 @@ export function Inspector() {
           <span className="text-xs text-muted">W</span>
           <input
             type="number"
-            min={1}
+            min={definition.minSize.w}
             aria-label="Width"
             className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.w}
+            disabled={!definition.canResize}
             onChange={(e) => {
               const n = Number(e.target.value)
-              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, w: Math.max(1, n) } })
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, w: n } })
             }}
           />
         </label>
@@ -183,13 +181,14 @@ export function Inspector() {
           <span className="text-xs text-muted">D</span>
           <input
             type="number"
-            min={1}
+            min={definition.minSize.d}
             aria-label="Depth"
             className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.d}
+            disabled={!definition.canResize}
             onChange={(e) => {
               const n = Number(e.target.value)
-              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, d: Math.max(1, n) } })
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, d: n } })
             }}
           />
         </label>
@@ -198,13 +197,14 @@ export function Inspector() {
           <span className="text-xs text-muted">H</span>
           <input
             type="number"
-            min={1}
+            min={definition.minSize.h}
             aria-label="Height"
             className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.size.h}
+            disabled={!definition.canResize}
             onChange={(e) => {
               const n = Number(e.target.value)
-              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, h: Math.max(1, n) } })
+              if (Number.isFinite(n)) updateRoom(room.id, { size: { ...room.size, h: n } })
             }}
           />
         </label>
@@ -222,8 +222,9 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation X"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.rotation.x}
+            disabled={!definition.canRotate}
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) {
@@ -242,8 +243,9 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation Y"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.rotation.y}
+            disabled={!definition.canRotate}
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) {
@@ -260,21 +262,24 @@ export function Inspector() {
         <div className="grid grid-cols-3 gap-1" aria-label="Quick rotate Y controls">
           <button
             type="button"
-            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
+            disabled={!definition.canRotate}
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => rotateY(-15)}
           >
             -15 deg
           </button>
           <button
             type="button"
-            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
+            disabled={!definition.canRotate}
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => rotateY(15)}
           >
             +15 deg
           </button>
           <button
             type="button"
-            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5"
+            disabled={!definition.canRotate}
+            className="rounded-lg border border-ink/15 px-2 py-1 text-xs font-medium text-ink/80 hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => rotateY(90)}
           >
             90 deg
@@ -286,8 +291,9 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation Z"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80"
+            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
             value={room.rotation.z}
+            disabled={!definition.canRotate}
             onChange={(e) => {
               const n = Number(e.target.value)
               if (Number.isFinite(n)) {

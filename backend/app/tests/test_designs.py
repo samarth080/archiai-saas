@@ -201,6 +201,92 @@ async def test_save_design_accepts_legacy_layout_metadata(client: AsyncClient):
     assert saved.json()["metadata"]["prompt"] is None
 
 
+async def test_all_supported_component_types_survive_save_latest_version_and_share(client: AsyncClient):
+    supported_types = [
+        "room",
+        "wall",
+        "door",
+        "window",
+        "stair",
+        "floor",
+        "open_space",
+        "corridor",
+        "lift",
+        "shaft",
+        "furniture",
+        "column",
+        "generic",
+    ]
+    token = await _register_and_token(client, "component-parity@example.com")
+    project = await client.post(
+        "/api/projects",
+        json={"title": "Component Parity", "description": None},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    project_id = project.json()["id"]
+    generated = await client.post(
+        "/api/design/generate",
+        json={"projectId": project_id, "prompt": "1 bedroom apartment with kitchen"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    layout = generated.json()
+    layout["rooms"] = [
+        {
+            "id": f"{object_type}-1",
+            "label": object_type.replace("_", " ").title(),
+            "roomType": "stairs" if object_type == "stair" else object_type,
+            "objectType": object_type,
+            "floorId": "floor_0",
+            "floorLevel": 0,
+            "position": {"x": index * 1.5, "y": 1.5, "z": 0},
+            "size": {"w": 1.2, "h": 2.4, "d": 1.2},
+            "rotation": {"x": 0, "y": 0, "z": 0},
+            "color": "#999999",
+        }
+        for index, object_type in enumerate(supported_types)
+    ]
+    layout["floors"] = [
+        {
+            "id": "floor_0",
+            "name": "Ground Floor",
+            "level": 0,
+            "elevation": 0,
+            "rooms": layout["rooms"],
+        }
+    ]
+
+    saved = await client.put(
+        f"/api/design/{layout['designId']}",
+        json={"layout": layout, "versionName": "All component types"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert [room["objectType"] for room in saved.json()["rooms"]] == supported_types
+
+    latest = await client.get(
+        f"/api/design/project/{project_id}/latest",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert latest.status_code == 200
+    assert [room["objectType"] for room in latest.json()["rooms"]] == supported_types
+
+    version = await client.get(
+        f"/api/design/version/{saved.json()['designVersionId']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert version.status_code == 200
+    assert [room["objectType"] for room in version.json()["rooms"]] == supported_types
+
+    share = await client.post(
+        f"/api/projects/{project_id}/share",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert share.status_code == 201
+    shared = await client.get(f"/api/share/{share.json()['token']}")
+    assert shared.status_code == 200
+    assert [room["objectType"] for room in shared.json()["layout"]["rooms"]] == supported_types
+
+
 async def test_refine_creates_new_version_and_logs_activity(client: AsyncClient):
     token = await _register_and_token(client, "refine@example.com")
     project = await client.post(

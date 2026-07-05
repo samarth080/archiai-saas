@@ -2,10 +2,9 @@ import { useEffect, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Scene } from './Scene'
 import { RoomMesh } from './RoomMesh'
-import { ResizeHandles } from './ResizeHandles'
 import { useCanvasStore } from '../../store/canvasStore'
-
-const RESIZABLE_TYPES = new Set(['room', 'stair', 'open_space'])
+import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
+import { getCanvasShortcut } from './keyboardShortcuts'
 
 interface Canvas3DProps {
   className?: string
@@ -16,18 +15,13 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const orbitRef = useRef<{ enabled: boolean }>(null)
   const rooms = useCanvasStore((s) => s.rooms)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
-  const selectedId = useCanvasStore((s) => s.selectedId)
   const viewMode = useCanvasStore((s) => s.viewMode)
-  const deselectAll = useCanvasStore((s) => s.deselectAll)
+  const clipboardMessage = useCanvasStore((s) => s.clipboardMessage)
+  const clearClipboardMessage = useCanvasStore((s) => s.clearClipboardMessage)
   const visibleRooms =
     selectedFloor === 'all'
       ? rooms
       : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
-  // Resize handles only in plan/top view (they read the X/Z plane) for
-  // resizable object types.
-  const selectedRoom = visibleRooms.find((room) => room.id === selectedId)
-  const showResizeHandles =
-    !readOnly && viewMode !== '3d' && selectedRoom && RESIZABLE_TYPES.has(selectedRoom.objectType)
   const camera =
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
@@ -38,44 +32,39 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
     if (readOnly) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      const tagName = target?.tagName.toLowerCase()
-      const isTyping =
-        tagName === 'input' ||
-        tagName === 'textarea' ||
-        tagName === 'select' ||
-        target?.isContentEditable
+      const shortcut = getCanvasShortcut(event)
+      if (!shortcut) return
 
-      if (isTyping) return
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+      const store = useCanvasStore.getState()
+      if (shortcut === 'copy') {
         event.preventDefault()
-        useCanvasStore.getState().duplicateSelected()
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        store.copySelected()
+      } else if (shortcut === 'paste') {
         event.preventDefault()
-        if (event.shiftKey) useCanvasStore.getState().redo()
-        else useCanvasStore.getState().undo()
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+        store.pasteClipboard()
+      } else if (shortcut === 'undo') {
         event.preventDefault()
-        useCanvasStore.getState().redo()
-      }
-
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        const { selectedId, deleteRoom } = useCanvasStore.getState()
-        if (selectedId) {
+        store.undo()
+      } else if (shortcut === 'redo') {
+        event.preventDefault()
+        store.redo()
+      } else if (shortcut === 'duplicate') {
+        event.preventDefault()
+        store.duplicateSelected()
+      } else if (shortcut === 'delete') {
+        if (store.selectedId) {
           event.preventDefault()
-          deleteRoom(selectedId)
+          store.deleteRoom(store.selectedId)
         }
-      }
-
-      if (event.key === 'Escape') {
-        const store = useCanvasStore.getState()
-        store.deselectAll()
+      } else if (shortcut === 'escape') {
+        event.preventDefault()
+        window.dispatchEvent(new Event('archiai:cancel-canvas-interaction'))
+        if (orbitRef.current) orbitRef.current.enabled = true
         store.setPlacementMode(null)
+        store.setShowDimensions(false)
+        store.clearMeasure()
+        store.resetInteraction()
+        store.deselectAll()
       }
     }
 
@@ -83,22 +72,56 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [readOnly])
 
+  useEffect(() => {
+    if (!clipboardMessage) return
+    const timer = window.setTimeout(() => clearClipboardMessage(), 2200)
+    return () => window.clearTimeout(timer)
+  }, [clearClipboardMessage, clipboardMessage])
+
   return (
-    <div className={className} style={{ background }}>
+    <div
+      className={className}
+      style={{ background }}
+      onContextMenu={readOnly ? undefined : (event) => event.preventDefault()}
+    >
       <Canvas
         key={viewMode}
         camera={camera}
         gl={{ preserveDrawingBuffer: true }}
-        onPointerMissed={readOnly ? undefined : deselectAll}
+        onPointerMissed={
+          readOnly
+            ? undefined
+            : (event) => {
+                const state = useCanvasStore.getState()
+                if (
+                  canClearSelectionFromEmptyCanvas({
+                    interactionMode: state.interactionMode,
+                    pointerIntent: state.pointerIntent,
+                    placementArmed: state.placementMode !== null || state.interactionMode === 'place',
+                    measureActive:
+                      state.measureMode || state.interactionMode === 'measure' || state.showDimensions,
+                    cameraAction: event.button === 1 || event.button === 2,
+                    button: event.button,
+                  })
+                ) {
+                  state.deselectAll()
+                }
+              }
+        }
       >
         <Scene orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         {visibleRooms.map((r) => (
           <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         ))}
-        {showResizeHandles && selectedRoom && (
-          <ResizeHandles room={selectedRoom} orbitRef={orbitRef} />
-        )}
       </Canvas>
+      {clipboardMessage && (
+        <div
+          role="status"
+          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-ink/10 bg-white/95 px-3 py-2 text-xs font-medium text-ink shadow-sm"
+        >
+          {clipboardMessage}
+        </div>
+      )}
     </div>
   )
 }
