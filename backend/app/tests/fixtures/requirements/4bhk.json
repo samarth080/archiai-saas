@@ -1,0 +1,25 @@
+{
+  "building_type": "villa",
+  "floors": 1,
+  "rooms": [
+    { "type": "master_bedroom", "count": 1 },
+    { "type": "bedroom", "count": 3 },
+    { "type": "bathroom", "count": 3 },
+    { "type": "kitchen", "count": 1 },
+    { "type": "living_room", "count": 1 },
+    { "type": "dining", "count": 1 },
+    { "type": "study", "count": 1 },
+    { "type": "utility", "count": 1 },
+    { "type": "parking", "count": 1 }
+  ],
+  "adjacency": [
+    { "room_a": "master_bedroom", "room_b": "bathroom", "strength": "must" },
+    { "room_a": "kitchen", "room_b": "utility", "strength": "should" }
+  ],
+  "avoid_adjacency": [
+    { "room_a": "kitchen", "room_b": "bathroom" }
+  ],
+  "plot": { "width_m": 15.0, "depth_m": 18.0 },
+  "facing": "north",
+  "missing_info": []
+}

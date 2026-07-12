@@ -1,0 +1,18 @@
+{
+  "building_type": "apartment",
+  "floors": 1,
+  "rooms": [
+    { "type": "bedroom", "count": 2 },
+    { "type": "bathroom", "count": 2 },
+    { "type": "kitchen", "count": 1 },
+    { "type": "living_room", "count": 1 },
+    { "type": "balcony", "count": 1 }
+  ],
+  "adjacency": [
+    { "room_a": "kitchen", "room_b": "living_room", "strength": "should" }
+  ],
+  "avoid_adjacency": [],
+  "plot": { "width_m": 9.0, "depth_m": 12.0 },
+  "facing": "east",
+  "missing_info": []
+}

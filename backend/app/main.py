@@ -1,9 +1,13 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
+from app.database.connection import get_db
+from app.services.llm_client import llm_reachable
 from app.api.auth.router import router as auth_router
 from app.api.billing.router import router as billing_router
 from app.api.designs.router import router as designs_router
@@ -125,5 +129,23 @@ app.include_router(billing_router)
 
 
 @app.get("/api/health")
-async def health():
-    return {"status": "ok", "version": "0.1.0"}
+async def health(db: AsyncSession = Depends(get_db)):
+    """Reports DB and LLM-server reachability separately (workflow Step 0.1).
+
+    The LLM being down degrades only the extraction feature, so overall status
+    stays "ok"; a DB failure is fatal, so status becomes "degraded" — Docker's
+    healthcheck watches the HTTP 200 either way (boot ordering is handled by
+    compose's service_healthy conditions, not by failing this endpoint).
+    """
+    try:
+        await db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+    llm_status = "ok" if await llm_reachable() else "unreachable"
+    return {
+        "status": "ok" if db_status == "ok" else "degraded",
+        "version": "0.1.0",
+        "db": db_status,
+        "llm": llm_status,
+    }

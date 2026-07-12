@@ -1,0 +1,26 @@
+{
+  "building_type": "house",
+  "floors": 1,
+  "rooms": [
+    { "type": "master_bedroom", "count": 1 },
+    { "type": "bedroom", "count": 2 },
+    { "type": "bathroom", "count": 2 },
+    { "type": "kitchen", "count": 1 },
+    { "type": "living_room", "count": 1 },
+    { "type": "dining", "count": 1 },
+    { "type": "pooja_room", "count": 1 },
+    { "type": "balcony", "count": 1 }
+  ],
+  "adjacency": [
+    { "room_a": "master_bedroom", "room_b": "bathroom", "strength": "must" },
+    { "room_a": "kitchen", "room_b": "dining", "strength": "should" },
+    { "room_a": "living_room", "room_b": "balcony", "strength": "should" }
+  ],
+  "avoid_adjacency": [
+    { "room_a": "pooja_room", "room_b": "bathroom" },
+    { "room_a": "kitchen", "room_b": "bathroom" }
+  ],
+  "plot": { "width_m": 12.0, "depth_m": 15.0 },
+  "facing": "east",
+  "missing_info": []
+}

@@ -1,0 +1,15 @@
+{
+  "building_type": "apartment",
+  "floors": 1,
+  "rooms": [
+    { "type": "bedroom", "count": 1 },
+    { "type": "bathroom", "count": 1 },
+    { "type": "kitchen", "count": 1 },
+    { "type": "living_room", "count": 1 }
+  ],
+  "adjacency": [],
+  "avoid_adjacency": [],
+  "plot": { "width_m": null, "depth_m": null },
+  "facing": null,
+  "missing_info": ["plot_size", "facing"]
+}
