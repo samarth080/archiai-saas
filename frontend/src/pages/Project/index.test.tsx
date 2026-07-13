@@ -188,6 +188,22 @@ describe('ProjectPage refine flow', () => {
   })
 
   it('sends designParams when plot width / floors / orientation are filled in', async () => {
+    const extracted = {
+      requirements: {
+        building_type: 'apartment',
+        floors: 1,
+        rooms: [{ type: 'bedroom', count: 1 }],
+        adjacency: [],
+        avoid_adjacency: [],
+        plot: { width_m: null, depth_m: null },
+        facing: null,
+        missing_info: [],
+      },
+      route: 'generate',
+      questions: [],
+      optional_missing: [],
+      understood_summary: ['Building: Apartment', '1 floor', '1 bedroom'],
+    }
     const generated = {
       version: '1.0',
       designId: 'd1',
@@ -197,7 +213,11 @@ describe('ProjectPage refine flow', () => {
       floors: [{ id: 'floor_0', name: 'Ground', level: 0, elevation: 0, rooms: [] }],
       rooms: [],
     }
-    vi.mocked(api.post).mockResolvedValue({ data: generated })
+    vi.mocked(api.post).mockImplementation(async (url: string) => {
+      if (url === '/api/extract') return { data: extracted }
+      if (url === '/api/design/generate') return { data: generated }
+      throw new Error('unexpected POST ' + url)
+    })
 
     renderProjectPage()
     const user = userEvent.setup()
@@ -208,6 +228,8 @@ describe('ProjectPage refine flow', () => {
     await user.selectOptions(screen.getByLabelText('Entry faces'), 'N')
     await user.type(screen.getByLabelText('Layout prompt'), 'studio apartment')
     await user.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('2 floors')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Generate layout' }))
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith('/api/design/generate', {
@@ -219,6 +241,22 @@ describe('ProjectPage refine flow', () => {
   })
 
   it('shows the option gallery after generating and lets the user pick an alternative', async () => {
+    const extracted = {
+      requirements: {
+        building_type: 'office',
+        floors: 1,
+        rooms: [{ type: 'study', count: 1 }],
+        adjacency: [],
+        avoid_adjacency: [],
+        plot: { width_m: 9, depth_m: 12 },
+        facing: 'east',
+        missing_info: [],
+      },
+      route: 'generate',
+      questions: [],
+      optional_missing: [],
+      understood_summary: ['Building: Office', '1 floor', '1 study'],
+    }
     const winner = {
       version: '1.0',
       designId: 'd1',
@@ -267,13 +305,18 @@ describe('ProjectPage refine flow', () => {
         },
       ],
     }
-    vi.mocked(api.post).mockResolvedValue({ data: winner })
+    vi.mocked(api.post).mockImplementation(async (url: string) => {
+      if (url === '/api/extract') return { data: extracted }
+      if (url === '/api/design/generate') return { data: winner }
+      throw new Error('unexpected POST ' + url)
+    })
 
     renderProjectPage()
     const user = userEvent.setup()
 
     await user.type(await screen.findByLabelText('Layout prompt'), 'apartment with bedroom')
     await user.click(screen.getByRole('button', { name: 'Generate' }))
+    await user.click(await screen.findByRole('button', { name: 'Generate layout' }))
 
     const altChip = await screen.findByRole('button', { name: /1 alternative/ })
     await user.click(altChip)
@@ -284,6 +327,92 @@ describe('ProjectPage refine flow', () => {
     expect(useCanvasStore.getState().rooms.map((room) => room.label)).toEqual(['Bedroom'])
     expect(useCanvasStore.getState().saveStatus).toBe('unsaved')
     expect(useCanvasStore.getState().designId).toBe('d1')
+  })
+
+  it('reviews and loads a canonical single-floor MVP response', async () => {
+    const requirements = {
+      building_type: 'house',
+      floors: 1,
+      rooms: [{ type: 'bedroom', count: 1 }],
+      adjacency: [],
+      avoid_adjacency: [],
+      plot: { width_m: null, depth_m: null },
+      facing: null,
+      missing_info: ['plot_size', 'facing', 'bathroom_count'],
+    }
+    vi.mocked(api.post).mockImplementation(async (url: string) => {
+      if (url === '/api/extract') {
+        return {
+          data: {
+            requirements,
+            route: 'generate',
+            questions: [],
+            optional_missing: ['What plot size should I use?'],
+            understood_summary: ['Building: House', '1 floor', '1 bedroom'],
+          },
+        }
+      }
+      if (url === '/api/generate') {
+        return {
+          data: {
+            requirements: {
+              ...requirements,
+              plot: { width_m: 9, depth_m: 12 },
+              facing: 'east',
+              rooms: [
+                { type: 'bedroom', count: 1 },
+                { type: 'bathroom', count: 1 },
+              ],
+            },
+            layout: {
+              plot: { width_m: 9, depth_m: 12, facing: 'east' },
+              rooms: [
+                {
+                  id: 'mvp-room-1',
+                  type: 'bedroom',
+                  label: 'Bedroom',
+                  x: 0,
+                  y: 0,
+                  w: 9,
+                  h: 12,
+                  rotation: 0,
+                },
+              ],
+              walls: [],
+              doors: [],
+            },
+            quality: { valid: true, hard_violations: [] },
+            defaults_applied: ['9x12 m plot', 'east facing', '1 bathroom'],
+            designId: 'mvp-design-1',
+            designVersionId: 'mvp-version-1',
+          },
+        }
+      }
+      throw new Error('unexpected POST ' + url)
+    })
+
+    renderProjectPage()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Layout prompt'), 'one bedroom house')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('AI understood')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Generate with defaults' }))
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/api/generate', {
+        requirements,
+        useDefaults: true,
+        projectId: 'p1',
+        prompt: 'one bedroom house',
+      }),
+    )
+    expect(useCanvasStore.getState().rooms[0]).toMatchObject({
+      id: 'mvp-room-1',
+      label: 'Bedroom',
+      objectType: 'room',
+    })
+    expect(useCanvasStore.getState().designId).toBe('mvp-design-1')
+    expect(await screen.findByText(/Assumed: 9x12 m plot/)).toBeInTheDocument()
   })
 
   it('posts to /api/design/refine when Refine mode is active', async () => {

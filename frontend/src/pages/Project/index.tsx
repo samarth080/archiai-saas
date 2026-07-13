@@ -12,6 +12,7 @@ import { SelectionGizmo } from '../../components/canvas/SelectionGizmo'
 import { ProgramPanel } from '../../components/canvas/ProgramPanel'
 import { InsightsStrip } from '../../components/canvas/InsightsStrip'
 import { CommandBar } from '../../components/canvas/CommandBar'
+import { BriefReviewPanel } from '../../components/canvas/BriefReviewPanel'
 import { DraftToast } from '../../components/canvas/DraftToast'
 import {
   DesignDraftResponse,
@@ -22,6 +23,13 @@ import {
   refineLayout,
   saveDesignLayout,
 } from '../../services/design.service'
+import { extractBrief, generateMvpLayout } from '../../services/mvp.service'
+import { generateResponseToCanvas } from '../../services/mvpLayoutAdapter'
+import {
+  generationEngineFor,
+  reviewWithOverrides,
+  type GenerationOverrides,
+} from '../../services/mvpGenerationPolicy'
 import { useCanvasStore } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
@@ -29,6 +37,7 @@ import { useAutoSave } from '../../hooks/useAutoSave'
 import { getApiErrorMessage } from '../../services/apiError'
 import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
 import type { CanvasLayout } from '../../store/canvasStore'
+import type { ExtractResponse } from '../../types/contracts'
 
 function captureCanvasThumbnail() {
   const canvas = document.querySelector('canvas')
@@ -154,6 +163,42 @@ function hasRecoverableDraft(
   return layoutSnapshotKey(savedLayout) !== layoutSnapshotKey(draftLayout)
 }
 
+function clarificationFromError(
+  error: unknown,
+): Pick<ExtractResponse, 'route' | 'questions' | 'optional_missing'> | null {
+  const payload = (
+    error as {
+      response?: {
+        data?: {
+          error?: {
+            route?: unknown
+            questions?: unknown
+            optional_missing?: unknown
+          }
+        }
+      }
+    }
+  ).response?.data?.error
+  if (
+    payload &&
+    (payload.route === 'vague' || payload.route === 'conflict') &&
+    Array.isArray(payload.questions)
+  ) {
+    return {
+      route: payload.route,
+      questions: payload.questions.filter(
+        (question): question is string => typeof question === 'string',
+      ),
+      optional_missing: Array.isArray(payload.optional_missing)
+        ? payload.optional_missing.filter(
+            (question): question is string => typeof question === 'string',
+          )
+        : [],
+    }
+  }
+  return null
+}
+
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -179,7 +224,13 @@ export default function ProjectPage() {
   const [orientation, setOrientation] = useState<'' | 'N' | 'S' | 'E' | 'W'>('')
   const [alternatives, setAlternatives] = useState<LayoutOption[]>([])
   const [generating, setGenerating] = useState(false)
+  const [generationStage, setGenerationStage] = useState<
+    'idle' | 'extracting' | 'generating'
+  >('idle')
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const [briefReview, setBriefReview] = useState<ExtractResponse | null>(null)
+  const [reviewPrompt, setReviewPrompt] = useState('')
+  const [generationNotice, setGenerationNotice] = useState<string | null>(null)
   const [layoutSaving, setLayoutSaving] = useState(false)
   const [layoutSaveError, setLayoutSaveError] = useState<string | null>(null)
   const [versionName, setVersionName] = useState('')
@@ -226,21 +277,89 @@ export default function ProjectPage() {
     })()
   }
 
-  const handleSubmit = async () => {
-    if (!prompt.trim()) return
+  const currentGenerationOverrides = (): GenerationOverrides => ({
+    plotWidthM,
+    floors: floorsOverride,
+    orientation,
+  })
+
+  const requestBriefReview = async (sourcePrompt: string) => {
     setGenerating(true)
+    setGenerationStage('extracting')
     setGenerateError(null)
     setLayoutSaveError(null)
     try {
-      if (mode === 'refine' && designId) {
-        const result = await refineLayout(designId, prompt)
-        loadLayout(result)
-        setDraftToRecover(null)
-        setRecoveredDraftAvailable(false)
-        setRefinementSummary(result.refinementSummary)
+      const result = await extractBrief(sourcePrompt)
+      setBriefReview(reviewWithOverrides(result, currentGenerationOverrides()))
+      setReviewPrompt(sourcePrompt)
+    } catch (err) {
+      setGenerateError(
+        getApiErrorMessage(
+          err,
+          'I could not understand that brief. Check that LM Studio is running, then try again.',
+        ),
+      )
+    } finally {
+      setGenerating(false)
+      setGenerationStage('idle')
+    }
+  }
+
+  const handleSubmit = async () => {
+    const sourcePrompt = prompt.trim()
+    if (!sourcePrompt) return
+    if (mode !== 'refine' || !designId) {
+      await requestBriefReview(sourcePrompt)
+      return
+    }
+
+    setGenerating(true)
+    setGenerationStage('generating')
+    setGenerateError(null)
+    setLayoutSaveError(null)
+    try {
+      const result = await refineLayout(designId, sourcePrompt)
+      loadLayout(result)
+      setDraftToRecover(null)
+      setRecoveredDraftAvailable(false)
+      setRefinementSummary(result.refinementSummary)
+      setAlternatives([])
+      setPrompt('')
+      setGenerationNotice(null)
+      refreshThumbnailAfterGenerate()
+    } catch (err) {
+      setGenerateError(
+        getApiErrorMessage(err, 'Refinement failed. Try a more specific change.'),
+      )
+    } finally {
+      setGenerating(false)
+      setGenerationStage('idle')
+    }
+  }
+
+  const handleGenerateReviewed = async (useDefaults: boolean) => {
+    if (!briefReview) return
+    const activeReview = briefReview
+    const sourcePrompt = reviewPrompt || prompt.trim()
+    setGenerating(true)
+    setGenerationStage('generating')
+    setGenerateError(null)
+    setLayoutSaveError(null)
+    try {
+      if (generationEngineFor(activeReview.requirements) === 'mvp') {
+        const result = await generateMvpLayout({
+          requirements: activeReview.requirements,
+          useDefaults,
+          projectId: id,
+          prompt: sourcePrompt,
+        })
+        loadLayout(generateResponseToCanvas(result, sourcePrompt))
         setAlternatives([])
-        setPrompt('')
-        refreshThumbnailAfterGenerate()
+        setGenerationNotice(
+          result.defaults_applied.length > 0
+            ? `Assumed: ${result.defaults_applied.join(', ')}`
+            : null,
+        )
       } else {
         const designParams = {
           plotWidthM: plotWidthM.trim() ? Number(plotWidthM) : undefined,
@@ -251,35 +370,67 @@ export default function ProjectPage() {
           designParams.plotWidthM !== undefined ||
           designParams.floors !== undefined ||
           designParams.orientation !== undefined
-        const result = await generateLayout(prompt, id, hasParams ? designParams : undefined)
+        const result = await generateLayout(
+          sourcePrompt,
+          id,
+          hasParams ? designParams : undefined,
+        )
         loadLayout(result)
-        setDraftToRecover(null)
-        setRecoveredDraftAvailable(false)
-        setRefinementSummary(null)
         setAlternatives(result.alternatives ?? [])
-        refreshThumbnailAfterGenerate()
+        setGenerationNotice(null)
       }
+      refreshThumbnailAfterGenerate()
+      setDraftToRecover(null)
+      setRecoveredDraftAvailable(false)
+      setRefinementSummary(null)
+      setBriefReview(null)
+      setReviewPrompt('')
+      setPrompt('')
     } catch (err) {
-      const apiErr = err as { response?: { data?: { error?: string } } }
-      setGenerateError(
-        apiErr.response?.data?.error ??
-          (mode === 'refine'
-            ? 'Refinement failed. Try a more specific change.'
-            : 'Generation failed. Try a more detailed description.'),
-      )
+      const clarification = clarificationFromError(err)
+      if (clarification) {
+        setBriefReview({
+          ...activeReview,
+          ...clarification,
+        })
+      } else {
+        setGenerateError(
+          getApiErrorMessage(
+            err,
+            'Generation failed. Try a more detailed description.',
+          ),
+        )
+      }
     } finally {
       setGenerating(false)
+      setGenerationStage('idle')
     }
+  }
+
+  const handleClarifyBrief = async (answers: string[]) => {
+    if (!briefReview) return
+    const additions = briefReview.questions.map(
+      (question, index) => `${question}\nAnswer: ${answers[index]}`,
+    )
+    const clarifiedPrompt =
+      `${reviewPrompt || prompt.trim()}\n\nAdditional details:\n${additions.join('\n')}`
+    setPrompt(clarifiedPrompt)
+    setBriefReview(null)
+    await requestBriefReview(clarifiedPrompt)
   }
 
   const handleModeChange = (next: 'generate' | 'refine') => {
     userPickedModeRef.current = true
     setMode(next)
+    setBriefReview(null)
+    setGenerateError(null)
   }
 
   const handlePromptChange = (value: string) => {
     setPrompt(value)
     setRefinementSummary(null)
+    setGenerationNotice(null)
+    setBriefReview(null)
   }
 
   const handlePickOption = (option: LayoutOption) => {
@@ -602,6 +753,22 @@ export default function ProjectPage() {
               onDismiss={handleDismissDraft}
             />
 
+            {briefReview && (
+              <BriefReviewPanel
+                key={`${reviewPrompt}:${briefReview.route}:${briefReview.questions.join('|')}`}
+                review={briefReview}
+                engine={generationEngineFor(briefReview.requirements)}
+                busy={generating}
+                error={generateError}
+                onGenerate={handleGenerateReviewed}
+                onClarify={handleClarifyBrief}
+                onCancel={() => {
+                  setBriefReview(null)
+                  setGenerateError(null)
+                }}
+              />
+            )}
+
             <ToolRail />
             <MeasurePanel />
             <SelectionGizmo />
@@ -626,6 +793,24 @@ export default function ProjectPage() {
               </div>
             )}
 
+            {generationNotice && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-amber-200 bg-amber-50/95 px-4 py-2 shadow-sm backdrop-blur"
+              >
+                <span className="text-xs font-medium text-amber-900">{generationNotice}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss assumptions"
+                  className="text-xs font-medium text-amber-700 hover:text-amber-900"
+                  onClick={() => setGenerationNotice(null)}
+                >
+                  x
+                </button>
+              </div>
+            )}
+
             <CommandBar
               roomCount={roomCount}
               mode={mode}
@@ -642,6 +827,15 @@ export default function ProjectPage() {
               prompt={prompt}
               setPrompt={handlePromptChange}
               generating={generating}
+              busyLabel={
+                generationStage === 'extracting'
+                  ? 'Understanding...'
+                  : generationStage === 'generating'
+                    ? mode === 'refine'
+                      ? 'Refining...'
+                      : 'Generating...'
+                    : undefined
+              }
               generateError={generateError}
               onSubmit={handleSubmit}
             />

@@ -16,6 +16,7 @@ interface CommandBarProps {
   prompt: string
   setPrompt: (value: string) => void
   generating: boolean
+  busyLabel?: string
   generateError: string | null
   onSubmit: () => void
 }
@@ -36,10 +37,16 @@ export function CommandBar({
   prompt,
   setPrompt,
   generating,
+  busyLabel,
   generateError,
   onSubmit,
 }: CommandBarProps) {
   const heroMode = roomCount === 0
+  const submitLabel = generating
+    ? busyLabel ?? (mode === 'refine' ? 'Refining…' : 'Generating…')
+    : mode === 'refine'
+      ? 'Refine'
+      : 'Generate'
 
   const tablist = (
     <div role="tablist" aria-label="Prompt mode" className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden">
@@ -94,7 +101,7 @@ export function CommandBar({
         <input
           type="number"
           min={1}
-          max={6}
+          max={5}
           placeholder="auto"
           className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={floorsOverride}
@@ -154,9 +161,7 @@ export function CommandBar({
               onClick={onSubmit}
               disabled={generating || !prompt.trim()}
             >
-              {generating
-                ? mode === 'refine' ? 'Refining…' : 'Generating…'
-                : mode === 'refine' ? 'Refine' : 'Generate'}
+              {submitLabel}
             </button>
           </div>
         </div>
@@ -202,9 +207,7 @@ export function CommandBar({
           onClick={onSubmit}
           disabled={generating || !prompt.trim()}
         >
-          {generating
-            ? mode === 'refine' ? 'Refining…' : 'Generating…'
-            : mode === 'refine' ? 'Refine' : 'Generate'}
+          {submitLabel}
         </button>
       </div>
       {generateError && <p className="text-xs text-red-500">{generateError}</p>}
