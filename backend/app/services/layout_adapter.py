@@ -28,6 +28,14 @@ def _room_color(room_type: str) -> str:
     return ROOM_COLORS.get(key, _FALLBACK_COLOR)
 
 
+def _bounded_center(origin: float, span: float, plot_span: float) -> float:
+    """Round a canvas centre without letting independent rounding cross bounds."""
+
+    half = span / 2
+    rounded = round(origin + half, 3)
+    return min(plot_span - half, max(half, rounded))
+
+
 def _wall_object(wall: Wall, index: int) -> dict:
     horizontal = abs(wall.x2 - wall.x1) >= abs(wall.y2 - wall.y1)
     length = hypot(wall.x2 - wall.x1, wall.y2 - wall.y1)
@@ -102,9 +110,9 @@ def layout_plan_to_canvas(
             "floorId": "floor_0",
             "floorLevel": 0,
             "position": {
-                "x": round(room.x + room.w / 2, 3),
+                "x": _bounded_center(room.x, room.w, plan.plot.width_m),
                 "y": WALL_HEIGHT_M / 2,
-                "z": round(room.y + room.h / 2, 3),
+                "z": _bounded_center(room.y, room.h, plan.plot.depth_m),
             },
             "size": {"w": room.w, "h": WALL_HEIGHT_M, "d": room.h},
             "rotation": _rotation(room.rotation),
@@ -124,8 +132,10 @@ def layout_plan_to_canvas(
     ]
     objects = [*room_objects, *wall_objects, *door_objects]
     footprint = {
-        "x": round(plan.plot.width_m / 2, 3),
-        "z": round(plan.plot.depth_m / 2, 3),
+        # Existing canvas footprints store their minimum X/Z corner, not their
+        # centre. The canonical plan already starts at the NW origin (0, 0).
+        "x": 0.0,
+        "z": 0.0,
         "w": plan.plot.width_m,
         "d": plan.plot.depth_m,
     }
