@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # "Serve on Local Network" in LM Studio or the container cannot reach it.
     LLM_BASE_URL: str = "http://localhost:1234/v1"
     LLM_TIMEOUT_S: float = 30.0
+    # Optional override. Empty = read the exact identifier of whatever model LM
+    # Studio has loaded from GET /v1/models (a mismatched hard-coded name errors).
+    LLM_MODEL: str = ""
 
     # Razorpay (Phase 3). All optional so dev/tests run without them; order
     # creation is disabled and the webhook rejects everything until set.
