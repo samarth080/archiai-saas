@@ -110,6 +110,39 @@ def test_single_room_spec_works():
     assert validate(plan) == []
 
 
+def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
+    """Regression from the Phase 4 live gate: area-only cut clamping made the
+    attached bathroom a 1.2 m sliver despite sufficient total plot area."""
+
+    spec = RequirementsSpec.model_validate(
+        {
+            "building_type": "house",
+            "rooms": [
+                {"type": "master_bedroom", "count": 1},
+                {"type": "bedroom", "count": 2},
+                {"type": "bathroom", "count": 1},
+                {"type": "living_room", "count": 1},
+                {"type": "kitchen", "count": 1},
+                {"type": "pooja_room", "count": 1},
+            ],
+            "adjacency": [
+                {
+                    "room_a": "master_bedroom",
+                    "room_b": "bathroom",
+                    "strength": "must",
+                }
+            ],
+            "plot": {"width_m": 9.144, "depth_m": 12.192},
+            "facing": "east",
+        }
+    )
+
+    plan = generate_plan(spec)
+
+    assert validate(plan) == []
+    assert len(plan.rooms) == 8  # seven requested rooms + auto-entry
+
+
 # ── Step 1.3 — hand-broken plans trigger exactly their violation codes ────────
 
 

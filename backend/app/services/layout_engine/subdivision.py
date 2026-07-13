@@ -63,8 +63,22 @@ def _clamped_cut(span: float, other_span: float, group_a: list[RoomNeed], group_
     area_b = sum(n.preferred_area for n in group_b)
     t = span * area_a / (area_a + area_b)
 
-    floor_a = max(_MIN_SPAN, sum(n.min_area for n in group_a) * 1.02 / other_span)
-    floor_b = max(_MIN_SPAN, sum(n.min_area for n in group_b) * 1.02 / other_span)
+    # Area alone is insufficient: a bathroom's 3.15 m² minimum can fit inside
+    # a 1.2×large strip by area while still violating its 1.5 m shortest side.
+    # Every descendant needs at least its smaller orientation-tolerant minimum
+    # along this cut axis, even before recursion decides its final orientation.
+    min_span_a = max(min(n.min_w, n.min_d) for n in group_a)
+    min_span_b = max(min(n.min_w, n.min_d) for n in group_b)
+    floor_a = max(
+        _MIN_SPAN,
+        min_span_a,
+        sum(n.min_area for n in group_a) * 1.02 / other_span,
+    )
+    floor_b = max(
+        _MIN_SPAN,
+        min_span_b,
+        sum(n.min_area for n in group_b) * 1.02 / other_span,
+    )
     if floor_a + floor_b > span + EPS:
         return None
     return min(max(t, floor_a), span - floor_b)

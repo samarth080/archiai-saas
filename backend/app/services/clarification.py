@@ -88,9 +88,10 @@ def _fit_question(error: DoesNotFitError) -> str:
             f"(about {required} m² required and {available} m² available). "
             "Would you like to increase the plot or reduce the room program?"
         )
+    detail = str(error).strip()
     return (
-        "The requested program does not fit within the current plot. "
-        "Would you like to increase the plot or reduce the room program?"
+        f"The requested program cannot be generated: {detail}. "
+        "Would you like to adjust the plot or room program?"
     )
 
 
