@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
 import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
+import { Plan2D } from '../../components/canvas/Plan2D'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorTopBar } from '../../components/canvas/EditorTopBar'
 import { ToolRail } from '../../components/canvas/ToolRail'
@@ -249,6 +250,8 @@ export default function ProjectPage() {
   const [exportError, setExportError] = useState<string | null>(null)
   const designId = useCanvasStore((s) => s.designId)
   const roomCount = useCanvasStore((s) => s.rooms.length)
+  const viewMode = useCanvasStore((s) => s.viewMode)
+  const selectedId = useCanvasStore((s) => s.selectedId)
   const loadLayout = useCanvasStore((s) => s.loadLayout)
   const clearLayout = useCanvasStore((s) => s.clearLayout)
   const serializeLayout = useCanvasStore((s) => s.serializeLayout)
@@ -705,7 +708,16 @@ export default function ProjectPage() {
         {/* Canvas + Inspector row */}
         <div className="flex-1 flex overflow-hidden">
           <div className="relative flex-1 h-full">
-            <Canvas3D className="h-full" />
+            {viewMode === 'floor_plan' ? (
+              <>
+                <div className="pointer-events-none invisible absolute inset-0" aria-hidden="true">
+                  <Canvas3D className="h-full" readOnly />
+                </div>
+                <Plan2D className="h-full" />
+              </>
+            ) : (
+              <Canvas3D className="h-full" />
+            )}
 
             <EditorTopBar
               projectTitle={project.title}
@@ -772,7 +784,9 @@ export default function ProjectPage() {
             <ToolRail />
             <MeasurePanel />
             <SelectionGizmo />
-            <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
+            {!selectedId && (
+              <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
+            )}
             <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
 
             {refinementSummary && (

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import ProjectPage from './index'
@@ -146,6 +146,7 @@ beforeEach(() => {
     })),
     floors: [DEFAULT_FLOOR],
     selectedFloor: 0,
+    viewMode: '3d',
     floorHeight: DEFAULT_FLOOR_HEIGHT,
     designId: null,
     designVersionId: null,
@@ -176,6 +177,36 @@ beforeEach(() => {
       throw err
     }
     throw new Error('unexpected GET ' + url)
+  })
+})
+
+describe('ProjectPage canvas views', () => {
+  it('switches the Plan control to the shared-state SVG floor plan', async () => {
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Plan' }))
+
+    expect(screen.getByRole('application', { name: 'Editable floor plan' })).toBeInTheDocument()
+    expect(useCanvasStore.getState().viewMode).toBe('floor_plan')
+  })
+
+  it('gives the selected object inspector priority over the program panel', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/api/design/project/p1/latest') return { data: SAVED_DESIGN_FIXTURE }
+      if (url.includes('/draft')) {
+        const err: any = new Error('not found')
+        err.response = { status: 404 }
+        throw err
+      }
+      throw new Error('unexpected GET ' + url)
+    })
+    renderProjectPage()
+
+    expect(await screen.findByText('Space program')).toBeInTheDocument()
+    act(() => useCanvasStore.getState().selectRoom(INITIAL_ROOMS[0].id))
+
+    expect(screen.queryByText('Space program')).not.toBeInTheDocument()
   })
 })
 

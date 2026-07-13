@@ -357,6 +357,18 @@ function clampToFootprint(
   }
 }
 
+function clampSizeToFootprint(
+  size: ComponentSize,
+  footprint?: { x: number; z: number; w: number; d: number },
+) {
+  if (!footprint || footprint.w <= 0 || footprint.d <= 0) return size
+  return {
+    ...size,
+    w: Math.min(size.w, footprint.w),
+    d: Math.min(size.d, footprint.d),
+  }
+}
+
 function footprintForLevel(floors: CanvasFloor[], level: number | undefined) {
   return floors.find((floor) => floor.level === level)?.footprint
 }
@@ -581,10 +593,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               : room.roomType,
       }
 
-      updated.size = clampComponentSize(
-        objectType,
-        (nextPatch.size as ComponentSize | undefined) ?? room.size,
-        room.size,
+      const updatedFootprint = footprintForLevel(state.floors, updated.floorLevel)
+      updated.size = clampSizeToFootprint(
+        clampComponentSize(
+          objectType,
+          (nextPatch.size as ComponentSize | undefined) ?? room.size,
+          room.size,
+        ),
+        updatedFootprint,
       )
 
       const patchPosition = nextPatch.position as Room['position'] | undefined
@@ -600,14 +616,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         updated.position = clampToFootprint(
           nextPosition,
           updated.size,
-          footprintForLevel(state.floors, updated.floorLevel),
+          updatedFootprint,
         )
       } else if (nextPatch.size || nextPatch.floorLevel !== undefined || nextPatch.floorId !== undefined) {
         updated = withFloorElevation(updated, state.floors)
         updated.position = clampToFootprint(
           updated.position,
           updated.size,
-          footprintForLevel(state.floors, updated.floorLevel),
+          updatedFootprint,
         )
       }
 
@@ -637,14 +653,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const room = state.rooms.find((r) => r.id === id)
       if (!room) return state
 
-      const clampedSize = clampComponentSize(room.objectType, size, room.size)
+      const footprint = footprintForLevel(state.floors, room.floorLevel)
+      const clampedSize = clampSizeToFootprint(
+        clampComponentSize(room.objectType, size, room.size),
+        footprint,
+      )
       let nextPosition = position ?? room.position
       nextPosition = applyGridToPosition(nextPosition, state)
       const elevation = floorElevation(state.floors, room.floorLevel)
       const clampedPosition = clampToFootprint(
         { ...nextPosition, y: elevation + clampedSize.h / 2 },
         clampedSize,
-        footprintForLevel(state.floors, room.floorLevel),
+        footprint,
       )
       const updated: Room = { ...room, size: clampedSize, position: clampedPosition }
 

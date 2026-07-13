@@ -560,6 +560,17 @@ describe('resizeRoom', () => {
     const room = useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!
     expect(room.position.y).toBe(2.5) // elevation 0 + height/2
   })
+
+  it('caps oversized dimensions to the active floor footprint', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().resizeRoom('r1', { w: 20, h: 3, d: 12 })
+
+    const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'r1')!
+    expect(room.size.w).toBe(8)
+    expect(room.size.d).toBe(8)
+    expect(room.position.x).toBe(4)
+    expect(room.position.z).toBe(4)
+  })
 })
 
 describe('new object types', () => {

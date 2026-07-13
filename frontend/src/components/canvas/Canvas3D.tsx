@@ -4,7 +4,7 @@ import { Scene } from './Scene'
 import { RoomMesh } from './RoomMesh'
 import { useCanvasStore } from '../../store/canvasStore'
 import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
-import { getCanvasShortcut } from './keyboardShortcuts'
+import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 
 interface Canvas3DProps {
   className?: string
@@ -28,49 +28,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       : { position: [0, 28, 0.01] as [number, number, number], fov: 42 }
   const background = viewMode === 'floor_plan' ? '#f8fafc' : '#eef2f7'
 
-  useEffect(() => {
-    if (readOnly) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const shortcut = getCanvasShortcut(event)
-      if (!shortcut) return
-
-      const store = useCanvasStore.getState()
-      if (shortcut === 'copy') {
-        event.preventDefault()
-        store.copySelected()
-      } else if (shortcut === 'paste') {
-        event.preventDefault()
-        store.pasteClipboard()
-      } else if (shortcut === 'undo') {
-        event.preventDefault()
-        store.undo()
-      } else if (shortcut === 'redo') {
-        event.preventDefault()
-        store.redo()
-      } else if (shortcut === 'duplicate') {
-        event.preventDefault()
-        store.duplicateSelected()
-      } else if (shortcut === 'delete') {
-        if (store.selectedId) {
-          event.preventDefault()
-          store.deleteRoom(store.selectedId)
-        }
-      } else if (shortcut === 'escape') {
-        event.preventDefault()
-        window.dispatchEvent(new Event('archiai:cancel-canvas-interaction'))
-        if (orbitRef.current) orbitRef.current.enabled = true
-        store.setPlacementMode(null)
-        store.setShowDimensions(false)
-        store.clearMeasure()
-        store.resetInteraction()
-        store.deselectAll()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [readOnly])
+  useCanvasKeyboardShortcuts({ disabled: readOnly })
 
   useEffect(() => {
     if (!clipboardMessage) return
