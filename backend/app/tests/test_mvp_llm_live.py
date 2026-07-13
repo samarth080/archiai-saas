@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services.clarification import assess
 from app.services.extraction import extract_requirements
 from app.services.llm_client import chat_structured
 
@@ -125,3 +126,15 @@ async def test_live_golden_suite_scores_at_least_eight_of_ten_three_times():
         passed = sum(ok for _, ok in rows)
         print(f"golden run {run}: {passed}/10 — {rows}")
         assert passed >= 8
+
+
+async def test_live_golden_suite_routes_all_ten_prompts_correctly():
+    cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
+    rows = []
+    for case in cases:
+        spec = await extract_requirements(case["prompt"])
+        actual = assess(spec).route
+        rows.append((case["id"], actual, case["expect"]["route"]))
+
+    print(f"clarification routes — {rows}")
+    assert all(actual == expected for _, actual, expected in rows)
