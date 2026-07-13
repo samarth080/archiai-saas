@@ -72,7 +72,43 @@ export interface QualityReport {
   warnings: QualityWarning[]
 }
 
-/** Editor-side clamp minima — subset of backend ROOM_SIZING (keep in sync). */
+export type ClarificationRoute = 'vague' | 'generate' | 'conflict'
+
+export interface ExtractResponse {
+  requirements: RequirementsSpec
+  route: ClarificationRoute
+  questions: string[]
+  optional_missing: string[]
+  understood_summary: string[]
+}
+
+export interface HardQualitySnapshot {
+  valid: boolean
+  hard_violations: Violation[]
+}
+
+export interface GenerateMvpResponse {
+  requirements: RequirementsSpec
+  layout: LayoutPlan
+  quality: HardQualitySnapshot
+  defaults_applied: string[]
+  designId: string | null
+  designVersionId: string | null
+}
+
+export interface MvpVersionResponse {
+  id: string
+  designId: string
+  projectId: string
+  versionNumber: number
+  prompt: string | null
+  requirements: RequirementsSpec
+  layout: LayoutPlan
+  quality: HardQualitySnapshot
+  createdAt: string
+}
+
+/** Editor-side clamp minima - subset of backend ROOM_SIZING (keep in sync). */
 export const ROOM_MIN_SIZE: Record<RoomType, { minW: number; minD: number }> = {
   bedroom: { minW: 3.0, minD: 3.0 },
   master_bedroom: { minW: 3.3, minD: 3.3 },
