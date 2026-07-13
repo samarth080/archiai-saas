@@ -44,6 +44,8 @@ _gpu_semaphore = asyncio.Semaphore(1)
 # another dependency such as respx.
 _client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient
 
+_MAX_STRUCTURED_OUTPUT_TOKENS = 1024
+
 
 def _raise_for_status(response: httpx.Response, operation: str) -> None:
     try:
@@ -123,6 +125,11 @@ async def chat_structured(
                             {"role": "user", "content": user},
                         ],
                         "temperature": 0,
+                        # Extraction is schema filling, not a reasoning task.
+                        # Qwen 3.5 otherwise spends the entire latency budget on
+                        # hidden reasoning before emitting any JSON content.
+                        "reasoning_effort": "none",
+                        "max_tokens": _MAX_STRUCTURED_OUTPUT_TOKENS,
                         "response_format": {
                             "type": "json_schema",
                             "json_schema": {

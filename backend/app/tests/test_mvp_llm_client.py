@@ -34,6 +34,8 @@ async def test_chat_structured_uses_loaded_model_and_json_schema(monkeypatch):
         payload = json.loads(request.content)
         assert payload["model"] == "qwen-test-model"
         assert payload["temperature"] == 0
+        assert payload["reasoning_effort"] == "none"
+        assert payload["max_tokens"] == 1024
         assert payload["response_format"] == {
             "type": "json_schema",
             "json_schema": {

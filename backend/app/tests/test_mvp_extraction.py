@@ -165,6 +165,49 @@ def test_house_with_home_office_remains_a_house():
     assert _room_count(spec, RoomType.study) == 1
 
 
+def test_normalizer_extracts_explicit_number_words_from_prompt_when_model_omits_rooms():
+    normalized = normalize_extraction(
+        {"rooms": [], "missing_info": ["total bedroom count", "bathroom types"]},
+        prompt="House with three bedrooms and two bathrooms",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert _room_count(spec, RoomType.bedroom) == 3
+    assert _room_count(spec, RoomType.bathroom) == 2
+    assert "rooms" not in spec.missing_info
+    assert "bathroom_count" not in spec.missing_info
+
+
+def test_normalizer_extracts_explicit_named_rooms_from_hinglish_brief():
+    normalized = normalize_extraction(
+        {"rooms": []},
+        prompt="3BHK, pooja room, attached bath, car parking chahiye",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert _room_count(spec, RoomType.bedroom) == 3
+    assert _room_count(spec, RoomType.pooja_room) == 1
+    assert _room_count(spec, RoomType.bathroom) == 1
+    assert _room_count(spec, RoomType.parking) == 1
+
+
+def test_explicit_bedroom_total_drops_model_invented_master():
+    normalized = normalize_extraction(
+        {
+            "rooms": [
+                {"type": "bedroom", "count": 4},
+                {"type": "master_bedroom", "count": 1},
+            ]
+        },
+        prompt="4 bedroom duplex with a study upstairs",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert _room_count(spec, RoomType.bedroom) == 4
+    assert _room_count(spec, RoomType.master_bedroom) == 0
+    assert _room_count(spec, RoomType.study) == 1
+
+
 async def test_invalid_first_output_is_corrected_once():
     calls: list[dict] = []
     responses = [
