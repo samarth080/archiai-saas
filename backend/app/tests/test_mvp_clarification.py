@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services.clarification import (
     BATHROOM_QUESTION,
+    ClarificationRequiredError,
     FACING_QUESTION,
     PLOT_SIZE_QUESTION,
     ROOM_PROGRAM_QUESTION,
@@ -163,6 +166,28 @@ def test_apply_defaults_preserves_explicit_values():
 
     assert report.requirements == spec
     assert report.defaults_applied == []
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        RequirementsSpec(rooms=[]),
+        RequirementsSpec.model_validate(
+            {
+                "rooms": [{"type": "bedroom", "count": 3}],
+                "missing_info": [
+                    "conflict: 2BHK conflicts with 3 explicit bedrooms"
+                ],
+            }
+        ),
+    ],
+    ids=["missing-room-program", "unresolved-conflict"],
+)
+def test_apply_defaults_cannot_bypass_blocking_clarification(
+    spec: RequirementsSpec,
+):
+    with pytest.raises(ClarificationRequiredError, match="optional information"):
+        apply_defaults_with_report(spec)
 
 
 def test_all_ten_golden_prompts_route_correctly_without_model_dependency():

@@ -51,6 +51,10 @@ class DefaultsApplication(BaseModel):
     defaults_applied: list[str] = Field(default_factory=list)
 
 
+class ClarificationRequiredError(ValueError):
+    """Defaults cannot replace a missing program or resolve a contradiction."""
+
+
 def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
     return sum(room.count for room in spec.rooms if room.type == room_type)
 
@@ -163,6 +167,13 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
     This makes the function robust to stale model metadata while preserving all
     explicit user values.
     """
+
+    decision = assess(spec)
+    if decision.route != "generate":
+        raise ClarificationRequiredError(
+            "Defaults can only fill optional information after the room program "
+            "is present and conflicts are resolved."
+        )
 
     defaults_applied: list[str] = []
 
