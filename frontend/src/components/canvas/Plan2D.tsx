@@ -30,6 +30,7 @@ import {
   type PlanResizeHandle,
 } from './plan2dGeometry'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
+import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 
 interface Plan2DProps {
   className?: string
@@ -120,7 +121,11 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
       ? sortedFloors[0]
       : sortedFloors.find((floor) => floor.level === selectedFloor) ?? sortedFloors[0]
   const activeLevel = activeFloor?.level ?? (selectedFloor === 'all' ? 0 : selectedFloor)
-  const visibleRooms = rooms.filter((room) => (room.floorLevel ?? 0) === activeLevel)
+  const visibleRooms = rooms.filter(
+    (room) =>
+      (room.floorLevel ?? 0) === activeLevel &&
+      shouldRenderCanvasObject(room, 'floor_plan'),
+  )
   const orderedVisibleRooms = selectedId
     ? [
         ...visibleRooms.filter((room) => room.id !== selectedId),

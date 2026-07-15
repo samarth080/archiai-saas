@@ -5,6 +5,7 @@ import { RoomMesh } from './RoomMesh'
 import { useCanvasStore } from '../../store/canvasStore'
 import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
+import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 
 interface Canvas3DProps {
   className?: string
@@ -20,8 +21,12 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const clearClipboardMessage = useCanvasStore((s) => s.clearClipboardMessage)
   const visibleRooms =
     selectedFloor === 'all'
-      ? rooms
-      : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
+      ? rooms.filter((room) => shouldRenderCanvasObject(room, viewMode))
+      : rooms.filter(
+          (room) =>
+            (room.floorLevel ?? 0) === selectedFloor &&
+            shouldRenderCanvasObject(room, viewMode),
+        )
   const camera =
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
