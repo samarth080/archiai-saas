@@ -24,7 +24,12 @@ from app.services.entitlement_service import (
 )
 from app.services.extraction import ExtractionFailed, extract_requirements
 from app.services.layout_engine.engine import DoesNotFitError, generate_plan
-from app.services.llm_client import LLMError
+from app.services.llm_client import (
+    LLMError,
+    LLMInvalidOutput,
+    LLMTimeout,
+    LLMUnavailable,
+)
 from app.services.mvp_pipeline_service import (
     get_mvp_version,
     hard_quality_snapshot,
@@ -72,10 +77,34 @@ async def extract_brief(
 ) -> ExtractResponse:
     try:
         requirements = await extract_requirements(request.prompt)
+    except LLMTimeout as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Local AI took too long to respond. Keep LM Studio open and try "
+                "again."
+            ),
+        ) from exc
+    except LLMInvalidOutput as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Local AI returned an invalid structured response. Try again or "
+                "simplify the brief."
+            ),
+        ) from exc
+    except LLMUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Local AI is unavailable. Start LM Studio, load "
+                "qwen/qwen3.5-9b, and try again."
+            ),
+        ) from exc
     except LLMError as exc:
         raise HTTPException(
             status_code=503,
-            detail="AI service unavailable. Start LM Studio and try again.",
+            detail="Local AI failed unexpectedly. Check LM Studio and try again.",
         ) from exc
     except ExtractionFailed as exc:
         raise HTTPException(

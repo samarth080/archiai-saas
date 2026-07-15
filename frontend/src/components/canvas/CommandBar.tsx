@@ -126,6 +126,31 @@ export function CommandBar({
     </div>
   )
 
+  const errorNotice = generateError && (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50/95 px-3 py-2 text-left shadow-sm"
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700"
+        >
+          !
+        </span>
+        <span className="text-xs leading-5 text-red-700">{generateError}</span>
+      </div>
+      <button
+        type="button"
+        className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={onSubmit}
+        disabled={generating || !prompt.trim()}
+      >
+        Try again
+      </button>
+    </div>
+  )
+
   if (heroMode) {
     return (
       <div className="absolute left-1/2 top-1/2 z-20 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 px-4">
@@ -165,7 +190,7 @@ export function CommandBar({
             </button>
           </div>
         </div>
-        {generateError && <p className="mt-2 text-center text-xs text-red-500">{generateError}</p>}
+        {errorNotice && <div className="mt-2">{errorNotice}</div>}
         <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
           <span className="text-xs text-muted-light">Try:</span>
           {QUICK_STARTS.map((q) => (
@@ -210,7 +235,7 @@ export function CommandBar({
           {submitLabel}
         </button>
       </div>
-      {generateError && <p className="text-xs text-red-500">{generateError}</p>}
+      {errorNotice}
     </div>
   )
 }

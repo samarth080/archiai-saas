@@ -50,6 +50,32 @@ def test_normalizer_maps_synonyms_and_explicit_feet_without_mutating_input():
     assert spec.facing.value == "east"
 
 
+def test_normalizer_recovers_hyphenated_storeys_and_units_on_each_plot_dimension():
+    normalized = normalize_extraction(
+        {
+            "building_type": "house",
+            "floors": 1,
+            "rooms": [
+                {"type": "bedroom", "count": 4},
+                {"type": "bathroom", "count": 3},
+            ],
+            "plot": {"width_m": None, "depth_m": None},
+            "facing": "east",
+            "missing_info": ["plot_size"],
+        },
+        prompt=(
+            "Design an east-facing two-storey 4-bedroom house on a "
+            "20m x 18m plot."
+        ),
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert spec.floors == 2
+    assert spec.plot.width_m == pytest.approx(20.0)
+    assert spec.plot.depth_m == pytest.approx(18.0)
+    assert "plot_size" not in spec.missing_info
+
+
 def test_normalizer_removes_invented_plot_and_facing():
     normalized = normalize_extraction(
         {

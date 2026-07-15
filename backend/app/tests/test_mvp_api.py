@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
@@ -10,7 +11,7 @@ from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_engine.engine import generate_plan
-from app.services.llm_client import LLMUnavailable
+from app.services.llm_client import LLMInvalidOutput, LLMTimeout, LLMUnavailable
 from app.tests.conftest import TestSessionLocal
 
 FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
@@ -89,16 +90,46 @@ async def test_extract_returns_deterministic_route_summary_and_optional_fields(
     assert "Plot: 9 × 12 m" in body["understood_summary"]
 
 
-async def test_extract_maps_local_model_outage_to_standard_503(
+@pytest.mark.parametrize(
+    ("failure", "expected_status", "expected_code", "expected_message"),
+    [
+        (
+            LLMUnavailable("LM Studio is down"),
+            503,
+            "SERVICE_UNAVAILABLE",
+            "Local AI is unavailable. Start LM Studio, load qwen/qwen3.5-9b, and try again.",
+        ),
+        (
+            LLMTimeout("LM Studio exceeded the timeout"),
+            504,
+            "GATEWAY_TIMEOUT",
+            "Local AI took too long to respond. Keep LM Studio open and try again.",
+        ),
+        (
+            LLMInvalidOutput("LM Studio returned malformed JSON"),
+            502,
+            "BAD_GATEWAY",
+            "Local AI returned an invalid structured response. Try again or simplify the brief.",
+        ),
+    ],
+)
+async def test_extract_maps_local_model_failures_to_actionable_errors(
     client: AsyncClient,
     monkeypatch,
+    failure,
+    expected_status: int,
+    expected_code: str,
+    expected_message: str,
 ):
-    token = await _register(client, "mvp-llm-down@example.com")
+    token = await _register(
+        client,
+        f"mvp-llm-{failure.__class__.__name__.lower()}@example.com",
+    )
 
-    async def unavailable(_: str) -> RequirementsSpec:
-        raise LLMUnavailable("LM Studio is down")
+    async def fail_extraction(_: str) -> RequirementsSpec:
+        raise failure
 
-    monkeypatch.setattr("app.api.mvp.router.extract_requirements", unavailable)
+    monkeypatch.setattr("app.api.mvp.router.extract_requirements", fail_extraction)
 
     response = await client.post(
         "/api/extract",
@@ -106,11 +137,11 @@ async def test_extract_maps_local_model_outage_to_standard_503(
         headers=_auth(token),
     )
 
-    assert response.status_code == 503
+    assert response.status_code == expected_status
     assert response.json() == {
-        "error": "AI service unavailable. Start LM Studio and try again.",
-        "code": "SERVICE_UNAVAILABLE",
-        "status": 503,
+        "error": expected_message,
+        "code": expected_code,
+        "status": expected_status,
     }
 
 

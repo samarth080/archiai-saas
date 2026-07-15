@@ -137,10 +137,11 @@ _FACING_ALIASES = {
     "west": "west",
 }
 
+_PLOT_UNIT = r"feet|foot|ft|metres?|meters?|m"
 _PLOT_RE = re.compile(
-    r"(?P<width>\d+(?:\.\d+)?)\s*(?:x|×|by)\s*"
-    r"(?P<depth>\d+(?:\.\d+)?)\s*"
-    r"(?P<unit>feet|foot|ft|metres?|meters?|m)\b",
+    rf"(?P<width>\d+(?:\.\d+)?)\s*(?P<width_unit>{_PLOT_UNIT})?\s*"
+    r"(?:x|×|by)\s*"
+    rf"(?P<depth>\d+(?:\.\d+)?)\s*(?P<depth_unit>{_PLOT_UNIT})?\b",
     re.IGNORECASE,
 )
 _FEET_VALUE_RE = re.compile(
@@ -183,6 +184,10 @@ _NUMBER_WORDS = {
     "ten": 10,
 }
 _COUNT_TOKEN = r"\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten"
+_FLOOR_COUNT_RE = re.compile(
+    rf"\b(?P<count>{_COUNT_TOKEN})[\s-]*(?:floors?|storeys?|stories?)\b",
+    re.IGNORECASE,
+)
 
 
 class ExtractionFailed(ValueError):
@@ -424,13 +429,32 @@ def _extract_plot(prompt: str) -> tuple[float, float] | None:
     match = _PLOT_RE.search(prompt)
     if not match:
         return None
+
+    width_unit = match.group("width_unit")
+    depth_unit = match.group("depth_unit")
+    if width_unit is None and depth_unit is None:
+        return None
+
+    # Briefs commonly use either ``30x40 feet`` or ``20m x 18m``. Inherit a
+    # single stated unit, while still converting each dimension independently
+    # when both dimensions include one.
+    width_unit = (width_unit or depth_unit).lower()
+    depth_unit = (depth_unit or width_unit).lower()
     width = float(match.group("width"))
     depth = float(match.group("depth"))
-    unit = match.group("unit").lower()
-    if unit in {"feet", "foot", "ft"}:
+    if width_unit in {"feet", "foot", "ft"}:
         width *= FEET_TO_METRES
+    if depth_unit in {"feet", "foot", "ft"}:
         depth *= FEET_TO_METRES
     return round(width, 4), round(depth, 4)
+
+
+def _extract_floor_count(prompt: str) -> int | None:
+    match = _FLOOR_COUNT_RE.search(prompt)
+    if not match:
+        return None
+    count = _parse_count_token(match.group("count"))
+    return count if 1 <= count <= 5 else None
 
 
 def _convert_feet_value(value: object) -> object:
@@ -585,7 +609,10 @@ def normalize_extraction(
             explicit_building = _explicit_building_type(prompt)
             if explicit_building:
                 payload["building_type"] = explicit_building
-            if "duplex" in prompt.lower() or re.search(
+            explicit_floors = _extract_floor_count(prompt)
+            if explicit_floors is not None:
+                payload["floors"] = explicit_floors
+            elif "duplex" in prompt.lower() or re.search(
                 r"\bupstairs\b", prompt, re.IGNORECASE
             ):
                 payload["floors"] = 2
