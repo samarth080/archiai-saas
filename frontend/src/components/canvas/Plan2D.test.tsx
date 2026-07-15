@@ -86,6 +86,19 @@ beforeEach(() => {
 })
 
 describe('Plan2D', () => {
+  it('gives generated spaces a layered architectural surface and area hierarchy', () => {
+    render(<Plan2D />)
+
+    expect(screen.getByTestId('plan-space-surface-room-1')).toBeInTheDocument()
+    expect(screen.getByTestId('plan-space-inset-room-1')).toBeInTheDocument()
+    expect(screen.getByText('16.0 m²')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-selection-halo-room-1')).not.toBeInTheDocument()
+
+    act(() => useCanvasStore.getState().selectRoom('room-1'))
+
+    expect(screen.getByTestId('plan-selection-halo-room-1')).toBeInTheDocument()
+  })
+
   it('renders every registered component type with a safe SVG treatment', () => {
     const rooms = CANVAS_OBJECT_TYPES.map((type, index) => {
       const definition = COMPONENT_REGISTRY[type]

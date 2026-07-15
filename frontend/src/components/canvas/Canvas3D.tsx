@@ -44,8 +44,10 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
     >
       <Canvas
         key={viewMode}
+        shadows={viewMode === '3d'}
+        dpr={[1, 2]}
         camera={camera}
-        gl={{ preserveDrawingBuffer: true }}
+        gl={{ preserveDrawingBuffer: true, antialias: true }}
         onPointerMissed={
           readOnly
             ? undefined

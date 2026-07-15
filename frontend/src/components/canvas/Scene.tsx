@@ -39,8 +39,18 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
 
   return (
     <>
-      <ambientLight intensity={isPlanView ? 0.9 : 0.65} />
-      <directionalLight position={[10, 20, 10]} intensity={isPlanView ? 0.55 : 1.15} castShadow />
+      <ambientLight intensity={isPlanView ? 0.9 : 0.42} />
+      {!isPlanView && (
+        <hemisphereLight args={['#f8fafc', '#9aa8b8', 0.58]} />
+      )}
+      <directionalLight
+        position={[10, 20, 10]}
+        intensity={isPlanView ? 0.55 : 1.25}
+        castShadow={!isPlanView}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-bias={-0.0002}
+      />
 
       {visibleFloors.map((floor) => {
         const footprint = floor.footprint
@@ -53,7 +63,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
           <group key={floor.id}>
             {/* Floor slab */}
             <group position={[centerX, slabY, centerZ]}>
-              <mesh raycast={() => null}>
+              <mesh raycast={() => null} receiveShadow>
                 <boxGeometry args={[footprint.w, slabHeight, footprint.d]} />
                 <meshStandardMaterial
                   color={floorSlabColor(floor.level)}
