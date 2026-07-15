@@ -15,6 +15,7 @@ import { InsightsStrip } from '../../components/canvas/InsightsStrip'
 import { CommandBar } from '../../components/canvas/CommandBar'
 import { BriefReviewPanel } from '../../components/canvas/BriefReviewPanel'
 import { DraftToast } from '../../components/canvas/DraftToast'
+import { RefinementPlaybackPanel } from '../../components/canvas/RefinementPlaybackPanel'
 import {
   DesignDraftResponse,
   fetchDesignDraft,
@@ -23,7 +24,10 @@ import {
   LayoutOption,
   refineLayout,
   saveDesignLayout,
+  type RefinementChange,
+  type RefineResponse,
 } from '../../services/design.service'
+import { buildRefinementPlaybackFrames } from '../../services/refinementPlayback'
 import { extractBrief, generateMvpLayout } from '../../services/mvp.service'
 import { generateResponseToCanvas } from '../../services/mvpLayoutAdapter'
 import {
@@ -164,6 +168,14 @@ function hasRecoverableDraft(
   return layoutSnapshotKey(savedLayout) !== layoutSnapshotKey(draftLayout)
 }
 
+function waitForRefinementMoment(durationMs: number) {
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return new Promise<void>((resolve) => window.setTimeout(resolve, reduceMotion ? 0 : durationMs))
+}
+
 function clarificationFromError(
   error: unknown,
 ): Pick<ExtractResponse, 'route' | 'questions' | 'optional_missing'> | null {
@@ -240,6 +252,12 @@ export default function ProjectPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [mode, setMode] = useState<'generate' | 'refine'>('generate')
   const [refinementSummary, setRefinementSummary] = useState<string | null>(null)
+  const [refinementPlayback, setRefinementPlayback] = useState<{
+    changes: RefinementChange[]
+    activeIndex: number
+    completedCount: number
+  } | null>(null)
+  const refinementRunRef = useRef(0)
   const [draftToRecover, setDraftToRecover] = useState<DesignDraftResponse | null>(null)
   const userPickedModeRef = useRef(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -258,6 +276,77 @@ export default function ProjectPage() {
   const setRecoveredDraftAvailable = useCanvasStore((s) => s.setRecoveredDraftAvailable)
 
   useAutoSave({ designId, enabled: Boolean(designId) })
+
+  useEffect(
+    () => () => {
+      refinementRunRef.current += 1
+    },
+    [],
+  )
+
+  const playRefinement = async (
+    currentLayout: CanvasLayout,
+    result: RefineResponse,
+    runId: number,
+  ) => {
+    const frames = buildRefinementPlaybackFrames(currentLayout, result)
+    const preservedView = useCanvasStore.getState().viewMode
+    if (frames.length === 0) {
+      loadLayout(result)
+      useCanvasStore.getState().setViewMode(preservedView)
+      return
+    }
+
+    setRefinementPlayback({
+      changes: result.refinementChanges ?? [],
+      activeIndex: 0,
+      completedCount: 0,
+    })
+
+    for (let index = 0; index < frames.length; index += 1) {
+      if (runId !== refinementRunRef.current) return
+      const frame = frames[index]
+      setRefinementPlayback({
+        changes: result.refinementChanges ?? [],
+        activeIndex: index,
+        completedCount: index,
+      })
+
+      const beforeState = useCanvasStore.getState()
+      beforeState.setSelectedFloor(frame.change.floorLevel)
+      if (beforeState.rooms.some((room) => room.id === frame.change.objectId)) {
+        beforeState.selectRoom(frame.change.objectId)
+      }
+      await waitForRefinementMoment(420)
+      if (runId !== refinementRunRef.current) return
+
+      loadLayout(frame.layout)
+      const afterState = useCanvasStore.getState()
+      afterState.setViewMode(preservedView)
+      afterState.setSelectedFloor(frame.change.floorLevel)
+      if (afterState.rooms.some((room) => room.id === frame.change.objectId)) {
+        afterState.selectRoom(frame.change.objectId)
+      }
+      setRefinementPlayback({
+        changes: result.refinementChanges ?? [],
+        activeIndex: index,
+        completedCount: index + 1,
+      })
+      await waitForRefinementMoment(260)
+    }
+
+    if (runId !== refinementRunRef.current) return
+    loadLayout(result)
+    const finalState = useCanvasStore.getState()
+    finalState.setViewMode(preservedView)
+    const lastChange = frames[frames.length - 1]?.change
+    if (lastChange) {
+      finalState.setSelectedFloor(lastChange.floorLevel)
+      if (finalState.rooms.some((room) => room.id === lastChange.objectId)) {
+        finalState.selectRoom(lastChange.objectId)
+      }
+    }
+  }
 
   // Refreshes the Dashboard-card thumbnail right after Generate/Refine, not
   // just on manual Save Layout — Generate already persists a Design behind
@@ -320,9 +409,11 @@ export default function ProjectPage() {
     setGenerationStage('generating')
     setGenerateError(null)
     setLayoutSaveError(null)
+    const currentLayout = serializeLayout()
+    const refinementRun = ++refinementRunRef.current
     try {
       const result = await refineLayout(designId, sourcePrompt)
-      loadLayout(result)
+      await playRefinement(currentLayout, result, refinementRun)
       setDraftToRecover(null)
       setRecoveredDraftAvailable(false)
       setRefinementSummary(result.refinementSummary)
@@ -335,6 +426,9 @@ export default function ProjectPage() {
         getApiErrorMessage(err, 'Refinement failed. Try a more specific change.'),
       )
     } finally {
+      if (refinementRun === refinementRunRef.current) {
+        setRefinementPlayback(null)
+      }
       setGenerating(false)
       setGenerationStage('idle')
     }
@@ -713,10 +807,10 @@ export default function ProjectPage() {
                 <div className="pointer-events-none invisible absolute inset-0" aria-hidden="true">
                   <Canvas3D className="h-full" readOnly />
                 </div>
-                <Plan2D className="h-full" />
+                <Plan2D className="h-full" readOnly={Boolean(refinementPlayback)} />
               </>
             ) : (
-              <Canvas3D className="h-full" />
+              <Canvas3D className="h-full" readOnly={Boolean(refinementPlayback)} />
             )}
 
             <EditorTopBar
@@ -788,6 +882,10 @@ export default function ProjectPage() {
               <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
             )}
             <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
+
+            {refinementPlayback && (
+              <RefinementPlaybackPanel {...refinementPlayback} />
+            )}
 
             {refinementSummary && (
               <div

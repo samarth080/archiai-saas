@@ -540,6 +540,85 @@ describe('ProjectPage refine flow', () => {
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  it('applies authoritative refinement changes visibly before settling on the saved result', async () => {
+    const addedBedroom = {
+      ...INITIAL_ROOMS[3],
+      id: 'refined-bedroom',
+      label: 'Bedroom 2',
+      floorId: 'floor_0',
+      floorLevel: 0,
+    }
+    const refinedRooms = [...SAVED_DESIGN_FIXTURE.rooms, addedBedroom]
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/api/design/project/p1/latest') return { data: SAVED_DESIGN_FIXTURE }
+      if (url === '/api/design/d1/draft') {
+        const err: any = new Error('not found')
+        err.response = { status: 404 }
+        throw err
+      }
+      throw new Error('unexpected URL ' + url)
+    })
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        ...SAVED_DESIGN_FIXTURE,
+        designVersionId: 'v2',
+        metadata: {
+          ...SAVED_DESIGN_FIXTURE.metadata,
+          room_count: refinedRooms.length,
+        },
+        floors: [
+          {
+            ...SAVED_DESIGN_FIXTURE.floors[0],
+            rooms: refinedRooms,
+          },
+        ],
+        rooms: refinedRooms,
+        refinementSummary: 'Added 1 bedroom',
+        refinementChanges: [
+          {
+            action: 'add',
+            objectId: addedBedroom.id,
+            roomType: 'bedroom',
+            label: addedBedroom.label,
+            floorLevel: 0,
+            description: 'Add Bedroom 2',
+          },
+        ],
+      },
+    })
+
+    renderProjectPage()
+    const user = userEvent.setup()
+    const refineTab = await screen.findByRole('tab', { name: 'Refine' })
+    await waitFor(() => expect(refineTab).not.toBeDisabled())
+    await user.click(refineTab)
+    await user.type(screen.getByLabelText('Layout prompt'), 'add a bedroom')
+    await user.click(screen.getByRole('button', { name: 'Refine' }))
+
+    expect(
+      await screen.findByRole('status', { name: 'Refinement progress' }),
+    ).toHaveTextContent('Add Bedroom 2')
+    expect(useCanvasStore.getState().rooms.some((room) => room.id === addedBedroom.id)).toBe(false)
+
+    await waitFor(
+      () =>
+        expect(
+          useCanvasStore.getState().rooms.some((room) => room.id === addedBedroom.id),
+        ).toBe(true),
+      { timeout: 2500 },
+    )
+    await waitFor(
+      () =>
+        expect(
+          screen.queryByRole('status', { name: 'Refinement progress' }),
+        ).not.toBeInTheDocument(),
+      { timeout: 2500 },
+    )
+    expect(useCanvasStore.getState().designVersionId).toBe('v2')
+    expect(useCanvasStore.getState().selectedId).toBe(addedBedroom.id)
+    expect(await screen.findByText('Added 1 bedroom')).toBeInTheDocument()
+  })
 })
 
 describe('ProjectPage history drawer', () => {

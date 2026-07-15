@@ -117,6 +117,16 @@ export async function fetchDesignDraft(
 
 export interface RefineResponse extends GenerateResponse {
   refinementSummary: string
+  refinementChanges?: RefinementChange[]
+}
+
+export interface RefinementChange {
+  action: 'resize' | 'remove' | 'add'
+  objectId: string
+  roomType: string
+  label: string
+  floorLevel: number
+  description: string
 }
 
 export async function refineLayout(
