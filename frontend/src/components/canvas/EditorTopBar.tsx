@@ -49,7 +49,6 @@ interface EditorTopBarProps {
 }
 
 const VIEW_MODES: { value: CanvasViewMode; label: string }[] = [
-  { value: 'top', label: '2D' },
   { value: 'floor_plan', label: 'Plan' },
   { value: '3d', label: '3D' },
 ]

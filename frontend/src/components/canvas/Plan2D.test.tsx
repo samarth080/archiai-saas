@@ -129,6 +129,8 @@ describe('Plan2D', () => {
     render(<Plan2D />)
     const object = screen.getByTestId('plan-object-room-1')
 
+    expect(object).toHaveStyle({ outline: 'none' })
+
     fireEvent.pointerDown(object, { button: 0, pointerId: 1, clientX: 300, clientY: 300 })
 
     const state = useCanvasStore.getState()

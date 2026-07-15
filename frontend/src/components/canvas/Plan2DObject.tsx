@@ -87,7 +87,13 @@ export function Plan2DObject({
       data-testid={`plan-object-${room.id}`}
       data-object-type={room.objectType}
       transform={objectTransform}
-      style={{ cursor: readOnly ? 'default' : selected && definition.canMove ? 'grab' : 'pointer' }}
+      style={{
+        cursor: readOnly ? 'default' : selected && definition.canMove ? 'grab' : 'pointer',
+        // Native browser focus outlines on transformed SVG groups can scale
+        // into a huge black/white ring. The selected-room halo below is the
+        // intentional focus treatment and remains keyboard-visible.
+        outline: 'none',
+      }}
       onPointerDown={readOnly ? undefined : (event) => onObjectPointerDown(event, room)}
       onPointerMove={readOnly ? undefined : onObjectPointerMove}
       onPointerUp={readOnly ? undefined : onObjectPointerEnd}

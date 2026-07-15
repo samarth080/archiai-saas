@@ -189,6 +189,8 @@ describe('ProjectPage canvas views', () => {
 
     expect(screen.getByRole('application', { name: 'Editable floor plan' })).toBeInTheDocument()
     expect(useCanvasStore.getState().viewMode).toBe('floor_plan')
+    expect(screen.queryByRole('button', { name: '2D' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '3D' })).toBeInTheDocument()
   })
 
   it('gives the selected object inspector priority over the program panel', async () => {

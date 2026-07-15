@@ -12,7 +12,7 @@ import type { InteractionMode, PointerIntent } from './interactionModel'
 export type { CanvasObjectType } from './componentRegistry'
 export type { InteractionMode, PointerIntent } from './interactionModel'
 
-export type CanvasViewMode = '3d' | 'top' | 'floor_plan'
+export type CanvasViewMode = '3d' | 'floor_plan'
 
 export type CanvasEditAction =
   | 'object.added'
