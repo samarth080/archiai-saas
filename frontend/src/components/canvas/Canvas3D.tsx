@@ -6,6 +6,7 @@ import { useCanvasStore } from '../../store/canvasStore'
 import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
+import { EDITOR_PALETTE } from './editorPalette'
 
 interface Canvas3DProps {
   className?: string
@@ -31,7 +32,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
       : { position: [0, 28, 0.01] as [number, number, number], fov: 42 }
-  const background = viewMode === 'floor_plan' ? '#f8fafc' : '#eef2f7'
+  const background = `radial-gradient(circle at 50% 10%, ${EDITOR_PALETTE.workspaceHighlight} 0%, ${EDITOR_PALETTE.workspaceStart} 48%, ${EDITOR_PALETTE.workspaceEnd} 100%)`
 
   useCanvasKeyboardShortcuts({ disabled: readOnly })
 
@@ -82,7 +83,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       {clipboardMessage && (
         <div
           role="status"
-          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-ink/10 bg-white/95 px-3 py-2 text-xs font-medium text-ink shadow-sm"
+          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 px-3 py-2 text-xs font-medium text-ink shadow-[0_8px_28px_rgba(43,57,78,0.16)]"
         >
           {clipboardMessage}
         </div>

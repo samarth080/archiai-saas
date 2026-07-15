@@ -115,7 +115,7 @@ export function EditorTopBar({
         <span className="h-3.5 w-px bg-ink/15" />
 
         {editing ? (
-          <div className="flex flex-col gap-1 rounded-xl border border-ink/10 bg-white/95 p-2 shadow-sm">
+          <div className="flex flex-col gap-1 rounded-xl border border-slate-400/40 bg-[#F5F1E8]/95 p-2 shadow-[0_8px_28px_rgba(43,57,78,0.16)] backdrop-blur">
             <input
               type="text"
               value={editTitle}
@@ -167,14 +167,14 @@ export function EditorTopBar({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3 pointer-events-auto">
-        <div className="flex items-baseline gap-2 rounded-lg bg-white/70 px-3 py-1.5">
+        <div className="flex items-baseline gap-2 rounded-lg border border-slate-400/30 bg-[#EEF1F4]/85 px-3 py-1.5 backdrop-blur">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">Net area</span>
           <span className="font-mono text-sm font-semibold tabular-nums text-brand-700">
             {netArea.toFixed(0)} m²
           </span>
         </div>
 
-        <div className="flex items-center gap-0.5 rounded-lg border border-ink/10 bg-white/70 p-1">
+        <div className="flex items-center gap-0.5 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 p-1 backdrop-blur">
           {VIEW_MODES.map((mode) => (
             <button
               key={mode.value}
@@ -211,7 +211,7 @@ export function EditorTopBar({
           type="button"
           aria-label="Share project"
           onClick={onShare}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink/10 bg-white/70 text-ink/70 hover:bg-white/90"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 text-ink/70 hover:bg-[#F7F4ED]"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="18" cy="5" r="3" />

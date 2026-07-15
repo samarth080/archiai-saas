@@ -7,6 +7,7 @@ import {
   type CanvasObjectType,
 } from '../../store/componentRegistry'
 import { Plan2D } from './Plan2D'
+import { EDITOR_PALETTE } from './editorPalette'
 
 const TEST_ROOM: Room = {
   id: 'room-1',
@@ -86,6 +87,21 @@ beforeEach(() => {
 })
 
 describe('Plan2D', () => {
+  it('uses a distinct workspace and warm drawing sheet instead of stacked white surfaces', () => {
+    render(<Plan2D />)
+
+    expect(screen.getByTestId('plan-workspace-background')).toHaveAttribute(
+      'fill',
+      expect.stringContaining('plan-workspace-'),
+    )
+    expect(screen.getByTestId('plan-footprint')).toHaveAttribute(
+      'stroke',
+      EDITOR_PALETTE.planFrame,
+    )
+    expect(screen.getByTestId('plan-footprint').getAttribute('fill')).toContain('plan-sheet-')
+    expect(Object.values(EDITOR_PALETTE)).not.toContain('#ffffff')
+  })
+
   it('gives generated spaces a layered architectural surface and area hierarchy', () => {
     render(<Plan2D />)
 

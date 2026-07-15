@@ -53,7 +53,7 @@ export function CommandBar({
       <button
         role="tab"
         aria-selected={mode === 'generate'}
-        className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-white text-muted'}`}
+        className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-[#E8ECF1] text-muted'}`}
         onClick={() => onModeChange('generate')}
       >
         Generate
@@ -63,7 +63,7 @@ export function CommandBar({
         aria-selected={mode === 'refine'}
         disabled={!designId}
         title={designId ? '' : 'Generate a layout first'}
-        className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-white text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-[#E8ECF1] text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
         onClick={() => onModeChange('refine')}
       >
         Refine
@@ -71,7 +71,7 @@ export function CommandBar({
       {mode === 'generate' && (
         <button
           type="button"
-          className="px-3 py-1 bg-white text-muted hover:text-ink border-l border-ink/15"
+          className="border-l border-ink/15 bg-[#E8ECF1] px-3 py-1 text-muted hover:text-ink"
           onClick={() => setShowParams(!showParams)}
           aria-expanded={showParams}
         >
@@ -91,7 +91,7 @@ export function CommandBar({
           max={40}
           step={0.5}
           placeholder="auto"
-          className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-24 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={plotWidthM}
           onChange={(e) => setPlotWidthM(e.target.value)}
         />
@@ -103,7 +103,7 @@ export function CommandBar({
           min={1}
           max={5}
           placeholder="auto"
-          className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-20 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={floorsOverride}
           onChange={(e) => setFloorsOverride(e.target.value)}
         />
@@ -111,7 +111,7 @@ export function CommandBar({
       <label className="flex flex-col gap-1">
         Entry faces
         <select
-          className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-24 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           value={orientation}
           onChange={(e) => setOrientation(e.target.value as typeof orientation)}
         >
@@ -160,7 +160,7 @@ export function CommandBar({
           </svg>
           <span className="text-sm font-semibold text-muted">Describe your building to begin</span>
         </div>
-        <div className="rounded-2xl border border-ink/10 bg-white/90 backdrop-blur p-4 shadow-xl">
+        <div className="rounded-2xl border border-slate-400/40 bg-[#F5F1E8]/95 p-4 shadow-[0_22px_60px_rgba(43,57,78,0.22)] backdrop-blur">
           <div className="mb-2 flex justify-center">{tablist}</div>
           {paramsRow && <div className="mb-2 flex justify-center">{paramsRow}</div>}
           <textarea
@@ -198,7 +198,7 @@ export function CommandBar({
               key={q.label}
               type="button"
               onClick={() => setPrompt(q.brief)}
-              className="rounded-full border border-ink/10 bg-white/70 px-3 py-1 text-xs font-medium text-muted hover:border-brand-300 hover:text-brand-700"
+              className="rounded-full border border-slate-400/35 bg-[#E8ECF1]/85 px-3 py-1 text-xs font-medium text-muted hover:border-brand-300 hover:bg-[#F5F1E8] hover:text-brand-700"
             >
               {q.label}
             </button>
@@ -209,13 +209,13 @@ export function CommandBar({
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 flex flex-col gap-2 rounded-2xl border border-ink/10 bg-white/90 backdrop-blur p-3 shadow-lg">
+    <div className="absolute bottom-4 left-1/2 z-20 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-slate-400/40 bg-[#F5F1E8]/95 p-3 shadow-[0_18px_50px_rgba(43,57,78,0.2)] backdrop-blur">
       {tablist}
       {paramsRow}
       <div className="flex gap-2 items-end">
         <textarea
           aria-label="Layout prompt"
-          className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="flex-1 resize-none rounded-lg border border-ink/15 bg-[#FCFAF5] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           rows={1}
           placeholder={
             mode === 'refine'

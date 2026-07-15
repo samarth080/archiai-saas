@@ -31,6 +31,7 @@ import {
 } from './plan2dGeometry'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
+import { EDITOR_PALETTE } from './editorPalette'
 
 interface Plan2DProps {
   className?: string
@@ -97,7 +98,11 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   const pendingMoveRef = useRef<PendingMove | null>(null)
   const activeResizeRef = useRef<ActiveResize | null>(null)
   const activePanRef = useRef<ActivePan | null>(null)
-  const patternId = `plan-grid-${useId().replace(/:/g, '')}`
+  const idSuffix = useId().replace(/:/g, '')
+  const patternId = `plan-grid-${idSuffix}`
+  const workspaceGradientId = `plan-workspace-${idSuffix}`
+  const sheetGradientId = `plan-sheet-${idSuffix}`
+  const sheetShadowId = `plan-sheet-shadow-${idSuffix}`
 
   const rooms = useCanvasStore((state) => state.rooms)
   const floors = useCanvasStore((state) => state.floors)
@@ -451,7 +456,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   }
 
   return (
-    <div className={`relative overflow-hidden bg-slate-100 ${className ?? ''}`}>
+    <div className={`relative overflow-hidden bg-slate-300 ${className ?? ''}`}>
       <svg
         ref={svgRef}
         role="application"
@@ -470,17 +475,43 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         onContextMenu={readOnly ? undefined : (event) => event.preventDefault()}
       >
         <defs>
+          <radialGradient id={workspaceGradientId} cx="50%" cy="8%" r="92%">
+            <stop offset="0%" stopColor={EDITOR_PALETTE.workspaceHighlight} />
+            <stop offset="50%" stopColor={EDITOR_PALETTE.workspaceStart} />
+            <stop offset="100%" stopColor={EDITOR_PALETTE.workspaceEnd} />
+          </radialGradient>
+          <linearGradient id={sheetGradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={EDITOR_PALETTE.planSheetStart} />
+            <stop offset="100%" stopColor={EDITOR_PALETTE.planSheetEnd} />
+          </linearGradient>
+          <filter id={sheetShadowId} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow
+              dx="0"
+              dy="0.18"
+              stdDeviation="0.28"
+              floodColor={EDITOR_PALETTE.planFrame}
+              floodOpacity="0.22"
+            />
+          </filter>
           <pattern id={patternId} width="1" height="1" patternUnits="userSpaceOnUse">
             <path
               d="M 1 0 L 0 0 0 1"
               fill="none"
-              stroke="#cbd5e1"
+              stroke={EDITOR_PALETTE.planGrid}
+              strokeOpacity="0.42"
               strokeWidth="0.025"
               vectorEffect="non-scaling-stroke"
             />
           </pattern>
         </defs>
-        <rect x={viewBox.x} y={viewBox.z} width={viewBox.w} height={viewBox.d} fill="#f8fafc" />
+        <rect
+          data-testid="plan-workspace-background"
+          x={viewBox.x}
+          y={viewBox.z}
+          width={viewBox.w}
+          height={viewBox.d}
+          fill={`url(#${workspaceGradientId})`}
+        />
         <rect x={viewBox.x} y={viewBox.z} width={viewBox.w} height={viewBox.d} fill={`url(#${patternId})`} />
         {footprint && (
           <rect
@@ -489,11 +520,12 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
             y={footprint.z}
             width={footprint.w}
             height={footprint.d}
-            fill="#ffffff"
-            fillOpacity="0.92"
-            stroke="#0f172a"
+            fill={`url(#${sheetGradientId})`}
+            fillOpacity="0.98"
+            stroke={EDITOR_PALETTE.planFrame}
             strokeWidth={Math.max(0.05, fontSize * 0.14)}
             vectorEffect="non-scaling-stroke"
+            filter={`url(#${sheetShadowId})`}
           />
         )}
 
@@ -554,10 +586,10 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-600 shadow-sm">
+      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 px-3 py-2 text-[11px] font-medium text-slate-700 shadow-[0_8px_28px_rgba(43,57,78,0.14)] backdrop-blur">
         Left click selects - drag selected object - right drag pans - wheel zooms
       </div>
-      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-sm">
+      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 p-1 shadow-[0_8px_28px_rgba(43,57,78,0.14)] backdrop-blur">
         <button
           type="button"
           aria-label="Zoom out"
@@ -597,7 +629,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         </div>
       )}
       {clipboardMessage && (
-        <div role="status" className="pointer-events-none absolute left-1/2 top-28 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-800 shadow-sm">
+        <div role="status" className="pointer-events-none absolute left-1/2 top-28 -translate-x-1/2 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 px-3 py-2 text-xs font-medium text-slate-800 shadow-[0_8px_28px_rgba(43,57,78,0.14)]">
           {clipboardMessage}
         </div>
       )}
