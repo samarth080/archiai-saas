@@ -316,6 +316,11 @@ async def test_refine_creates_new_version_and_logs_activity(client: AsyncClient)
     bedrooms_after = sum(1 for r in data["rooms"] if r["roomType"] == "bedroom")
     assert bedrooms_after == bedrooms_before + 1
     assert "Added 1 bedroom" in data["refinementSummary"]
+    assert len(data["refinementChanges"]) == 1
+    added_change = data["refinementChanges"][0]
+    assert added_change["action"] == "add"
+    assert added_change["objectId"] in {room["id"] for room in data["rooms"]}
+    assert added_change["description"] == "Add Bedroom"
 
     async with TestSessionLocal() as session:
         version_count = await session.scalar(

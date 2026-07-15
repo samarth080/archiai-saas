@@ -53,7 +53,7 @@ def test_parse_returns_empty_for_unrecognised():
 import copy
 from math import sqrt
 
-from app.services.refinement_service import apply_refinement
+from app.services.refinement_service import apply_refinement, apply_refinement_with_changes
 
 SAMPLE_LAYOUT = {
     "version": "1.0",
@@ -214,3 +214,32 @@ def test_apply_combined_ops_summary():
         [AddOp(room_type="bedroom", count=1), RemoveOp(room_type="office", count=1)],
     )
     assert summary == "Removed 1 office, Added 1 bedroom"
+
+
+def test_apply_reports_ordered_object_changes_for_visual_playback():
+    layout = copy.deepcopy(SAMPLE_LAYOUT)
+
+    new_layout, summary, changes = apply_refinement_with_changes(
+        layout,
+        [
+            AddOp(room_type="bedroom", count=1),
+            RemoveOp(room_type="office", count=1),
+            ResizeOp(room_type="kitchen", factor=1.4),
+        ],
+    )
+
+    assert summary == "Resized 1 kitchen (Kitchen), Removed 1 office, Added 1 bedroom"
+    assert [change["action"] for change in changes] == ["resize", "remove", "add"]
+    assert changes[0] == {
+        "action": "resize",
+        "objectId": "r-2",
+        "roomType": "kitchen",
+        "label": "Kitchen",
+        "floorLevel": 0,
+        "description": "Resize Kitchen: 16.0 to 22.1 m2",
+    }
+    assert changes[1]["objectId"] == "r-3"
+    assert changes[1]["description"] == "Remove Office"
+    added_change = changes[2]
+    assert added_change["objectId"] in {room["id"] for room in new_layout["rooms"]}
+    assert added_change["description"] == "Add Bedroom"

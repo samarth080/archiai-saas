@@ -32,7 +32,7 @@ from app.services.layout_service import generate_layout
 from app.services.layout_pattern_service import get_layout_pattern_rules
 from app.services.planning import from_parser_output, score_graph_satisfaction
 from app.services.prompt_service import extract_total_area_sqm, parse_prompt, parsed_to_room_specs
-from app.services.refinement_service import apply_refinement, parse_refinement
+from app.services.refinement_service import apply_refinement_with_changes, parse_refinement
 from app.services.workspace_service import require_project_read_access
 from app.utils.activity import log_activity
 from app.utils.rate_limit import rate_limit
@@ -246,7 +246,7 @@ async def refine(
             ),
         )
 
-    new_layout, summary = apply_refinement(design.layout_json, ops)
+    new_layout, summary, changes = apply_refinement_with_changes(design.layout_json, ops)
     if not summary:
         raise HTTPException(
             status_code=422, detail="No matching rooms found for that change."
@@ -296,6 +296,7 @@ async def refine(
         designId=design.id,
         designVersionId=version.id,
         refinementSummary=summary,
+        refinementChanges=changes,
     )
 
 

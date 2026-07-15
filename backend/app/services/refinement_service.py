@@ -27,6 +27,7 @@ class ResizeOp:
 
 
 RefinementOp = AddOp | RemoveOp | ResizeOp
+RefinementChange = dict[str, str | int]
 
 _COUNT_ALTS = "|".join(WORD_TO_NUM.keys())
 _ADD_VERBS = r"add|include|insert|put in|put|another|also need"
@@ -252,9 +253,28 @@ def _make_room(room_type: str, layout: dict, existing_rooms: list[dict]) -> dict
     }
 
 
-def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
+def _change_for(
+    action: str,
+    room: dict,
+    description: str,
+) -> RefinementChange:
+    return {
+        "action": action,
+        "objectId": str(room["id"]),
+        "roomType": str(room.get("roomType") or "room"),
+        "label": str(room.get("label") or "Space"),
+        "floorLevel": int(room.get("floorLevel") or 0),
+        "description": description,
+    }
+
+
+def apply_refinement_with_changes(
+    layout: dict,
+    ops: list[RefinementOp],
+) -> tuple[dict, str, list[RefinementChange]]:
     rooms = [copy.deepcopy(r) for r in layout.get("rooms", [])]
     summary_parts: list[str] = []
+    changes: list[RefinementChange] = []
 
     # Order: RESIZE -> REMOVE -> ADD
     for op in ops:
@@ -265,10 +285,19 @@ def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
             continue
         f = sqrt(op.factor)
         for room in matches:
+            before_area = float(room["size"]["w"]) * float(room["size"]["d"])
             room["size"]["w"] = round(room["size"]["w"] * f, 1)
             room["size"]["d"] = round(room["size"]["d"] * f, 1)
             elevation = _floor_elevation_for_level(layout, room.get("floorLevel") or 0)
             room["position"]["y"] = round(elevation + room["size"]["h"] / 2, 2)
+            after_area = float(room["size"]["w"]) * float(room["size"]["d"])
+            changes.append(
+                _change_for(
+                    "resize",
+                    room,
+                    f"Resize {room['label']}: {before_area:.1f} to {after_area:.1f} m2",
+                )
+            )
         labels = ", ".join(m["label"] for m in matches)
         summary_parts.append(
             f"Resized {len(matches)} {_label_for_summary(op.room_type)}"
@@ -283,6 +312,10 @@ def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
         if not matches:
             continue
         to_remove = matches if op.count is None else matches[: op.count]
+        changes.extend(
+            _change_for("remove", room, f"Remove {room['label']}")
+            for room in to_remove
+        )
         remove_ids = {r["id"] for r in to_remove}
         rooms = [r for r in rooms if r["id"] not in remove_ids]
         label = _label_for_summary(op.room_type)
@@ -298,6 +331,9 @@ def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
             new_room = _make_room(op.room_type, layout, rooms)
             rooms.append(new_room)
             added.append(new_room)
+            changes.append(
+                _change_for("add", new_room, f"Add {new_room['label']}")
+            )
         if added:
             label = _label_for_summary(op.room_type)
             summary_parts.append(
@@ -308,4 +344,11 @@ def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
     summary = ", ".join(summary_parts)
     if summary:
         summary = summary[0].upper() + summary[1:]
+    return new_layout, summary, changes
+
+
+def apply_refinement(layout: dict, ops: list[RefinementOp]) -> tuple[dict, str]:
+    """Backward-compatible refinement API used by existing callers/tests."""
+
+    new_layout, summary, _ = apply_refinement_with_changes(layout, ops)
     return new_layout, summary

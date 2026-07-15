@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -175,8 +175,18 @@ class GenerateResponse(BaseModel):
     alternatives: list[LayoutOption] | None = None
 
 
+class RefinementChange(BaseModel):
+    action: Literal["resize", "remove", "add"]
+    objectId: str
+    roomType: str
+    label: str
+    floorLevel: int
+    description: str
+
+
 class RefineResponse(GenerateResponse):
     refinementSummary: str
+    refinementChanges: list[RefinementChange] = Field(default_factory=list)
 
 
 class DesignDraftResponse(GenerateResponse):
