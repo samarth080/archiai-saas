@@ -25,7 +25,10 @@ export function MeasurePanel() {
   if (!selected && !measureMode) return null
 
   return (
-    <div className="absolute left-16 top-4 z-10 w-52 rounded-lg border border-gray-200 bg-white/95 p-3 text-xs shadow-sm">
+    <aside
+      aria-label="Measurements"
+      className="absolute left-16 top-20 z-10 w-52 rounded-lg border border-gray-200 bg-white/95 p-3 text-xs shadow-sm"
+    >
       {selected && (
         <div className="mb-2">
           <div className="mb-1 font-semibold text-gray-700">{selected.label}</div>
@@ -77,6 +80,6 @@ export function MeasurePanel() {
             : 'Click two points on the canvas.'}
         </p>
       )}
-    </div>
+    </aside>
   )
 }
