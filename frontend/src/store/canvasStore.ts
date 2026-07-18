@@ -199,7 +199,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 0 },
     size: { w: 6, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#b3b8e9',
+    color: '#5F6E88',
   },
   {
     id: 'room-2',
@@ -208,7 +208,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 7, y: 1.5, z: 0 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#6bc0a1',
+    color: '#84705B',
   },
   {
     id: 'room-3',
@@ -217,7 +217,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 6 },
     size: { w: 5, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#dea97d',
+    color: '#5E7876',
   },
   {
     id: 'room-4',
@@ -226,7 +226,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 6, y: 1.5, z: 6 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#e4a6c6',
+    color: '#6E7F68',
   },
   {
     id: 'room-5',
@@ -235,7 +235,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 11, y: 1.5, z: 6 },
     size: { w: 3, h: 3, d: 3 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#9abbe4',
+    color: '#4E5B72',
   },
 ]
 

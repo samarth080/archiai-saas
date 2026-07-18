@@ -1,6 +1,6 @@
 import { Html, Line } from '@react-three/drei'
 import { Room } from '../../store/canvasStore'
-import { BRAND_HEX } from '../../constants/theme'
+import { ACCENT_HEX, DIM_HEX } from '../../constants/theme'
 
 interface DimensionAnnotationsProps {
   room: Room
@@ -21,7 +21,7 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
   const halfW = w / 2
   const halfD = d / 2
   const lineY = 0.02
-  const color = emphasized ? BRAND_HEX : '#94a3b8'
+  const color = emphasized ? ACCENT_HEX : DIM_HEX
   const lineWidth = emphasized ? 1.5 : 1
 
   const widthLineZ = z - halfD - OFFSET
@@ -57,7 +57,7 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       <Html position={[x, lineY, widthLineZ - 0.3]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
         <span
           className={`rounded-lg px-1.5 py-0.5 text-[10px] font-mono font-medium shadow-sm ${
-            emphasized ? 'bg-brand-600 text-white' : 'bg-white/85 text-muted'
+            emphasized ? 'bg-ink text-graphite-900' : 'bg-graphite-800/85 text-muted'
           }`}
         >
           {formatMeters(w)}
@@ -92,7 +92,7 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       <Html position={[depthLineX - 0.3, lineY, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
         <span
           className={`rounded-lg px-1.5 py-0.5 text-[10px] font-mono font-medium shadow-sm ${
-            emphasized ? 'bg-brand-600 text-white' : 'bg-white/85 text-muted'
+            emphasized ? 'bg-ink text-graphite-900' : 'bg-graphite-800/85 text-muted'
           }`}
         >
           {formatMeters(d)}
@@ -102,7 +102,7 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       {/* Area badge — selected room only; sits above the room label */}
       {emphasized && (
         <Html position={[x, y + h / 2 + 0.65, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="rounded-lg border border-brand-200 bg-white/95 px-2 py-1 text-[11px] font-mono font-semibold text-brand-700 shadow-sm">
+          <span className="rounded-lg border border-ink/20 bg-graphite-800/95 px-2 py-1 text-[11px] font-mono font-semibold text-ink shadow-sm">
             {w.toFixed(2)} × {d.toFixed(2)} m · {(w * d).toFixed(1)} m²
           </span>
         </Html>

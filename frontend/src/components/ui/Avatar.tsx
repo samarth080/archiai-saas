@@ -1,6 +1,6 @@
 // Deterministic avatar color from a hash of the user's name/email, so the
 // same person always gets the same color (no randomness, no extra data).
-const AVATAR_COLORS = ['#7A6CD6', '#3FA39B', '#E08A6B', '#C77DBB', '#5B8DD9']
+const AVATAR_COLORS = ['#5F6E88', '#5E7876', '#84705B', '#71657E', '#6E7F68']
 
 function hashString(value: string): number {
   let hash = 0
