@@ -2,6 +2,7 @@ import type { KeyboardEvent, PointerEvent } from 'react'
 import type { Room } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { PLAN_RESIZE_HANDLES, type PlanResizeHandle } from './plan2dGeometry'
+import { displayRoomColor } from './editorPalette'
 
 interface Plan2DObjectProps {
   room: Room
@@ -66,7 +67,7 @@ export function Plan2DObject({
   const showObjectDimensions = definition.canResize && (selected || showDimensions)
   const dimensionOffset = Math.max(fontSize * 1.5, handleSize * 1.4)
   const rotation = Number.isFinite(room.rotation.y) ? room.rotation.y : 0
-  const stroke = selected ? '#6354b8' : isOpening ? '#475569' : '#334155'
+  const stroke = selected ? '#FFFFFF' : isOpening ? '#8A8E95' : '#B9BCC1'
   const strokeWidth = selected ? Math.max(0.06, fontSize * 0.16) : Math.max(0.025, fontSize * 0.07)
   const fillOpacity = isOpenSpace ? 0.2 : isSpace ? 0.68 : isOpening ? 0.82 : isThin ? 0.72 : 0.64
   const objectTransform = `translate(${room.position.x} ${room.position.z}) rotate(${rotation})`
@@ -114,8 +115,8 @@ export function Plan2DObject({
           height={room.size.d + handleSize * 0.56}
           rx={surfaceRadius + handleSize * 0.2}
           fill="none"
-          stroke="#9b8ce8"
-          strokeOpacity="0.5"
+          stroke="#FFFFFF"
+          strokeOpacity="0.55"
           strokeWidth={Math.max(0.1, fontSize * 0.3)}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
@@ -129,7 +130,7 @@ export function Plan2DObject({
         width={room.size.w}
         height={room.size.d}
         rx={surfaceRadius}
-        fill={room.color}
+        fill={displayRoomColor(room)}
         fillOpacity={fillOpacity}
         stroke={stroke}
         strokeWidth={strokeWidth}
@@ -146,9 +147,9 @@ export function Plan2DObject({
           height={Math.max(0, room.size.d - inset * 2)}
           rx={Math.max(0, surfaceRadius - inset * 0.2)}
           fill="#ffffff"
-          fillOpacity={isOpenSpace ? 0.08 : 0.16}
+          fillOpacity={isOpenSpace ? 0.04 : 0.07}
           stroke="#ffffff"
-          strokeOpacity={selected ? 0.62 : 0.34}
+          strokeOpacity={selected ? 0.55 : 0.28}
           strokeWidth={Math.max(0.018, fontSize * 0.045)}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
@@ -161,7 +162,7 @@ export function Plan2DObject({
           y1={0}
           x2={room.size.w / 2}
           y2={0}
-          stroke="#0284c7"
+          stroke="#7C93A6"
           strokeWidth={Math.max(0.04, fontSize * 0.11)}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
@@ -175,7 +176,7 @@ export function Plan2DObject({
             y1={room.size.d / 2}
             x2={room.size.w / 2}
             y2={room.size.d / 2}
-            stroke="#92400e"
+            stroke="#9C8468"
             strokeWidth={Math.max(0.04, fontSize * 0.11)}
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
@@ -183,7 +184,7 @@ export function Plan2DObject({
           <path
             d={`M ${-room.size.w / 2} ${room.size.d / 2} A ${room.size.w} ${room.size.w} 0 0 1 ${room.size.w / 2} ${room.size.d / 2 - room.size.w}`}
             fill="none"
-            stroke="#b45309"
+            stroke="#A08B70"
             strokeDasharray={`${fontSize * 0.3} ${fontSize * 0.22}`}
             strokeWidth={Math.max(0.025, fontSize * 0.07)}
             vectorEffect="non-scaling-stroke"
@@ -200,7 +201,7 @@ export function Plan2DObject({
             y1={-room.size.d / 2 + (room.size.d * step) / 6}
             x2={room.size.w / 2}
             y2={-room.size.d / 2 + (room.size.d * step) / 6}
-            stroke="#9a3412"
+            stroke="#8A7D64"
             strokeWidth={Math.max(0.02, fontSize * 0.055)}
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
@@ -216,7 +217,7 @@ export function Plan2DObject({
             dominantBaseline="middle"
             fontSize={fontSize}
             fontWeight={selected ? 700 : 600}
-            fill={selected ? '#51449d' : '#172033'}
+            fill={selected ? '#FFFFFF' : '#E8E9EB'}
           >
             {room.label}
           </text>
@@ -228,7 +229,7 @@ export function Plan2DObject({
               dominantBaseline="middle"
               fontSize={fontSize * 0.72}
               fontWeight="600"
-              fill={selected ? '#6354b8' : '#526077'}
+              fill={selected ? '#DDDEE1' : '#9CA0A8'}
             >
               {(room.size.w * room.size.d).toFixed(1)} m²
             </text>
@@ -243,7 +244,7 @@ export function Plan2DObject({
             y1={-room.size.d / 2 - dimensionOffset}
             x2={room.size.w / 2}
             y2={-room.size.d / 2 - dimensionOffset}
-            stroke={selected ? '#6354b8' : '#94a3b8'}
+            stroke={selected ? '#FFFFFF' : '#6C7078'}
             strokeWidth={Math.max(0.02, fontSize * 0.055)}
             vectorEffect="non-scaling-stroke"
           />
@@ -252,7 +253,7 @@ export function Plan2DObject({
             y={-room.size.d / 2 - dimensionOffset - fontSize * 0.35}
             textAnchor="middle"
             fontSize={fontSize * 0.78}
-            fill={selected ? '#51449d' : '#64748b'}
+            fill={selected ? '#F3F4F5' : '#8A8E95'}
           >
             {room.size.w.toFixed(2)} m
           </text>
@@ -261,7 +262,7 @@ export function Plan2DObject({
             y1={-room.size.d / 2}
             x2={-room.size.w / 2 - dimensionOffset}
             y2={room.size.d / 2}
-            stroke={selected ? '#6354b8' : '#94a3b8'}
+            stroke={selected ? '#FFFFFF' : '#6C7078'}
             strokeWidth={Math.max(0.02, fontSize * 0.055)}
             vectorEffect="non-scaling-stroke"
           />
@@ -271,7 +272,7 @@ export function Plan2DObject({
             textAnchor="middle"
             dominantBaseline="middle"
             fontSize={fontSize * 0.78}
-            fill={selected ? '#51449d' : '#64748b'}
+            fill={selected ? '#F3F4F5' : '#8A8E95'}
             transform={`rotate(-90 ${-room.size.w / 2 - dimensionOffset - fontSize * 0.35} 0)`}
           >
             {room.size.d.toFixed(2)} m
@@ -293,7 +294,7 @@ export function Plan2DObject({
               height={handleSize}
               rx={handleSize * 0.18}
               fill="#ffffff"
-              stroke="#6354b8"
+              stroke="#131417"
               strokeWidth={Math.max(0.04, fontSize * 0.11)}
               vectorEffect="non-scaling-stroke"
               style={{ cursor: cursorForHandle(handle) }}

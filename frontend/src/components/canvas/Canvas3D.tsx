@@ -83,7 +83,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       {clipboardMessage && (
         <div
           role="status"
-          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 px-3 py-2 text-xs font-medium text-ink shadow-[0_8px_28px_rgba(43,57,78,0.16)]"
+          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-ink/10 bg-graphite-800/95 px-3 py-2 text-xs font-medium text-ink shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
         >
           {clipboardMessage}
         </div>

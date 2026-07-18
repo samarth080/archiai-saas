@@ -121,8 +121,8 @@ function ToolButton({
         onClick={tool.onClick}
         className={`flex h-9 w-9 items-center justify-center rounded-lg ${
           tool.active
-            ? 'bg-brand-600/10 text-brand-600'
-            : 'text-muted-light hover:bg-brand-600/10 hover:text-brand-600'
+            ? 'bg-ink/10 text-ink'
+            : 'text-muted-light hover:bg-ink/10 hover:text-ink'
         }`}
       >
         <svg
@@ -139,10 +139,10 @@ function ToolButton({
         </svg>
       </button>
       {hovered === tool.key && (
-        <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-white shadow-lg">
+        <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-graphite-900 shadow-lg">
           <span className="text-xs font-semibold">{tool.label}</span>
           {tool.shortcut && (
-            <span className="rounded bg-white px-1 py-0.5 font-mono text-[10px] font-semibold text-ink">
+            <span className="rounded bg-graphite-800 px-1 py-0.5 font-mono text-[10px] font-semibold text-graphite-100">
               {tool.shortcut}
             </span>
           )}
@@ -219,13 +219,13 @@ export function ToolRail() {
       ))}
 
       {moreOpen && (
-        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-white p-1.5 shadow-2xl">
+        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-graphite-800 p-1.5 shadow-2xl">
           {PROFESSIONAL_COMPONENTS.map((definition) => (
             <button
               key={definition.type}
               type="button"
               onClick={() => armPlacement(definition.type)}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/80 hover:bg-brand-600/10 hover:text-brand-700"
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/80 hover:bg-ink/10 hover:text-ink"
             >
               <svg
                 width="15"

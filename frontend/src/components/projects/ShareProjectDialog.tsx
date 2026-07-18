@@ -67,17 +67,17 @@ export function ShareProjectDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-graphite-950/70 p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Share ${projectTitle}`}
-        className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded border border-gray-200 bg-white p-5 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded border border-ink/10 bg-graphite-800 p-5 shadow-xl"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Share read-only project</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-base font-semibold text-ink">Share read-only project</h2>
+            <p className="mt-1 text-sm text-muted-light">
               Anyone with the link can view the latest saved layout. They cannot edit it.
             </p>
           </div>
@@ -85,7 +85,7 @@ export function ShareProjectDialog({
             type="button"
             aria-label="Close share dialog"
             onClick={onClose}
-            className="text-sm text-gray-500 hover:text-gray-900"
+            className="text-sm text-muted-light hover:text-ink"
           >
             Close
           </button>
@@ -97,7 +97,7 @@ export function ShareProjectDialog({
               aria-label="Share link"
               readOnly
               value={publicUrl}
-              className="w-full rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700"
+              className="w-full rounded border border-ink/15 bg-surface px-3 py-2 text-sm text-muted"
               onFocus={(event) => event.currentTarget.select()}
             />
             <div className="flex items-center gap-2">
@@ -115,8 +115,8 @@ export function ShareProjectDialog({
           </Button>
         )}
 
-        {message && <p className="mt-3 text-sm text-emerald-700">{message}</p>}
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {message && <p className="mt-3 text-sm text-ok">{message}</p>}
+        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
       </div>
     </div>
   )

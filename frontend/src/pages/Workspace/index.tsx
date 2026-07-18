@@ -88,12 +88,12 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-surface">
       <Sidebar userName={user?.name} userEmail={user?.email} onLogout={logOut} />
       <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
-        {loading && <p className="py-12 text-center text-gray-400">Loading...</p>}
+        {loading && <p className="py-12 text-center text-muted-light">Loading...</p>}
         {!loading && error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
             {error}
           </div>
         )}
@@ -104,8 +104,8 @@ export default function WorkspacePage() {
                 <Button variant="secondary" onClick={() => navigate('/workspaces')} className="mb-4">
                   Back
                 </Button>
-                <h1 className="text-2xl font-bold text-gray-900">{workspace.name}</h1>
-                <p className="mt-1 text-sm text-gray-500">
+                <h1 className="text-2xl font-bold text-ink">{workspace.name}</h1>
+                <p className="mt-1 text-sm text-muted-light">
                   {workspace.description ?? 'No description'}
                 </p>
               </div>
@@ -117,9 +117,9 @@ export default function WorkspacePage() {
             </div>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">Shared projects</h2>
+              <h2 className="mb-3 text-lg font-semibold text-ink">Shared projects</h2>
               {projects.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-8 text-center text-sm text-gray-400">
+                <p className="rounded-lg border border-dashed border-ink/15 bg-graphite-800 px-4 py-8 text-center text-sm text-muted-light">
                   No shared projects yet.
                 </p>
               ) : (
@@ -136,7 +136,7 @@ export default function WorkspacePage() {
             </section>
 
             <section className="mt-8">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">Members</h2>
+              <h2 className="mb-3 text-lg font-semibold text-ink">Members</h2>
               {canManageMembers && id && (
                 <div className="mb-4">
                   <AddMemberForm
@@ -148,7 +148,7 @@ export default function WorkspacePage() {
                   />
                 </div>
               )}
-              {memberError && <p className="mb-3 text-sm text-red-600">{memberError}</p>}
+              {memberError && <p className="mb-3 text-sm text-danger">{memberError}</p>}
               <MemberList
                 members={members}
                 canManage={canManageMembers}
@@ -158,15 +158,15 @@ export default function WorkspacePage() {
             </section>
 
             <section className="mt-8">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">Recent activity</h2>
+              <h2 className="mb-3 text-lg font-semibold text-ink">Recent activity</h2>
               {activity.length === 0 ? (
-                <p className="text-sm text-gray-400">No workspace activity yet.</p>
+                <p className="text-sm text-muted-light">No workspace activity yet.</p>
               ) : (
-                <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+                <div className="divide-y divide-ink/10 rounded-lg border border-ink/10 bg-graphite-800">
                   {activity.map((entry) => (
                     <div key={entry.id} className="flex justify-between gap-4 px-4 py-3 text-sm">
-                      <span className="text-gray-700">{activityLabel(entry.action)}</span>
-                      <time className="whitespace-nowrap text-xs text-gray-400">
+                      <span className="text-muted">{activityLabel(entry.action)}</span>
+                      <time className="whitespace-nowrap text-xs text-muted-light">
                         {new Date(entry.timestamp).toLocaleString()}
                       </time>
                     </div>

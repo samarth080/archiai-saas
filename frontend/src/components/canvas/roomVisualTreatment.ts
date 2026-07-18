@@ -41,8 +41,8 @@ export function roomVisualTreatment(
     depthWrite: opacity > 0.75,
     roughness: definition.category === 'opening' ? 0.48 : 0.72,
     metalness: definition.category === 'structure' ? 0.07 : 0.02,
-    emissive: selected ? '#6354b8' : '#000000',
-    emissiveIntensity: selected ? 0.24 : 0,
-    edgeColor: selected ? '#6354b8' : '#3f4b5f',
+    emissive: selected ? '#ffffff' : '#000000',
+    emissiveIntensity: selected ? 0.12 : 0,
+    edgeColor: selected ? '#ffffff' : '#1e2024',
   }
 }

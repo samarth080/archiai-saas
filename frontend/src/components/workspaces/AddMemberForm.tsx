@@ -39,7 +39,7 @@ export function AddMemberForm({ workspaceId, onAdded }: AddMemberFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-      <label className="min-w-56 flex-1 text-sm font-medium text-gray-700">
+      <label className="min-w-56 flex-1 text-sm font-medium text-muted">
         Member email
         <input
           type="email"
@@ -47,15 +47,15 @@ export function AddMemberForm({ workspaceId, onAdded }: AddMemberFormProps) {
           onChange={(event) => setEmail(event.target.value)}
           required
           placeholder="teammate@example.com"
-          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="mt-1 w-full rounded border border-ink/15 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </label>
-      <label className="text-sm font-medium text-gray-700">
+      <label className="text-sm font-medium text-muted">
         Role
         <select
           value={role}
           onChange={(event) => setRole(event.target.value as AssignableWorkspaceRole)}
-          className="mt-1 block rounded border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="mt-1 block rounded border border-ink/15 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="admin">Admin</option>
           <option value="editor">Editor</option>
@@ -65,7 +65,7 @@ export function AddMemberForm({ workspaceId, onAdded }: AddMemberFormProps) {
       <Button type="submit" loading={submitting}>
         Add member
       </Button>
-      {error && <p className="w-full text-sm text-red-600">{error}</p>}
+      {error && <p className="w-full text-sm text-danger">{error}</p>}
     </form>
   )
 }

@@ -456,7 +456,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   }
 
   return (
-    <div className={`relative overflow-hidden bg-slate-300 ${className ?? ''}`}>
+    <div className={`relative overflow-hidden bg-graphite-900 ${className ?? ''}`}>
       <svg
         ref={svgRef}
         role="application"
@@ -554,7 +554,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
             cx={point.x}
             cy={point.z}
             r={handleSize * 0.38}
-            fill="#dc2626"
+            fill="#C9A96E"
             pointerEvents="none"
           />
         ))}
@@ -565,7 +565,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
               y1={measurePoints[0].z}
               x2={measurePoints[1].x}
               y2={measurePoints[1].z}
-              stroke="#dc2626"
+              stroke="#C9A96E"
               strokeWidth={Math.max(0.04, fontSize * 0.11)}
               vectorEffect="non-scaling-stroke"
             />
@@ -575,7 +575,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
               textAnchor="middle"
               fontSize={fontSize * 0.86}
               fontWeight="700"
-              fill="#b91c1c"
+              fill="#C9A96E"
             >
               {Math.hypot(
                 measurePoints[1].x - measurePoints[0].x,
@@ -586,32 +586,32 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 px-3 py-2 text-[11px] font-medium text-slate-700 shadow-[0_8px_28px_rgba(43,57,78,0.14)] backdrop-blur">
+      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-ink/10 bg-graphite-800/90 px-3 py-2 text-[11px] font-medium text-muted shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
         Left click selects - drag selected object - right drag pans - wheel zooms
       </div>
-      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 p-1 shadow-[0_8px_28px_rgba(43,57,78,0.14)] backdrop-blur">
+      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-ink/10 bg-graphite-800/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
         <button
           type="button"
           aria-label="Zoom out"
-          className="h-7 w-7 rounded text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          className="h-7 w-7 rounded text-sm font-semibold text-muted hover:bg-ink/10"
           onClick={() => setZoom((current) => Math.max(0.6, current * 0.85))}
         >
           -
         </button>
-        <span className="min-w-12 text-center font-mono text-[10px] text-slate-500">
+        <span className="min-w-12 text-center font-mono text-[10px] text-muted-light">
           {Math.round(zoom * 100)}%
         </span>
         <button
           type="button"
           aria-label="Zoom in"
-          className="h-7 w-7 rounded text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          className="h-7 w-7 rounded text-sm font-semibold text-muted hover:bg-ink/10"
           onClick={() => setZoom((current) => Math.min(5, current * 1.18))}
         >
           +
         </button>
         <button
           type="button"
-          className="rounded px-2 py-1 text-[10px] font-semibold text-brand-700 hover:bg-brand-50"
+          className="rounded px-2 py-1 text-[10px] font-semibold text-ink hover:bg-ink/10"
           onClick={fitPlan}
         >
           Fit
@@ -619,17 +619,17 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
       </div>
 
       {selectedFloor === 'all' && activeFloor && (
-        <div role="status" className="absolute left-1/2 top-24 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm">
+        <div role="status" className="absolute left-1/2 top-24 -translate-x-1/2 rounded-full border border-warn/30 bg-graphite-800/95 px-3 py-1.5 text-[11px] font-medium text-warn shadow-sm">
           Plan view shows {activeFloor.name}. Choose a level to edit another floor.
         </div>
       )}
       {visibleRooms.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-500">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-light">
           Add a component or generate a layout to begin this floor plan.
         </div>
       )}
       {clipboardMessage && (
-        <div role="status" className="pointer-events-none absolute left-1/2 top-28 -translate-x-1/2 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/95 px-3 py-2 text-xs font-medium text-slate-800 shadow-[0_8px_28px_rgba(43,57,78,0.14)]">
+        <div role="status" className="pointer-events-none absolute left-1/2 top-28 -translate-x-1/2 rounded-lg border border-ink/10 bg-graphite-800/95 px-3 py-2 text-xs font-medium text-ink shadow-[0_8px_28px_rgba(0,0,0,0.14)]">
           {clipboardMessage}
         </div>
       )}

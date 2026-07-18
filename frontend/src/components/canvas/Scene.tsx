@@ -32,16 +32,16 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
 
   // Distinct floor slab colours so stacked floors are visually separable
   const floorSlabColor = (level: number) => {
-    if (isPlanView) return '#f1f5f9'
-    const palette = ['#c8d3df', '#b8c9d8', '#a8bac8', '#98aab8']
+    if (isPlanView) return '#26282D'
+    const palette = ['#2A2D33', '#303439', '#363A40', '#3C4046']
     return palette[level % palette.length]
   }
 
   return (
     <>
-      <ambientLight intensity={isPlanView ? 0.9 : 0.42} />
+      <ambientLight intensity={isPlanView ? 0.9 : 0.5} />
       {!isPlanView && (
-        <hemisphereLight args={['#f8fafc', '#9aa8b8', 0.58]} />
+        <hemisphereLight args={['#B9BCC1', '#26282D', 0.5]} />
       )}
       <directionalLight
         position={[10, 20, 10]}
@@ -75,7 +75,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
               </mesh>
               <lineSegments raycast={() => null}>
                 <edgesGeometry args={[edgeGeometry]} />
-                <lineBasicMaterial color={floor.level === 0 ? '#334155' : '#64748b'} />
+                <lineBasicMaterial color={floor.level === 0 ? '#8A8E95' : '#5C6067'} />
               </lineSegments>
             </group>
 
@@ -88,9 +88,9 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
               >
                 <planeGeometry args={[footprint.w, footprint.d]} />
                 <meshStandardMaterial
-                  color="#94a3b8"
+                  color="#43474E"
                   transparent
-                  opacity={0.18}
+                  opacity={0.3}
                   side={2}
                 />
               </mesh>
@@ -102,8 +102,8 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       <Grid
         args={[40, 40]}
         position={[0, 0, 0]}
-        cellColor={isPlanView ? '#cbd5e1' : '#94a3b8'}
-        sectionColor={isPlanView ? '#94a3b8' : '#e2e8f0'}
+        cellColor={isPlanView ? '#2E3136' : '#2E3136'}
+        sectionColor={isPlanView ? '#43464C' : '#43464C'}
         fadeDistance={isPlanView ? 80 : 60}
         infiniteGrid={!isPlanView}
       />
@@ -160,7 +160,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       {measurePoints.map((point, index) => (
         <mesh key={index} position={[point.x, 0.05, point.z]} raycast={() => null}>
           <sphereGeometry args={[0.18, 12, 12]} />
-          <meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.4} />
+          <meshStandardMaterial color="#C9A96E" emissive="#C9A96E" emissiveIntensity={0.4} />
         </mesh>
       ))}
       {measurePoints.length === 2 && (
@@ -170,7 +170,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
               [measurePoints[0].x, 0.05, measurePoints[0].z],
               [measurePoints[1].x, 0.05, measurePoints[1].z],
             ]}
-            color="#dc2626"
+            color="#C9A96E"
             lineWidth={2}
           />
           <Html
@@ -182,7 +182,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
             center
             style={{ pointerEvents: 'none' }}
           >
-            <div className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow">
+            <div className="rounded bg-warn px-2 py-0.5 text-[11px] font-semibold text-graphite-900 shadow">
               {Math.hypot(
                 measurePoints[1].x - measurePoints[0].x,
                 measurePoints[1].z - measurePoints[0].z,

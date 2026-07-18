@@ -110,26 +110,26 @@ export function EditorTopBar({
           title="Back to projects"
         >
           <span className="text-sm font-extrabold tracking-wide">ARCHI</span>
-          <span className="text-sm font-extrabold tracking-wide text-brand-600">·AI</span>
+          <span className="text-sm font-extrabold tracking-wide text-ink">·AI</span>
         </button>
         <span className="h-3.5 w-px bg-ink/15" />
 
         {editing ? (
-          <div className="flex flex-col gap-1 rounded-xl border border-slate-400/40 bg-[#F5F1E8]/95 p-2 shadow-[0_8px_28px_rgba(43,57,78,0.16)] backdrop-blur">
+          <div className="flex flex-col gap-1 rounded-xl border border-ink/10 bg-graphite-800/95 p-2 shadow-[0_8px_28px_rgba(0,0,0,0.16)] backdrop-blur">
             <input
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              className="rounded-lg border border-ink/15 px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="rounded-lg border border-ink/15 px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               rows={2}
               placeholder="Description (optional)"
-              className="w-56 resize-none rounded-lg border border-ink/15 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-56 resize-none rounded-lg border border-ink/15 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
-            {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+            {saveError && <p className="text-xs text-danger">{saveError}</p>}
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -143,7 +143,7 @@ export function EditorTopBar({
                 type="button"
                 onClick={onSaveTitle}
                 disabled={savingTitle || !editTitle.trim()}
-                className="flex-1 rounded-lg bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-500 disabled:bg-brand-300"
+                className="flex-1 rounded-lg bg-ink px-2 py-1 text-xs font-medium text-graphite-900 hover:bg-graphite-100 disabled:bg-graphite-500"
               >
                 Save
               </button>
@@ -167,21 +167,21 @@ export function EditorTopBar({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3 pointer-events-auto">
-        <div className="flex items-baseline gap-2 rounded-lg border border-slate-400/30 bg-[#EEF1F4]/85 px-3 py-1.5 backdrop-blur">
+        <div className="flex items-baseline gap-2 rounded-lg border border-ink/10 bg-graphite-800/85 px-3 py-1.5 backdrop-blur">
           <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">Net area</span>
-          <span className="font-mono text-sm font-semibold tabular-nums text-brand-700">
+          <span className="font-mono text-sm font-semibold tabular-nums text-ink">
             {netArea.toFixed(0)} m²
           </span>
         </div>
 
-        <div className="flex items-center gap-0.5 rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 p-1 backdrop-blur">
+        <div className="flex items-center gap-0.5 rounded-lg border border-ink/10 bg-graphite-800/90 p-1 backdrop-blur">
           {VIEW_MODES.map((mode) => (
             <button
               key={mode.value}
               type="button"
               onClick={() => setViewMode(mode.value)}
               className={`rounded-lg px-2.5 py-1 font-mono text-xs font-semibold ${
-                viewMode === mode.value ? 'bg-brand-600 text-white' : 'text-muted hover:text-ink'
+                viewMode === mode.value ? 'bg-ink text-graphite-900' : 'text-muted hover:text-ink'
               }`}
             >
               {mode.label}
@@ -211,7 +211,7 @@ export function EditorTopBar({
           type="button"
           aria-label="Share project"
           onClick={onShare}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-400/40 bg-[#EEF1F4]/90 text-ink/70 hover:bg-[#F7F4ED]"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink/10 bg-graphite-800/90 text-ink/70 hover:bg-graphite-750"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="18" cy="5" r="3" />

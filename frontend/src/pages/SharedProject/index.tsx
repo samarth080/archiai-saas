@@ -44,32 +44,32 @@ export default function SharedProjectPage() {
   }, [token, loadLayout, clearLayout])
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">Loading shared project...</div>
+    return <div className="flex min-h-screen items-center justify-center text-sm text-muted-light">Loading shared project...</div>
   }
 
   if (error || !sharedProject) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-        <div className="max-w-md rounded border border-red-200 bg-white p-5 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-gray-900">Shared project unavailable</h1>
-          <p className="mt-2 text-sm text-red-600">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-surface p-6">
+        <div className="max-w-md rounded border border-danger/30 bg-graphite-800 p-5 text-center shadow-sm">
+          <h1 className="text-lg font-semibold text-ink">Shared project unavailable</h1>
+          <p className="mt-2 text-sm text-danger">{error}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <main className="flex h-screen flex-col bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
+    <main className="flex h-screen flex-col bg-surface">
+      <header className="border-b border-ink/10 bg-graphite-800 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase text-indigo-600">ArchiAI shared project</p>
-            <h1 className="mt-1 text-xl font-bold text-gray-900">{sharedProject.project.title}</h1>
+            <h1 className="mt-1 text-xl font-bold text-ink">{sharedProject.project.title}</h1>
             {sharedProject.project.description && (
-              <p className="mt-1 text-sm text-gray-500">{sharedProject.project.description}</p>
+              <p className="mt-1 text-sm text-muted-light">{sharedProject.project.description}</p>
             )}
           </div>
-          <span className="rounded border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600">
+          <span className="rounded border border-ink/10 bg-surface px-3 py-1.5 text-xs font-medium text-muted">
             Read-only saved layout
           </span>
         </div>
@@ -79,7 +79,7 @@ export default function SharedProjectPage() {
         {sharedProject.layout ? (
           <Canvas3D className="h-full" readOnly />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-gray-500">
+          <div className="flex h-full items-center justify-center text-sm text-muted-light">
             This project does not have a saved layout yet.
           </div>
         )}

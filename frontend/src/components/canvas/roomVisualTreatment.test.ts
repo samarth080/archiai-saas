@@ -4,14 +4,14 @@ import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { roomVisualTreatment } from './roomVisualTreatment'
 
 describe('roomVisualTreatment', () => {
-  it('gives selected spaces a strong brand accent and greater solidity', () => {
+  it('gives selected spaces the white selection accent and greater solidity', () => {
     const idle = roomVisualTreatment(COMPONENT_REGISTRY.room, 'room', false, false)
     const selected = roomVisualTreatment(COMPONENT_REGISTRY.room, 'room', true, false)
 
     expect(idle.opacity).toBeGreaterThanOrEqual(0.8)
     expect(selected.opacity).toBeGreaterThan(idle.opacity)
-    expect(selected.emissive).toBe('#6354b8')
-    expect(selected.edgeColor).toBe('#6354b8')
+    expect(selected.emissive).toBe('#ffffff')
+    expect(selected.edgeColor).toBe('#ffffff')
   })
 
   it('keeps glazing translucent and prevents it from hiding geometry behind it', () => {

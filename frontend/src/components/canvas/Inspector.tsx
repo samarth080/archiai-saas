@@ -41,7 +41,7 @@ export function Inspector() {
   }
 
   return (
-    <div className="w-56 bg-white/90 backdrop-blur border-l border-ink/10 p-4 flex flex-col gap-4 overflow-y-auto">
+    <div className="w-56 bg-graphite-800/90 backdrop-blur border-l border-ink/10 p-4 flex flex-col gap-4 overflow-y-auto">
       <div className="flex flex-col gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-muted uppercase tracking-wide">Label</span>
@@ -316,7 +316,7 @@ export function Inspector() {
           Duplicate
         </button>
         <button
-          className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600"
+          className="rounded-lg bg-danger px-3 py-2 text-sm font-medium text-white hover:bg-danger/85"
           onClick={() => deleteRoom(room.id)}
         >
           Delete

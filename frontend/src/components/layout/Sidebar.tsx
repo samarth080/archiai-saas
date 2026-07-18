@@ -54,13 +54,13 @@ export function Sidebar({
 }: SidebarProps) {
   const navClassName = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-      isActive ? 'bg-brand-600/10 text-brand-700' : 'text-muted hover:bg-ink/5 hover:text-ink'
+      isActive ? 'bg-ink/10 text-ink' : 'text-muted hover:bg-ink/5 hover:text-ink'
     }`
 
   const displayName = userName ?? userEmail ?? ''
 
   return (
-    <aside className="flex w-44 flex-shrink-0 flex-col bg-white/80 backdrop-blur text-ink lg:w-52 border-r border-ink/10">
+    <aside className="flex w-44 flex-shrink-0 flex-col bg-graphite-800/80 backdrop-blur text-ink lg:w-52 border-r border-ink/10">
       <div className="border-b border-ink/10 p-4">
         <span className="text-lg font-bold">ArchiAI</span>
       </div>

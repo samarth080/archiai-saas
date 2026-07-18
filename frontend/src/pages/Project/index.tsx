@@ -782,7 +782,7 @@ export default function ProjectPage() {
   if (error) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <p className="text-red-500">{error}</p>
+        <p className="text-danger">{error}</p>
       </div>
     )
   }
@@ -891,13 +891,13 @@ export default function ProjectPage() {
               <div
                 role="status"
                 aria-live="polite"
-                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-200 bg-emerald-50/95 backdrop-blur px-4 py-2 shadow-sm"
+                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-ok/30 bg-graphite-800/95 backdrop-blur px-4 py-2 shadow-sm"
               >
-                <span className="text-xs font-medium text-emerald-800">{refinementSummary}</span>
+                <span className="text-xs font-medium text-ok">{refinementSummary}</span>
                 <button
                   type="button"
                   aria-label="Dismiss"
-                  className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                  className="text-xs font-medium text-ok hover:text-ink"
                   onClick={() => setRefinementSummary(null)}
                 >
                   ✕
@@ -909,13 +909,13 @@ export default function ProjectPage() {
               <div
                 role="status"
                 aria-live="polite"
-                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-amber-200 bg-amber-50/95 px-4 py-2 shadow-sm backdrop-blur"
+                className="absolute left-1/2 top-16 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-warn/30 bg-graphite-800/95 px-4 py-2 shadow-sm backdrop-blur"
               >
-                <span className="text-xs font-medium text-amber-900">{generationNotice}</span>
+                <span className="text-xs font-medium text-warn">{generationNotice}</span>
                 <button
                   type="button"
                   aria-label="Dismiss assumptions"
-                  className="text-xs font-medium text-amber-700 hover:text-amber-900"
+                  className="text-xs font-medium text-warn hover:text-ink"
                   onClick={() => setGenerationNotice(null)}
                 >
                   x

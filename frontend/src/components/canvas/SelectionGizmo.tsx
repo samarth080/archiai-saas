@@ -1,4 +1,5 @@
 import { useCanvasStore } from '../../store/canvasStore'
+import { displayRoomColor } from './editorPalette'
 
 /**
  * A floating top-center pill shown when a room is selected — type, color
@@ -30,11 +31,11 @@ export function SelectionGizmo() {
   }
 
   return (
-    <div className="absolute left-1/2 top-16 z-20 -translate-x-1/2 flex items-center gap-3 rounded-xl border border-brand-200 bg-white/95 backdrop-blur px-3.5 py-2 shadow-sm">
+    <div className="absolute left-1/2 top-16 z-20 -translate-x-1/2 flex items-center gap-3 rounded-xl border border-ink/15 bg-graphite-800/95 backdrop-blur px-3.5 py-2 shadow-sm">
       <span
         aria-hidden="true"
         className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-        style={{ backgroundColor: room.color }}
+        style={{ backgroundColor: displayRoomColor(room) }}
       />
       <span className="text-xs font-semibold text-ink">{room.label}</span>
       <span className="font-mono text-xs tabular-nums text-muted">
@@ -70,7 +71,7 @@ export function SelectionGizmo() {
         aria-label="Delete"
         title="Delete"
         onClick={() => deleteRoom(room.id)}
-        className="flex h-6 w-6 items-center justify-center rounded-lg text-red-500 hover:bg-red-50"
+        className="flex h-6 w-6 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6h12z" />

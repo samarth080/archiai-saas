@@ -14,6 +14,7 @@ import {
 import { DimensionAnnotations } from './DimensionAnnotations'
 import { ResizeHandles } from './ResizeHandles'
 import { roomVisualTreatment } from './roomVisualTreatment'
+import { displayRoomColor } from './editorPalette'
 
 interface OrbitHandle {
   enabled: boolean
@@ -224,7 +225,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     >
       <boxGeometry args={[room.size.w, room.size.h, room.size.d]} />
       <meshStandardMaterial
-        color={room.color}
+        color={displayRoomColor(room)}
         emissive={visual.emissive}
         emissiveIntensity={visual.emissiveIntensity}
         transparent={visual.opacity < 1}
@@ -242,7 +243,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
           >
             <boxGeometry args={[room.size.w + 0.06, 0.07, room.size.d + 0.06]} />
             <meshStandardMaterial
-              color={room.color}
+              color={displayRoomColor(room)}
               roughness={0.62}
               metalness={0.03}
             />
@@ -291,7 +292,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
             ]}
           />
           <lineBasicMaterial
-            color="#a99cf0"
+            color="#ffffff"
             transparent
             opacity={0.9}
             linewidth={2}
@@ -311,22 +312,22 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
       style={{ pointerEvents: 'none' }}
     >
       <div
-        className={`min-w-max rounded-lg border bg-white/94 px-2.5 py-1.5 shadow-md backdrop-blur ${
+        className={`min-w-max rounded-lg border bg-graphite-800/90 px-2.5 py-1.5 shadow-md backdrop-blur ${
           isSelected
-            ? 'border-brand-500 text-brand-800 ring-2 ring-brand-200/80'
-            : 'border-slate-200/90 text-slate-700'
+            ? 'border-ink text-ink ring-2 ring-ink/25'
+            : 'border-ink/10 text-muted'
         }`}
       >
         <div className="flex items-center gap-1.5 text-[11px] font-semibold">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
-              isSelected ? 'bg-brand-600' : 'bg-slate-400'
+              isSelected ? 'bg-ink' : 'bg-graphite-400'
             }`}
           />
           {room.label}
         </div>
         {isSpace && (
-          <div className="mt-0.5 pl-3 text-[9px] font-medium text-slate-500">
+          <div className="mt-0.5 pl-3 text-[9px] font-medium text-muted-light">
             {(room.size.w * room.size.d).toFixed(1)} m²
           </div>
         )}
