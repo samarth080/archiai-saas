@@ -12,7 +12,7 @@ import type { InteractionMode, PointerIntent } from './interactionModel'
 export type { CanvasObjectType } from './componentRegistry'
 export type { InteractionMode, PointerIntent } from './interactionModel'
 
-export type CanvasViewMode = '3d' | 'floor_plan'
+export type CanvasViewMode = '3d' | 'floor_plan' | 'zoning' | 'graph'
 
 export type CanvasEditAction =
   | 'object.added'
@@ -965,11 +965,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   loadLayout: (layout) => {
     const { floors, rooms, floorHeight } = normalizeLayout(layout)
+    // viewMode is deliberately left untouched: switching 2D/3D/zoning/graph
+    // must survive generation, refine, restore, and recovery loads.
     set({
       rooms,
       floors,
       selectedFloor: floors[0]?.level ?? 0,
-      viewMode: '3d',
       floorHeight,
       designId: layout.designId ?? null,
       designVersionId: layout.designVersionId ?? null,
@@ -994,7 +995,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rooms: [],
       floors: [DEFAULT_FLOOR],
       selectedFloor: 0,
-      viewMode: '3d',
       floorHeight: DEFAULT_FLOOR_HEIGHT,
       designId: null,
       designVersionId: null,

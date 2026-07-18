@@ -1,0 +1,43 @@
+import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
+
+export const VIEW_MODE_OPTIONS: { value: CanvasViewMode; label: string }[] = [
+  { value: 'floor_plan', label: '2D Plan' },
+  { value: '3d', label: '3D Edit' },
+  { value: 'zoning', label: 'Zoning' },
+  { value: 'graph', label: 'Room Graph' },
+]
+
+/**
+ * The single editor view switcher: 2D Plan | 3D Edit | Zoning | Room Graph.
+ * All four views read the same canvas store, so switching never touches
+ * layout state — only which lens renders it.
+ */
+export function ViewModeSwitcher() {
+  const viewMode = useCanvasStore((s) => s.viewMode)
+  const setViewMode = useCanvasStore((s) => s.setViewMode)
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Editor view"
+      className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-ink/10 bg-graphite-800/90 p-1 shadow-lg backdrop-blur"
+    >
+      {VIEW_MODE_OPTIONS.map((mode) => (
+        <button
+          key={mode.value}
+          type="button"
+          role="tab"
+          aria-selected={viewMode === mode.value}
+          onClick={() => setViewMode(mode.value)}
+          className={`rounded-md px-2.5 py-1 font-mono text-xs font-semibold transition-colors ${
+            viewMode === mode.value
+              ? 'bg-ink text-graphite-900'
+              : 'text-muted hover:bg-ink/10 hover:text-ink'
+          }`}
+        >
+          {mode.label}
+        </button>
+      ))}
+    </div>
+  )
+}

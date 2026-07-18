@@ -90,6 +90,8 @@ const ICONS: Record<string, JSX.Element> = {
       <circle cx="19" cy="12" r="1.5" />
     </>
   ),
+  undo: <path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />,
+  redo: <path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />,
 }
 
 interface ToolDef {
@@ -98,6 +100,7 @@ interface ToolDef {
   shortcut?: string
   onClick?: () => void
   active?: boolean
+  disabled?: boolean
 }
 
 function ToolButton({
@@ -119,10 +122,13 @@ function ToolButton({
         type="button"
         aria-label={tool.label}
         onClick={tool.onClick}
+        disabled={tool.disabled}
         className={`flex h-9 w-9 items-center justify-center rounded-lg ${
           tool.active
             ? 'bg-ink/10 text-ink'
-            : 'text-muted-light hover:bg-ink/10 hover:text-ink'
+            : tool.disabled
+              ? 'text-graphite-500'
+              : 'text-muted-light hover:bg-ink/10 hover:text-ink'
         }`}
       >
         <svg
@@ -172,8 +178,17 @@ export function ToolRail() {
   const setPlacementMode = useCanvasStore((s) => s.setPlacementMode)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
   const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
+  const viewMode = useCanvasStore((s) => s.viewMode)
+  const setViewMode = useCanvasStore((s) => s.setViewMode)
+  const undo = useCanvasStore((s) => s.undo)
+  const redo = useCanvasStore((s) => s.redo)
+  const canUndo = useCanvasStore((s) => s.past.length > 0)
+  const canRedo = useCanvasStore((s) => s.future.length > 0)
 
   const armPlacement = (type: CanvasObjectType) => {
+    // Placement needs an editable canvas — zoning/graph are analysis lenses,
+    // so arming a draw tool there jumps back to the 2D plan first.
+    if (viewMode === 'zoning' || viewMode === 'graph') setViewMode('floor_plan')
     setShowDimensions(false)
     setPlacementMode(placementMode === type ? null : type)
     setMoreOpen(false)
@@ -210,6 +225,20 @@ export function ToolRail() {
       active: moreOpen,
       onClick: () => setMoreOpen((value) => !value),
     },
+    {
+      key: 'undo',
+      label: 'Undo',
+      shortcut: 'Ctrl+Z',
+      disabled: !canUndo,
+      onClick: () => undo(),
+    },
+    {
+      key: 'redo',
+      label: 'Redo',
+      shortcut: 'Ctrl+Shift+Z',
+      disabled: !canRedo,
+      onClick: () => redo(),
+    },
   ]
 
   return (
@@ -242,6 +271,10 @@ export function ToolRail() {
               <span>{definition.label}</span>
             </button>
           ))}
+          <div className="mt-1 border-t border-ink/10 px-2.5 pb-1 pt-2">
+            <p className="text-xs font-medium text-graphite-500">Furniture / FF&amp;E library</p>
+            <p className="text-[10px] text-graphite-500">Coming soon</p>
+          </div>
         </div>
       )}
     </div>

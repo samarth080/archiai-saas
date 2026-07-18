@@ -209,7 +209,7 @@ export function CommandBar({
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-20 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-ink/10 bg-graphite-800/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur">
+    <div className="absolute bottom-9 left-1/2 z-20 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-ink/10 bg-graphite-800/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur">
       {tablist}
       {paramsRow}
       <div className="flex gap-2 items-end">

@@ -56,7 +56,7 @@ export function InsightsStrip({ alternatives, onPickAlternative }: InsightsStrip
       : undefined
 
   return (
-    <div className="absolute left-4 bottom-4 z-10 flex items-center gap-2">
+    <div className="absolute left-4 bottom-9 z-10 flex items-center gap-2">
       <div
         className="flex items-center gap-2 rounded-xl border border-ink/10 bg-graphite-800/90 backdrop-blur px-3 py-1.5 shadow-sm"
         title={tooltip}

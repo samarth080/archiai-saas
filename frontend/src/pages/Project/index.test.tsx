@@ -181,16 +181,65 @@ beforeEach(() => {
 })
 
 describe('ProjectPage canvas views', () => {
-  it('switches the Plan control to the shared-state SVG floor plan', async () => {
+  it('switches the 2D Plan tab to the shared-state SVG floor plan', async () => {
     renderProjectPage()
     const user = userEvent.setup()
 
-    await user.click(await screen.findByRole('button', { name: 'Plan' }))
+    await user.click(await screen.findByRole('tab', { name: '2D Plan' }))
 
     expect(screen.getByRole('application', { name: 'Editable floor plan' })).toBeInTheDocument()
     expect(useCanvasStore.getState().viewMode).toBe('floor_plan')
-    expect(screen.queryByRole('button', { name: '2D' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '3D' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '3D Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Zoning' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Room Graph' })).toBeInTheDocument()
+  })
+
+  it('renders the zoning and room graph lenses from the same layout state', async () => {
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: 'Zoning' }))
+    expect(useCanvasStore.getState().viewMode).toBe('zoning')
+    expect(screen.getByRole('application', { name: 'Zoning view' })).toBeInTheDocument()
+    expect(screen.getByTestId('zone-legend')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Room Graph' }))
+    expect(useCanvasStore.getState().viewMode).toBe('graph')
+    expect(
+      screen.getByRole('application', { name: 'Room relationship graph' }),
+    ).toBeInTheDocument()
+  })
+
+  it('preserves the selected object when switching between editor views', async () => {
+    renderProjectPage()
+    const user = userEvent.setup()
+
+    await screen.findByRole('tab', { name: '2D Plan' })
+    const roomId = 'seed-room'
+    useCanvasStore.setState({
+      rooms: [
+        {
+          id: roomId,
+          label: 'Seed Room',
+          objectType: 'room',
+          roomType: 'living_room',
+          floorId: DEFAULT_FLOOR.id,
+          floorLevel: DEFAULT_FLOOR.level,
+          position: { x: 0, y: 1.5, z: 0 },
+          size: { w: 4, h: 3, d: 4 },
+          rotation: { x: 0, y: 0, z: 0 },
+          color: '#5F6E88',
+        },
+      ],
+    })
+    useCanvasStore.getState().selectRoom(roomId)
+
+    await user.click(screen.getByRole('tab', { name: 'Zoning' }))
+    expect(useCanvasStore.getState().selectedId).toBe(roomId)
+
+    await user.click(screen.getByRole('tab', { name: '3D Edit' }))
+    expect(useCanvasStore.getState().selectedId).toBe(roomId)
+    expect(useCanvasStore.getState().rooms.length).toBeGreaterThan(0)
   })
 
   it('gives the selected object inspector priority over the program panel', async () => {

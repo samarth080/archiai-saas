@@ -1,4 +1,3 @@
-import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
 import { Avatar } from '../ui/Avatar'
 import { LevelMenu } from './LevelMenu'
 import { OverflowMenu } from './OverflowMenu'
@@ -48,11 +47,6 @@ interface EditorTopBarProps {
   deleteError: string | null
 }
 
-const VIEW_MODES: { value: CanvasViewMode; label: string }[] = [
-  { value: 'floor_plan', label: 'Plan' },
-  { value: '3d', label: '3D' },
-]
-
 export function EditorTopBar({
   projectTitle,
   onBackToDashboard,
@@ -92,14 +86,6 @@ export function EditorTopBar({
   duplicateError,
   deleteError,
 }: EditorTopBarProps) {
-  const rooms = useCanvasStore((s) => s.rooms)
-  const viewMode = useCanvasStore((s) => s.viewMode)
-  const setViewMode = useCanvasStore((s) => s.setViewMode)
-
-  const netArea = rooms
-    .filter((room) => room.objectType === 'room')
-    .reduce((sum, room) => sum + room.size.w * room.size.d, 0)
-
   return (
     <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-4 pointer-events-none">
       <div className="flex flex-wrap items-center gap-2.5 pointer-events-auto">
@@ -167,28 +153,6 @@ export function EditorTopBar({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3 pointer-events-auto">
-        <div className="flex items-baseline gap-2 rounded-lg border border-ink/10 bg-graphite-800/85 px-3 py-1.5 backdrop-blur">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">Net area</span>
-          <span className="font-mono text-sm font-semibold tabular-nums text-ink">
-            {netArea.toFixed(0)} m²
-          </span>
-        </div>
-
-        <div className="flex items-center gap-0.5 rounded-lg border border-ink/10 bg-graphite-800/90 p-1 backdrop-blur">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.value}
-              type="button"
-              onClick={() => setViewMode(mode.value)}
-              className={`rounded-lg px-2.5 py-1 font-mono text-xs font-semibold ${
-                viewMode === mode.value ? 'bg-ink text-graphite-900' : 'text-muted hover:text-ink'
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
         <OverflowMenu
           onHistory={onHistory}
           onActivity={onActivity}

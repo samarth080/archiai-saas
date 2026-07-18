@@ -13,6 +13,8 @@ function typeLabel(roomType: string | undefined): string {
 interface ProgramPanelProps {
   alternatives: LayoutOption[]
   onPickAlternative: (option: LayoutOption) => void
+  /** Vertical placement — overridden when the 3D context card occupies the corner. */
+  positionClass?: string
 }
 
 /**
@@ -25,7 +27,11 @@ interface ProgramPanelProps {
  * totals across every floor, mirroring how MetricsHud derives its numbers
  * for a single floor.
  */
-export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelProps) {
+export function ProgramPanel({
+  alternatives,
+  onPickAlternative,
+  positionClass = 'top-28 bottom-9',
+}: ProgramPanelProps) {
   const [showReport, setShowReport] = useState(false)
   const [altIndex, setAltIndex] = useState(0)
   const rooms = useCanvasStore((s) => s.rooms)
@@ -82,7 +88,7 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
   }
 
   return (
-    <div className="absolute right-4 top-28 bottom-4 z-10 flex w-60 flex-col gap-2">
+    <div className={`absolute right-4 z-10 flex w-60 flex-col gap-2 ${positionClass}`}>
       <div className="flex flex-1 min-h-0 flex-col rounded-xl border border-ink/10 bg-graphite-800/90 backdrop-blur shadow-sm">
         <div className="flex items-center justify-between border-b border-ink/10 px-3 py-2.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted-light">

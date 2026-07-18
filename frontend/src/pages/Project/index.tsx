@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import projectService, { Project } from '../../services/project.service'
-import { Sidebar } from '../../components/layout/Sidebar'
 import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Plan2D } from '../../components/canvas/Plan2D'
+import { ZoningView } from '../../components/canvas/ZoningView'
+import { RoomGraphView } from '../../components/canvas/RoomGraphView'
 import { Inspector } from '../../components/canvas/Inspector'
 import { EditorTopBar } from '../../components/canvas/EditorTopBar'
+import { ViewModeSwitcher } from '../../components/canvas/ViewModeSwitcher'
+import { BottomStatusBar } from '../../components/canvas/BottomStatusBar'
+import { ThreeDContextCard } from '../../components/canvas/ThreeDContextCard'
 import { ToolRail } from '../../components/canvas/ToolRail'
 import { MeasurePanel } from '../../components/canvas/MeasurePanel'
 import { SelectionGizmo } from '../../components/canvas/SelectionGizmo'
@@ -35,7 +39,7 @@ import {
   reviewWithOverrides,
   type GenerationOverrides,
 } from '../../services/mvpGenerationPolicy'
-import { useCanvasStore } from '../../store/canvasStore'
+import { useCanvasStore, type CanvasViewMode } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
@@ -176,6 +180,21 @@ function waitForRefinementMoment(durationMs: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, reduceMotion ? 0 : durationMs))
 }
 
+// URL <-> store mapping for the editor view switcher, so 2D/3D/Zoning/Graph
+// are deep-linkable (?view=2d|3d|zoning|graph) and survive reload/back.
+const VIEW_PARAM_TO_MODE: Record<string, CanvasViewMode> = {
+  '2d': 'floor_plan',
+  '3d': '3d',
+  zoning: 'zoning',
+  graph: 'graph',
+}
+const VIEW_MODE_TO_PARAM: Record<CanvasViewMode, string> = {
+  floor_plan: '2d',
+  '3d': '3d',
+  zoning: 'zoning',
+  graph: 'graph',
+}
+
 function clarificationFromError(
   error: unknown,
 ): Pick<ExtractResponse, 'route' | 'questions' | 'optional_missing'> | null {
@@ -216,7 +235,8 @@ export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-  const { logOut, user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user } = useAuth()
 
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
@@ -640,6 +660,31 @@ export default function ProjectPage() {
     }
   }, [designId, mode])
 
+  // Adopt ?view= from the URL (initial load, back/forward navigation).
+  useEffect(() => {
+    const mode = VIEW_PARAM_TO_MODE[searchParams.get('view') ?? '']
+    if (mode && mode !== useCanvasStore.getState().viewMode) {
+      useCanvasStore.getState().setViewMode(mode)
+    }
+  }, [searchParams])
+
+  // Reflect the live view into the URL. Reads the store directly so the
+  // adoption effect above (same commit) can't be overwritten by a stale
+  // closure value.
+  useEffect(() => {
+    const liveMode = useCanvasStore.getState().viewMode
+    const param = VIEW_MODE_TO_PARAM[liveMode]
+    setSearchParams(
+      (current) => {
+        if (current.get('view') === param) return current
+        const next = new URLSearchParams(current)
+        next.set('view', param)
+        return next
+      },
+      { replace: true },
+    )
+  }, [viewMode, setSearchParams])
+
   // Prefill the prompt when arriving from the Dashboard's hero composer,
   // which creates the project first and forwards the brief via navigation
   // state rather than auto-generating sight-unseen.
@@ -791,26 +836,26 @@ export default function ProjectPage() {
 
   return (
     <div className="flex h-screen bg-surface">
-      <Sidebar
-        userName={user?.name}
-        userEmail={user?.email}
-        onLogout={logOut}
-      />
-
-      {/* Main */}
+      {/* Main — editor pages use the compact tool rail only (no dashboard sidebar) */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Canvas + Inspector row */}
         <div className="flex-1 flex overflow-hidden">
           <div className="relative flex-1 h-full">
-            {viewMode === 'floor_plan' ? (
+            {viewMode === '3d' ? (
+              <Canvas3D className="h-full" readOnly={Boolean(refinementPlayback)} />
+            ) : (
               <>
+                {/* Hidden WebGL canvas keeps the thumbnail/PNG/PDF capture
+                    path alive while an SVG lens (plan/zoning/graph) is on. */}
                 <div className="pointer-events-none invisible absolute inset-0" aria-hidden="true">
                   <Canvas3D className="h-full" readOnly />
                 </div>
-                <Plan2D className="h-full" readOnly={Boolean(refinementPlayback)} />
+                {viewMode === 'floor_plan' && (
+                  <Plan2D className="h-full" readOnly={Boolean(refinementPlayback)} />
+                )}
+                {viewMode === 'zoning' && <ZoningView className="h-full" />}
+                {viewMode === 'graph' && <RoomGraphView className="h-full" />}
               </>
-            ) : (
-              <Canvas3D className="h-full" readOnly={Boolean(refinementPlayback)} />
             )}
 
             <EditorTopBar
@@ -875,13 +920,28 @@ export default function ProjectPage() {
               />
             )}
 
+            <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2">
+              <ViewModeSwitcher />
+            </div>
+
             <ToolRail />
-            <MeasurePanel />
-            <SelectionGizmo />
-            {!selectedId && (
-              <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
+            {(viewMode === 'floor_plan' || viewMode === '3d') && <MeasurePanel />}
+            {(viewMode === 'floor_plan' || viewMode === '3d') && <SelectionGizmo />}
+            {viewMode !== 'graph' && (
+              <div className="absolute right-4 top-16 z-10">
+                <ThreeDContextCard />
+              </div>
             )}
-            <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
+            {!selectedId && (viewMode === 'floor_plan' || viewMode === '3d') && (
+              <ProgramPanel
+                alternatives={alternatives}
+                onPickAlternative={handlePickOption}
+                positionClass="top-[15.5rem] bottom-9"
+              />
+            )}
+            {(viewMode === 'floor_plan' || viewMode === '3d') && (
+              <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
+            )}
 
             {refinementPlayback && (
               <RefinementPlaybackPanel {...refinementPlayback} />
@@ -951,8 +1011,10 @@ export default function ProjectPage() {
               generateError={generateError}
               onSubmit={handleSubmit}
             />
+
+            <BottomStatusBar />
           </div>
-          <Inspector />
+          {viewMode !== 'graph' && <Inspector />}
         </div>
       </main>
 
