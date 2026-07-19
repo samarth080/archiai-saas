@@ -33,7 +33,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
   // Distinct floor slab colours so stacked floors are visually separable
   const floorSlabColor = (level: number) => {
     if (isPlanView) return '#26282D'
-    const palette = ['#2A2D33', '#303439', '#363A40', '#3C4046']
+    const palette = ['#2E2E2F', '#343435', '#3A3A3B', '#404041']
     return palette[level % palette.length]
   }
 
@@ -41,7 +41,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
     <>
       <ambientLight intensity={isPlanView ? 0.9 : 0.5} />
       {!isPlanView && (
-        <hemisphereLight args={['#B9BCC1', '#26282D', 0.5]} />
+        <hemisphereLight args={['#BDBDC0', '#26282D', 0.5]} />
       )}
       <directionalLight
         position={[10, 20, 10]}
@@ -75,7 +75,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
               </mesh>
               <lineSegments raycast={() => null}>
                 <edgesGeometry args={[edgeGeometry]} />
-                <lineBasicMaterial color={floor.level === 0 ? '#8A8E95' : '#5C6067'} />
+                <lineBasicMaterial color={floor.level === 0 ? '#909094' : '#6A6A6E'} />
               </lineSegments>
             </group>
 
@@ -88,7 +88,7 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
               >
                 <planeGeometry args={[footprint.w, footprint.d]} />
                 <meshStandardMaterial
-                  color="#43474E"
+                  color="#48484A"
                   transparent
                   opacity={0.3}
                   side={2}
@@ -102,8 +102,8 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
       <Grid
         args={[40, 40]}
         position={[0, 0, 0]}
-        cellColor={isPlanView ? '#2E3136' : '#2E3136'}
-        sectionColor={isPlanView ? '#43464C' : '#43464C'}
+        cellColor={isPlanView ? '#323233' : '#323233'}
+        sectionColor={isPlanView ? '#464648' : '#464648'}
         fadeDistance={isPlanView ? 80 : 60}
         infiniteGrid={!isPlanView}
       />

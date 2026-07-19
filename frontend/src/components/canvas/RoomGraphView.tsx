@@ -1,11 +1,7 @@
 import { useMemo } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import { ZONE_META, ZONE_ORDER, type ZoneType } from './editorPalette'
-import {
-  buildRoomGraph,
-  connectionsFor,
-  type RoomGraphNode,
-} from './roomGraphModel'
+import { buildRoomGraph, type RoomGraphNode } from './roomGraphModel'
 
 interface RoomGraphViewProps {
   className?: string
@@ -13,8 +9,8 @@ interface RoomGraphViewProps {
 
 const NODE_W = 150
 const NODE_H = 44
-const NODE_GAP = 18
-const GROUP_GAP = 48
+const NODE_GAP = 22
+const GROUP_GAP = 56
 const GROUP_PAD = 16
 const GROUP_HEADER = 30
 
@@ -99,12 +95,6 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
     }
   }, [nodes])
 
-  const selectedConnections = selectedId ? connectionsFor(edges, selectedId) : []
-  const selectedNode = selectedId ? positioned.get(selectedId) ?? null : null
-  const directCount = edges.filter((edge) => edge.kind === 'direct').length
-  const proximityCount = edges.length - directCount
-
-  const labelOf = (id: string) => positioned.get(id)?.label ?? id
 
   return (
     <div className={`relative overflow-hidden bg-graphite-900 ${className ?? ''}`}>
@@ -166,7 +156,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                 key={`${edge.source}-${edge.target}`}
                 d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
                 fill="none"
-                stroke={touched ? '#FFFFFF' : edge.kind === 'direct' ? '#8A8E95' : '#5C6067'}
+                stroke={touched ? '#FFFFFF' : edge.kind === 'direct' ? '#909094' : '#6A6A6E'}
                 strokeWidth={touched ? 2 : 1.2}
                 strokeDasharray={edge.kind === 'proximity' ? '4 4' : undefined}
                 opacity={selectedId && !touched ? 0.35 : 0.9}
@@ -195,7 +185,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     width={NODE_W}
                     height={NODE_H}
                     rx={9}
-                    fill={selected ? '#F3F4F5' : '#1C1E22'}
+                    fill={selected ? '#F5F5F6' : '#2B2B2C'}
                     stroke={selected ? '#FFFFFF' : ZONE_META[node.zone].color}
                     strokeWidth={selected ? 2 : 1.2}
                   />
@@ -210,7 +200,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     y={NODE_H / 2 - 3}
                     fontSize={11.5}
                     fontWeight={600}
-                    fill={selected ? '#131417' : '#F3F4F5'}
+                    fill={selected ? '#1B1B1C' : '#F5F5F6'}
                   >
                     {node.label.length > 17 ? `${node.label.slice(0, 16)}…` : node.label}
                   </text>
@@ -218,7 +208,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     x={30}
                     y={NODE_H / 2 + 11}
                     fontSize={9.5}
-                    fill={selected ? '#43464C' : '#8A8E95'}
+                    fill={selected ? '#464648' : '#909094'}
                   >
                     {node.areaSqm.toFixed(0)} m²
                   </text>
@@ -237,57 +227,10 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
         </span>
         <span className="flex items-center gap-1.5">
           <svg width="20" height="2" aria-hidden="true">
-            <line x1="0" y1="1" x2="20" y2="1" stroke="#5C6067" strokeWidth="2" strokeDasharray="4 3" />
+            <line x1="0" y1="1" x2="20" y2="1" stroke="#6A6A6E" strokeWidth="2" strokeDasharray="4 3" />
           </svg>
           Proximity
         </span>
-      </div>
-
-      {/* Relationships panel */}
-      <div
-        data-testid="room-graph-panel"
-        className="absolute right-4 top-20 z-10 w-60 rounded-xl border border-ink/10 bg-graphite-800/95 p-3 shadow-lg backdrop-blur"
-      >
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-light">
-          {selectedNode ? 'Relationships' : 'Spatial logic'}
-        </p>
-        {selectedNode ? (
-          <>
-            <p className="text-sm font-semibold text-ink">{selectedNode.label}</p>
-            <p className="mb-2 text-[11px] text-muted">
-              {ZONE_META[selectedNode.zone].label} zone · {selectedNode.areaSqm.toFixed(1)} m²
-            </p>
-            {selectedConnections.length === 0 ? (
-              <p className="text-[11px] text-muted-light">
-                No detected connections on this floor.
-              </p>
-            ) : (
-              <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto">
-                {selectedConnections.map((connection) => (
-                  <li
-                    key={connection.otherId}
-                    className="flex items-center justify-between gap-2 rounded-md bg-ink/5 px-2 py-1.5 text-[11px]"
-                  >
-                    <span className="truncate text-ink">{labelOf(connection.otherId)}</span>
-                    <span className="shrink-0 text-[10px] text-muted-light">
-                      {connection.kind === 'direct' ? 'Direct' : 'Proximity'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col gap-1 text-[11px] text-muted">
-            <span>{nodes.length} rooms on this floor</span>
-            <span>{directCount} direct connections</span>
-            <span>{proximityCount} proximity links</span>
-            <span className="mt-1 text-[10px] leading-snug text-muted-light">
-              Connections are derived from the current plan geometry. Select a
-              room to inspect its relationships.
-            </span>
-          </div>
-        )}
       </div>
 
       {nodes.length === 0 && (

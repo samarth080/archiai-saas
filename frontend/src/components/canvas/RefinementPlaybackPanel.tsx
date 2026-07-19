@@ -45,10 +45,10 @@ export function RefinementPlaybackPanel({
               key={`${change.action}-${change.objectId}`}
               className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                 active
-                  ? 'border-ink/20 bg-ink/10/90'
+                  ? 'border-ink/20 bg-ink/10'
                   : complete
-                    ? 'border-ok/30/70 bg-ok/10/60'
-                    : 'border-ink/10/60 bg-graphite-800/70'
+                    ? 'border-ok/30 bg-ok/10'
+                    : 'border-ink/10 bg-graphite-800/70'
               }`}
             >
               <span

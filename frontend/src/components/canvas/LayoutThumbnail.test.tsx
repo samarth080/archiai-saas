@@ -1,0 +1,42 @@
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
+import type { Room } from '../../store/canvasStore'
+import { LayoutThumbnail } from './LayoutThumbnail'
+
+function room(partial: Partial<Room>): Room {
+  return {
+    id: partial.id ?? 'r1',
+    label: partial.label ?? 'Room',
+    objectType: partial.objectType ?? 'room',
+    floorLevel: partial.floorLevel ?? 0,
+    position: partial.position ?? { x: 0, y: 1.5, z: 0 },
+    size: partial.size ?? { w: 4, h: 3, d: 4 },
+    rotation: { x: 0, y: 0, z: 0 },
+    color: '#5F6E88',
+  } as Room
+}
+
+describe('LayoutThumbnail', () => {
+  it('renders one rect per ground-floor space, skipping walls and upper floors', () => {
+    const { container } = render(
+      <LayoutThumbnail
+        rooms={[
+          room({ id: 'a' }),
+          room({ id: 'b', position: { x: 5, y: 1.5, z: 0 } }),
+          room({ id: 'wall', objectType: 'wall' }),
+          room({ id: 'upstairs', floorLevel: 1 }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByTestId('layout-thumbnail')).toBeInTheDocument()
+    // background sheet + 2 ground-floor spaces
+    expect(container.querySelectorAll('rect')).toHaveLength(3)
+  })
+
+  it('renders just the sheet for an empty layout', () => {
+    const { container } = render(<LayoutThumbnail rooms={[]} />)
+    expect(container.querySelectorAll('rect')).toHaveLength(1)
+  })
+})

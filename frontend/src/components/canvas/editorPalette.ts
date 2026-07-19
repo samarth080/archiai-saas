@@ -11,15 +11,15 @@
  * rewriting any persisted layout data.
  */
 export const EDITOR_PALETTE = {
-  workspaceHighlight: '#26282D',
-  workspaceStart: '#1B1D21',
-  workspaceEnd: '#131417',
-  planSheetStart: '#232529',
-  planSheetEnd: '#1D1F23',
-  planGrid: '#3B3F46',
-  planFrame: '#DDDEE1',
+  workspaceHighlight: '#303031',
+  workspaceStart: '#262627',
+  workspaceEnd: '#1D1D1E',
+  planSheetStart: '#2A2A2B',
+  planSheetEnd: '#242425',
+  planGrid: '#404042',
+  planFrame: '#DFDFE1',
   selection: '#FFFFFF',
-  dimension: '#8A8E95',
+  dimension: '#909094',
   measure: '#C9A96E',
 } as const
 
@@ -86,17 +86,17 @@ const ROOM_TYPE_COLORS: Record<string, string> = {
 
 /** Non-room object types keep structural, near-neutral colors. */
 const OBJECT_TYPE_COLORS: Record<string, string> = {
-  wall: '#B9BCC1',
+  wall: '#BDBDC0',
   door: '#9C8468',
   window: '#7C93A6',
   stair: MUTED_ROOM_COLORS.sand,
-  floor: '#33363C',
+  floor: '#373738',
   open_space: '#3F444B',
   corridor: MUTED_ROOM_COLORS.charcoal,
-  lift: '#565B63',
-  shaft: '#43474E',
+  lift: '#5A5A5E',
+  shaft: '#48484A',
   furniture: '#6E6659',
-  column: '#8A8E95',
+  column: '#909094',
   generic: MUTED_ROOM_COLORS.graphiteGray,
 }
 

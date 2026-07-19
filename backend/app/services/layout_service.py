@@ -23,9 +23,9 @@ changing either:
 
 Both engines share the same post-processing: _architectural_markers adds
 boundary walls/windows/the entry door, and _generate_partition_walls adds
-interior walls plus door openings between rooms (gated by _wants_direct_door
-so private/service cells route through a corridor instead of opening
-directly into their lateral neighbour — see Sprint 17 Phase 2).
+interior walls plus door openings between rooms (door rules live in
+_generate_partition_walls: corridors open onto everything, public rooms
+flow into each other, every other room gets exactly one access door — see Sprint 17 Phase 2).
 """
 import uuid
 from math import sqrt
@@ -670,7 +670,10 @@ def _architectural_markers(
     # Windows go on the other three exterior walls for cross-floor daylight,
     # one per wall, sized to that wall's span.
     entry_wall = _ORIENTATION_ENTRY_WALL.get((orientation or "S").upper(), "front")
-    exterior_offset = 0.7  # metres beyond the wall face — keeps the marker clear of the wall mesh
+    # Windows and the entry door sit ON the boundary wall's centre-line (half
+    # the wall thickness outside the footprint), not floating 0.7 m beyond it —
+    # detached markers read as random clutter around the plan.
+    exterior_offset = off
     window_specs = {
         "front": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z - exterior_offset},
         "rear": {"x": x + w - min(2.0, w / 2), "y": 1.7, "z": z + d + exterior_offset},
@@ -733,26 +736,75 @@ _DOOR_THICKNESS = 0.12  # metres — matches the existing window/entry-door mark
 _MIN_DOORWAY_SPAN = 1.2  # metres — shorter shared walls don't get a door opening
 
 
-def _wants_direct_door(a: dict, b: dict, *, has_corridor: bool) -> bool:
-    """
-    Decide whether two adjacent rooms should get a doorway directly between
-    them, or whether they should only be reachable via the corridor.
+_MIN_WALL_SPAN = 0.3  # metres — corner-touching slivers don't get a wall
 
-    Without a corridor on the floor there's no alternative circulation path,
-    so every adjacent pair gets a door (matches pre-corridor layouts). With a
-    corridor, the corridor itself always gets a door to whatever it touches;
-    open-plan public rooms (living/kitchen/dining/etc.) still flow into each
-    other directly; but two private/service cells (e.g. an office and a
-    bathroom sitting side by side in the same row) should each open onto the
-    corridor, not into one another.
+# Door-access priority per room category: which neighbour a room would rather
+# open onto when it needs its single access door. Bathrooms/storage prefer a
+# corridor, then a private room (ensuite), and only then a public room;
+# bedrooms prefer the corridor, then the public zone.
+_SERVICE_DOOR_PRIORITY = ("corridor", "private", "front", "service")
+_DEFAULT_DOOR_PRIORITY = ("corridor", "front", "private", "service")
+
+
+def _wall_category(room_type: str | None) -> str:
+    if room_type in _TILED_CORRIDOR_TYPES:
+        return "corridor"
+    if room_type in _TILED_FRONT_TYPES:
+        return "front"
+    if room_type in _TILED_SERVICE_TYPES:
+        return "service"
+    # Unknown types behave like private cells: exactly one access door.
+    return "private"
+
+
+def _shared_boundaries(room_only: list[dict]) -> list[dict]:
     """
-    a_type = a.get("roomType")
-    b_type = b.get("roomType")
-    if a_type in _TILED_CORRIDOR_TYPES or b_type in _TILED_CORRIDOR_TYPES:
-        return True
-    if not has_corridor:
-        return True
-    return a_type in _TILED_FRONT_TYPES and b_type in _TILED_FRONT_TYPES
+    True shared-wall relationships between rooms on one floor. A pair shares
+    a boundary only when their edges actually meet on one axis (gap on that
+    axis within tolerance) AND their spans genuinely overlap on the other
+    axis. The gap is measured on the axis perpendicular to the wall — testing
+    the wrong axis is what used to make every same-row pair 'adjacent' no
+    matter how far apart, spraying phantom walls and doors through the rooms
+    in between.
+    """
+    adjacency_threshold = _GAP + 0.05  # bridges the fallback engine's row gap
+    boundaries: list[dict] = []
+    for i, a in enumerate(room_only):
+        ax1, ax2, az1, az2 = _room_bounds(a)
+        for b in room_only[i + 1:]:
+            bx1, bx2, bz1, bz2 = _room_bounds(b)
+            overlap_x = min(ax2, bx2) - max(ax1, bx1)
+            overlap_z = min(az2, bz2) - max(az1, bz1)
+            x_gap = max(0.0, -overlap_x)
+            z_gap = max(0.0, -overlap_z)
+
+            # Orientation by the larger real overlap (handles a narrow room
+            # nested against a wider one, where both gaps read near zero).
+            if overlap_z >= overlap_x:
+                # Vertical wall: rooms side-by-side along X — their X edges
+                # must meet, and they must share real span along Z.
+                if x_gap <= adjacency_threshold and overlap_z >= _MIN_WALL_SPAN:
+                    boundaries.append({
+                        "a": a,
+                        "b": b,
+                        "vertical": True,
+                        "x": (min(ax2, bx2) + max(ax1, bx1)) / 2,
+                        "z": (max(az1, bz1) + min(az2, bz2)) / 2,
+                        "span": overlap_z,
+                    })
+            else:
+                # Horizontal wall: rooms stacked along Z — their Z edges must
+                # meet, and they must share real span along X.
+                if z_gap <= adjacency_threshold and overlap_x >= _MIN_WALL_SPAN:
+                    boundaries.append({
+                        "a": a,
+                        "b": b,
+                        "vertical": False,
+                        "x": (max(ax1, bx1) + min(ax2, bx2)) / 2,
+                        "z": (min(az2, bz2) + max(az1, bz1)) / 2,
+                        "span": overlap_x,
+                    })
+    return boundaries
 
 
 def _generate_partition_walls(
@@ -763,108 +815,106 @@ def _generate_partition_walls(
     elevation: float,
 ) -> list[dict]:
     """
-    Generate thin partition wall meshes between every pair of adjacent rooms
-    on the same floor, plus a door marker centred on each wall long enough to
-    fit one. Two rooms are considered adjacent when the gap between their
-    nearest edges is <= _GAP (i.e. they were placed side-by-side); a doorway
-    along that shared wall is what makes the floor plan actually walkable.
+    Generate thin partition wall meshes along every true shared boundary
+    between rooms on one floor, plus door markers where a doorway is
+    architecturally justified:
 
-    Not every adjacent wall gets a doorway, though — see _wants_direct_door.
-    Private/service rooms sitting beside each other in the same row (e.g. an
-    office next to a bathroom) should each connect to the corridor, not to
-    each other directly; the wall between them stays solid.
+    - the corridor opens onto everything it touches
+    - open-plan public rooms (living/kitchen/dining/reception/…) flow into
+      each other directly
+    - every other room (bedrooms, bathrooms, offices, storage, …) gets
+      exactly ONE access door, on its best neighbour by category priority
+      (service rooms prefer corridor > private > public, so a bathroom
+      beside a bedroom becomes an ensuite rather than opening into dining)
+
+    At most one door ever exists between the same two rooms, every door sits
+    centred on its partition wall, and no door is created without a shared
+    boundary long enough (>= _MIN_DOORWAY_SPAN) to hold it.
     """
     wall_h = 2.8
     wall_t = 0.15
-    adjacency_threshold = _GAP + 0.05  # small tolerance
     room_only = [r for r in rooms if r.get("objectType") == "room"]
-    has_corridor = any(r.get("roomType") in _TILED_CORRIDOR_TYPES for r in room_only)
+    boundaries = _shared_boundaries(room_only)
     markers: list[dict] = []
 
-    checked: set[tuple[str, str]] = set()
-    for i, a in enumerate(room_only):
-        ax1, ax2, az1, az2 = _room_bounds(a)
-        for b in room_only[i + 1:]:
-            pair = tuple(sorted([a["id"], b["id"]]))
-            if pair in checked:
-                continue
-            checked.add(pair)
-            bx1, bx2, bz1, bz2 = _room_bounds(b)
-            wants_door = _wants_direct_door(a, b, has_corridor=has_corridor)
+    for boundary in boundaries:
+        span = round(boundary["span"], 2)
+        markers.append(_make_marker(
+            label="Partition Wall",
+            room_type="wall",
+            object_type="wall",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": boundary["x"], "y": wall_h / 2, "z": boundary["z"]},
+            size=(
+                {"w": wall_t, "h": wall_h, "d": span}
+                if boundary["vertical"]
+                else {"w": span, "h": wall_h, "d": wall_t}
+            ),
+        ))
 
-            # overlap_* is positive when the rooms' spans overlap on that axis,
-            # negative (a gap) when they don't. When one room is narrower than
-            # another and sits fully within its span on one axis (e.g. an
-            # office narrower than the corridor it's stacked against), BOTH
-            # axes can come out near zero — so the branch must be chosen by
-            # which axis has the larger real overlap (the shared wall span),
-            # not just by which gap happens to be small.
-            overlap_x = min(ax2, bx2) - max(ax1, bx1)
-            overlap_z = min(az2, bz2) - max(az1, bz1)
-            x_gap = max(0.0, -overlap_x)
-            z_gap = max(0.0, -overlap_z)
+    # ── Door decisions on the true adjacency graph ──────────────────────────
+    def category(room: dict) -> str:
+        return _wall_category(room.get("roomType"))
 
-            # Adjacent along Z axis (rooms side-by-side in X direction)
-            if overlap_z >= overlap_x and z_gap <= adjacency_threshold:
-                # shared X boundary — a vertical wall running along Z
-                wall_x = (min(ax2, bx2) + max(ax1, bx1)) / 2
-                overlap_z1 = max(az1, bz1)
-                overlap_z2 = min(az2, bz2)
-                span = overlap_z2 - overlap_z1
-                if span > 0:
-                    wall_z = (overlap_z1 + overlap_z2) / 2
-                    markers.append(_make_marker(
-                        label="Partition Wall",
-                        room_type="wall",
-                        object_type="wall",
-                        floor_id=floor_id,
-                        floor_level=floor_level,
-                        elevation=elevation,
-                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
-                        size={"w": wall_t, "h": wall_h, "d": round(span, 2)},
-                    ))
-                    if wants_door and span >= _MIN_DOORWAY_SPAN:
-                        markers.append(_make_marker(
-                            label="Interior Door",
-                            room_type="door",
-                            object_type="door",
-                            floor_id=floor_id,
-                            floor_level=floor_level,
-                            elevation=elevation,
-                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
-                            size={"w": _DOOR_THICKNESS, "h": _DOOR_HEIGHT, "d": min(_DOOR_WIDTH, span)},
-                        ))
+    doorable = [b for b in boundaries if b["span"] >= _MIN_DOORWAY_SPAN]
+    doored_pairs: set[frozenset] = set()
+    door_count: dict[str, int] = {room["id"]: 0 for room in room_only}
 
-            # Adjacent along X axis (rooms side-by-side in Z direction)
-            elif overlap_x >= overlap_z and x_gap <= adjacency_threshold:
-                # shared Z boundary — a horizontal wall running along X
-                wall_z = (min(az2, bz2) + max(az1, bz1)) / 2
-                overlap_x1 = max(ax1, bx1)
-                overlap_x2 = min(ax2, bx2)
-                span = overlap_x2 - overlap_x1
-                if span > 0:
-                    wall_x = (overlap_x1 + overlap_x2) / 2
-                    markers.append(_make_marker(
-                        label="Partition Wall",
-                        room_type="wall",
-                        object_type="wall",
-                        floor_id=floor_id,
-                        floor_level=floor_level,
-                        elevation=elevation,
-                        position={"x": wall_x, "y": wall_h / 2, "z": wall_z},
-                        size={"w": round(span, 2), "h": wall_h, "d": wall_t},
-                    ))
-                    if wants_door and span >= _MIN_DOORWAY_SPAN:
-                        markers.append(_make_marker(
-                            label="Interior Door",
-                            room_type="door",
-                            object_type="door",
-                            floor_id=floor_id,
-                            floor_level=floor_level,
-                            elevation=elevation,
-                            position={"x": wall_x, "y": _DOOR_HEIGHT / 2, "z": wall_z},
-                            size={"w": min(_DOOR_WIDTH, span), "h": _DOOR_HEIGHT, "d": _DOOR_THICKNESS},
-                        ))
+    def add_door(boundary: dict) -> None:
+        pair = frozenset({boundary["a"]["id"], boundary["b"]["id"]})
+        if pair in doored_pairs:
+            return
+        doored_pairs.add(pair)
+        door_count[boundary["a"]["id"]] += 1
+        door_count[boundary["b"]["id"]] += 1
+        door_span = min(_DOOR_WIDTH, boundary["span"])
+        markers.append(_make_marker(
+            label="Interior Door",
+            room_type="door",
+            object_type="door",
+            floor_id=floor_id,
+            floor_level=floor_level,
+            elevation=elevation,
+            position={"x": boundary["x"], "y": _DOOR_HEIGHT / 2, "z": boundary["z"]},
+            size=(
+                {"w": _DOOR_THICKNESS, "h": _DOOR_HEIGHT, "d": door_span}
+                if boundary["vertical"]
+                else {"w": door_span, "h": _DOOR_HEIGHT, "d": _DOOR_THICKNESS}
+            ),
+        ))
+
+    # 1. Circulation and open-plan flow.
+    for boundary in doorable:
+        cat_a, cat_b = category(boundary["a"]), category(boundary["b"])
+        if "corridor" in (cat_a, cat_b) or (cat_a == "front" and cat_b == "front"):
+            add_door(boundary)
+
+    # 2. Access guarantee — one door for every room still sealed off.
+    for room in room_only:
+        if door_count[room["id"]] > 0:
+            continue
+        candidates = [
+            b for b in doorable
+            if room["id"] in (b["a"]["id"], b["b"]["id"])
+        ]
+        if not candidates:
+            continue  # no boundary long enough — surfaced by the reachability check
+        priority = (
+            _SERVICE_DOOR_PRIORITY
+            if category(room) == "service"
+            else _DEFAULT_DOOR_PRIORITY
+        )
+
+        def neighbour_rank(boundary: dict) -> tuple[int, float]:
+            other = boundary["b"] if boundary["a"]["id"] == room["id"] else boundary["a"]
+            other_cat = category(other)
+            rank = priority.index(other_cat) if other_cat in priority else len(priority)
+            return (rank, -boundary["span"])
+
+        add_door(min(candidates, key=neighbour_rank))
+
     return markers
 
 

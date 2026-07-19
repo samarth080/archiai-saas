@@ -20,7 +20,7 @@ export function EditorPreviewCard() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none select-none overflow-hidden rounded-2xl border border-ink/15 bg-graphite-850 shadow-[0_30px_80px_rgba(0,0,0,0.5)]"
+      className="pointer-events-none select-none overflow-hidden rounded-2xl border border-ink/15 bg-graphite-850 shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/5"
     >
       {/* Editor top bar */}
       <div className="flex items-center justify-between border-b border-ink/10 bg-graphite-800 px-3 py-2">
@@ -77,7 +77,7 @@ export function EditorPreviewCard() {
                   height={room.h}
                   fill={room.color}
                   fillOpacity="0.78"
-                  stroke="#B9BCC1"
+                  stroke="#BDBDC0"
                   strokeWidth="0.5"
                 />
                 <text
@@ -86,7 +86,7 @@ export function EditorPreviewCard() {
                   textAnchor="middle"
                   fontSize="4.6"
                   fontWeight="600"
-                  fill="#E8E9EB"
+                  fill="#EAEAEC"
                 >
                   {room.label}
                 </text>
@@ -108,7 +108,7 @@ export function EditorPreviewCard() {
               [selected.x, selected.y + selected.h],
               [selected.x + selected.w, selected.y + selected.h],
             ].map(([hx, hy], i) => (
-              <rect key={i} x={hx - 1.8} y={hy - 1.8} width="3.6" height="3.6" fill="#FFFFFF" stroke="#131417" strokeWidth="0.5" />
+              <rect key={i} x={hx - 1.8} y={hy - 1.8} width="3.6" height="3.6" fill="#FFFFFF" stroke="#1B1B1C" strokeWidth="0.5" />
             ))}
             <line
               x1={selected.x}
@@ -123,10 +123,10 @@ export function EditorPreviewCard() {
               y={selected.y - 5}
               textAnchor="middle"
               fontSize="3.8"
-              fill="#F3F4F5"
+              fill="#F5F5F6"
               fontFamily="monospace"
             >
-              6.20 m
+              6.2 m
             </text>
           </svg>
 
@@ -143,7 +143,7 @@ export function EditorPreviewCard() {
                   { dx: -4, dy: 2, w: 10, d: 7, c: MUTED_ROOM_COLORS.warmBrown },
                 ].map((box, i) => (
                   <g key={i} transform={`translate(${box.dx} ${box.dy})`}>
-                    <path d={`M0 0 L${box.w * 0.86} ${box.w * 0.28} L${box.w * 0.86 - box.d * 0.86} ${box.w * 0.28 + box.d * 0.28} L${-box.d * 0.86} ${box.d * 0.28} Z`} fill={box.c} opacity="0.92" stroke="#131417" strokeWidth="0.3" />
+                    <path d={`M0 0 L${box.w * 0.86} ${box.w * 0.28} L${box.w * 0.86 - box.d * 0.86} ${box.w * 0.28 + box.d * 0.28} L${-box.d * 0.86} ${box.d * 0.28} Z`} fill={box.c} opacity="0.92" stroke="#1B1B1C" strokeWidth="0.3" />
                     <path d={`M0 0 L0 5 L${box.w * 0.86} ${box.w * 0.28 + 5} L${box.w * 0.86} ${box.w * 0.28} Z`} fill={box.c} opacity="0.55" />
                   </g>
                 ))}
@@ -163,8 +163,8 @@ export function EditorPreviewCard() {
           <p className="text-[6px] font-semibold uppercase tracking-wide text-muted-light">Properties</p>
           <p className="mt-1 text-[8px] font-semibold text-ink">Conference 02</p>
           {[
-            ['Width', '6.20 m'],
-            ['Depth', '4.80 m'],
+            ['Width', '6.2 m'],
+            ['Depth', '4.8 m'],
             ['Area', '29.8 m²'],
             ['Zone', 'Collab'],
           ].map(([key, value]) => (

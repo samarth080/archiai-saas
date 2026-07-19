@@ -45,7 +45,7 @@ export function MeasurePanel() {
               <dt>Height</dt>
               <dd className="font-mono">{selected.size.h.toFixed(2)} m</dd>
             </div>
-            <div className="flex justify-between border-t border-ink/10/70 pt-0.5">
+            <div className="flex justify-between border-t border-ink/10 pt-0.5">
               <dt>Area</dt>
               <dd className="font-mono">{(selected.size.w * selected.size.d).toFixed(2)} m²</dd>
             </div>
