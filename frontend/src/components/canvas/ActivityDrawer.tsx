@@ -52,7 +52,7 @@ export function ActivityDrawer({ projectId, open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Project activity"
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-graphite-800 shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
           <h2 className="text-sm font-semibold text-ink">Activity</h2>
@@ -68,7 +68,7 @@ export function ActivityDrawer({ projectId, open, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
           {loading && <p className="text-sm text-muted-light">Loading…</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           {!loading && !error && entries.length === 0 && (
             <p className="text-sm text-muted-light">No activity yet.</p>
           )}

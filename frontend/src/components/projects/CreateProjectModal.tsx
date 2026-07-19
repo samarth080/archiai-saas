@@ -34,7 +34,7 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white/95 backdrop-blur rounded-xl p-6 w-full max-w-md">
+      <div className="bg-graphite-800/95 backdrop-blur rounded-xl p-6 w-full max-w-md">
         <h2 className="text-lg font-semibold text-ink mb-4">New Project</h2>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
@@ -49,7 +49,7 @@ export function CreateProjectModal({ onClose, onCreated, workspaceId }: CreatePr
             You'll describe what to build next, on the project's own page.
           </p>
           {submitError && (
-            <p className="text-sm text-red-600">{submitError}</p>
+            <p className="text-sm text-danger">{submitError}</p>
           )}
           <div className="flex gap-3 justify-end pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>

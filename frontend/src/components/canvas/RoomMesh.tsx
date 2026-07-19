@@ -13,6 +13,8 @@ import {
 } from '../../store/interactionModel'
 import { DimensionAnnotations } from './DimensionAnnotations'
 import { ResizeHandles } from './ResizeHandles'
+import { roomVisualTreatment } from './roomVisualTreatment'
+import { displayRoomColor } from './editorPalette'
 
 interface OrbitHandle {
   enabled: boolean
@@ -62,20 +64,13 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     definition.category === 'structure'
   const isDimensionable = definition.canResize
   const isPlanView = viewMode !== '3d'
-  const materialOpacity =
-    room.objectType === 'window'
-      ? 0.48
-      : room.objectType === 'door'
-        ? 0.72
-        : definition.renderingTreatment === 'thin'
-          ? 0.66
-          : definition.renderingTreatment === 'slab'
-            ? 0.55
-            : isSelected
-              ? 0.9
-              : isPlanView && definition.category === 'space'
-                ? 0.64
-                : 0.76
+  const isSpace = definition.category === 'space'
+  const visual = roomVisualTreatment(
+    definition,
+    room.objectType,
+    isSelected,
+    isPlanView,
+  )
 
   const resetMoveState = () => {
     pendingMoveRef.current = null
@@ -208,6 +203,8 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
   const mesh = (
     <mesh
       ref={meshRef}
+      castShadow={!isPlanView}
+      receiveShadow
       position={[room.position.x, room.position.y, room.position.z]}
       rotation={[
         THREE.MathUtils.degToRad(room.rotation.x),
@@ -228,20 +225,57 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     >
       <boxGeometry args={[room.size.w, room.size.h, room.size.d]} />
       <meshStandardMaterial
-        color={room.color}
-        emissive={isSelected ? '#1d4ed8' : '#000000'}
-        emissiveIntensity={isSelected ? 0.28 : 0}
-        transparent={materialOpacity < 1}
-        opacity={materialOpacity}
-        depthWrite={materialOpacity > 0.75}
-        roughness={0.82}
-        metalness={0.02}
+        color={displayRoomColor(room)}
+        emissive={visual.emissive}
+        emissiveIntensity={visual.emissiveIntensity}
+        transparent={visual.opacity < 1}
+        opacity={visual.opacity}
+        depthWrite={visual.depthWrite}
+        roughness={visual.roughness}
+        metalness={visual.metalness}
       />
+      {isSpace && !isPlanView && (
+        <>
+          <mesh
+            position={[0, -room.size.h / 2 + 0.035, 0]}
+            raycast={() => null}
+            receiveShadow
+          >
+            <boxGeometry args={[room.size.w + 0.06, 0.07, room.size.d + 0.06]} />
+            <meshStandardMaterial
+              color={displayRoomColor(room)}
+              roughness={0.62}
+              metalness={0.03}
+            />
+          </mesh>
+          <mesh
+            position={[0, room.size.h / 2 + 0.018, 0]}
+            raycast={() => null}
+          >
+            <boxGeometry
+              args={[
+                Math.max(0.05, room.size.w - 0.1),
+                0.035,
+                Math.max(0.05, room.size.d - 0.1),
+              ]}
+            />
+            <meshStandardMaterial
+              color="#ffffff"
+              transparent
+              opacity={isSelected ? 0.25 : 0.14}
+              depthWrite={false}
+              roughness={0.45}
+            />
+          </mesh>
+        </>
+      )}
       {(isSelected || definition.category === 'space' || room.objectType === 'stair') && (
         <lineSegments>
           <edgesGeometry args={[new THREE.BoxGeometry(room.size.w, room.size.h, room.size.d)]} />
           <lineBasicMaterial
-            color={isSelected ? '#2563eb' : '#475569'}
+            color={visual.edgeColor}
+            transparent
+            opacity={isSelected ? 1 : 0.82}
             linewidth={isSelected ? 2 : 1}
           />
         </lineSegments>
@@ -257,7 +291,13 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
               ),
             ]}
           />
-          <lineBasicMaterial color="#60a5fa" linewidth={2} depthTest={false} />
+          <lineBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.9}
+            linewidth={2}
+            depthTest={false}
+          />
         </lineSegments>
       )}
     </mesh>
@@ -272,11 +312,25 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
       style={{ pointerEvents: 'none' }}
     >
       <div
-        className={`rounded bg-white/90 px-2 py-1 text-[11px] font-medium shadow-sm border ${
-          isSelected ? 'border-blue-500 text-blue-700 ring-2 ring-blue-200' : 'border-gray-200 text-gray-700'
+        className={`min-w-max rounded-lg border bg-graphite-800/90 px-2.5 py-1.5 shadow-md backdrop-blur ${
+          isSelected
+            ? 'border-ink text-ink ring-2 ring-ink/25'
+            : 'border-ink/10 text-muted'
         }`}
       >
-        {room.label}
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              isSelected ? 'bg-ink' : 'bg-graphite-400'
+            }`}
+          />
+          {room.label}
+        </div>
+        {isSpace && (
+          <div className="mt-0.5 pl-3 text-[9px] font-medium text-muted-light">
+            {(room.size.w * room.size.d).toFixed(1)} m²
+          </div>
+        )}
       </div>
     </Html>
   ) : null

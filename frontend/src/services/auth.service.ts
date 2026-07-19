@@ -1,5 +1,6 @@
-import { AuthResponse, LoginRequest, RegisterRequest, UserOut } from '../types/auth'
+import { AuthResponse, LoginRequest, RefreshResponse, RegisterRequest, UserOut } from '../types/auth'
 import api from './api'
+import { useAuthStore } from '../store/authStore'
 
 export const authService = {
   register: (data: RegisterRequest): Promise<AuthResponse> =>
@@ -8,8 +9,16 @@ export const authService = {
   login: (data: LoginRequest): Promise<AuthResponse> =>
     api.post<AuthResponse>('/api/auth/login', data).then((r) => r.data),
 
+  refresh: (refreshToken: string): Promise<RefreshResponse> =>
+    api
+      .post<RefreshResponse>('/api/auth/refresh', { refresh_token: refreshToken }, { skipAuthRefresh: true })
+      .then((r) => r.data),
+
   logout: (): Promise<void> => {
-    return api.post('/api/auth/logout').then(() => undefined)
+    const refreshToken = useAuthStore.getState().refreshToken
+    return api
+      .post('/api/auth/logout', { refresh_token: refreshToken }, { skipAuthRefresh: true })
+      .then(() => undefined)
   },
 
   getMe: (): Promise<UserOut> => {

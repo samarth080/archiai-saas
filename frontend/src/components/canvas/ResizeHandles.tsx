@@ -196,7 +196,7 @@ export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandle
           onPointerCancel={finishResize}
         >
           <boxGeometry args={[handleSize, 0.08, handleSize]} />
-          <meshBasicMaterial color="#2563eb" depthTest={false} />
+          <meshBasicMaterial color="#ffffff" depthTest={false} />
         </mesh>
       ))}
     </group>

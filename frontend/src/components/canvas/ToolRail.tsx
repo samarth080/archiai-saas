@@ -90,6 +90,8 @@ const ICONS: Record<string, JSX.Element> = {
       <circle cx="19" cy="12" r="1.5" />
     </>
   ),
+  undo: <path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" />,
+  redo: <path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />,
 }
 
 interface ToolDef {
@@ -98,6 +100,7 @@ interface ToolDef {
   shortcut?: string
   onClick?: () => void
   active?: boolean
+  disabled?: boolean
 }
 
 function ToolButton({
@@ -119,10 +122,13 @@ function ToolButton({
         type="button"
         aria-label={tool.label}
         onClick={tool.onClick}
+        disabled={tool.disabled}
         className={`flex h-9 w-9 items-center justify-center rounded-lg ${
           tool.active
-            ? 'bg-brand-600/10 text-brand-600'
-            : 'text-muted-light hover:bg-brand-600/10 hover:text-brand-600'
+            ? 'bg-ink/10 text-ink'
+            : tool.disabled
+              ? 'text-graphite-500'
+              : 'text-muted-light hover:bg-ink/10 hover:text-ink'
         }`}
       >
         <svg
@@ -139,10 +145,10 @@ function ToolButton({
         </svg>
       </button>
       {hovered === tool.key && (
-        <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-white shadow-lg">
+        <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-graphite-900 shadow-lg">
           <span className="text-xs font-semibold">{tool.label}</span>
           {tool.shortcut && (
-            <span className="rounded bg-white px-1 py-0.5 font-mono text-[10px] font-semibold text-ink">
+            <span className="rounded bg-graphite-800 px-1 py-0.5 font-mono text-[10px] font-semibold text-graphite-100">
               {tool.shortcut}
             </span>
           )}
@@ -172,8 +178,17 @@ export function ToolRail() {
   const setPlacementMode = useCanvasStore((s) => s.setPlacementMode)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
   const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
+  const viewMode = useCanvasStore((s) => s.viewMode)
+  const setViewMode = useCanvasStore((s) => s.setViewMode)
+  const undo = useCanvasStore((s) => s.undo)
+  const redo = useCanvasStore((s) => s.redo)
+  const canUndo = useCanvasStore((s) => s.past.length > 0)
+  const canRedo = useCanvasStore((s) => s.future.length > 0)
 
   const armPlacement = (type: CanvasObjectType) => {
+    // Placement needs an editable canvas — zoning/graph are analysis lenses,
+    // so arming a draw tool there jumps back to the 2D plan first.
+    if (viewMode === 'zoning' || viewMode === 'graph') setViewMode('floor_plan')
     setShowDimensions(false)
     setPlacementMode(placementMode === type ? null : type)
     setMoreOpen(false)
@@ -210,6 +225,20 @@ export function ToolRail() {
       active: moreOpen,
       onClick: () => setMoreOpen((value) => !value),
     },
+    {
+      key: 'undo',
+      label: 'Undo',
+      shortcut: 'Ctrl+Z',
+      disabled: !canUndo,
+      onClick: () => undo(),
+    },
+    {
+      key: 'redo',
+      label: 'Redo',
+      shortcut: 'Ctrl+Shift+Z',
+      disabled: !canRedo,
+      onClick: () => redo(),
+    },
   ]
 
   return (
@@ -219,13 +248,13 @@ export function ToolRail() {
       ))}
 
       {moreOpen && (
-        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-white p-1.5 shadow-2xl">
+        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-graphite-800 p-1.5 shadow-2xl">
           {PROFESSIONAL_COMPONENTS.map((definition) => (
             <button
               key={definition.type}
               type="button"
               onClick={() => armPlacement(definition.type)}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/80 hover:bg-brand-600/10 hover:text-brand-700"
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink/80 hover:bg-ink/10 hover:text-ink"
             >
               <svg
                 width="15"
@@ -242,6 +271,10 @@ export function ToolRail() {
               <span>{definition.label}</span>
             </button>
           ))}
+          <div className="mt-1 border-t border-ink/10 px-2.5 pb-1 pt-2">
+            <p className="text-xs font-medium text-graphite-500">Furniture / FF&amp;E library</p>
+            <p className="text-[10px] text-graphite-500">Coming soon</p>
+          </div>
         </div>
       )}
     </div>

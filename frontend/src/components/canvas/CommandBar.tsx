@@ -16,6 +16,7 @@ interface CommandBarProps {
   prompt: string
   setPrompt: (value: string) => void
   generating: boolean
+  busyLabel?: string
   generateError: string | null
   onSubmit: () => void
 }
@@ -36,17 +37,23 @@ export function CommandBar({
   prompt,
   setPrompt,
   generating,
+  busyLabel,
   generateError,
   onSubmit,
 }: CommandBarProps) {
   const heroMode = roomCount === 0
+  const submitLabel = generating
+    ? busyLabel ?? (mode === 'refine' ? 'Refining…' : 'Generating…')
+    : mode === 'refine'
+      ? 'Refine'
+      : 'Generate'
 
   const tablist = (
     <div role="tablist" aria-label="Prompt mode" className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden">
       <button
         role="tab"
         aria-selected={mode === 'generate'}
-        className={`px-3 py-1 ${mode === 'generate' ? 'bg-brand-600 text-white' : 'bg-white text-muted'}`}
+        className={`px-3 py-1 ${mode === 'generate' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'}`}
         onClick={() => onModeChange('generate')}
       >
         Generate
@@ -56,7 +63,7 @@ export function CommandBar({
         aria-selected={mode === 'refine'}
         disabled={!designId}
         title={designId ? '' : 'Generate a layout first'}
-        className={`px-3 py-1 ${mode === 'refine' ? 'bg-brand-600 text-white' : 'bg-white text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`px-3 py-1 ${mode === 'refine' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
         onClick={() => onModeChange('refine')}
       >
         Refine
@@ -64,7 +71,7 @@ export function CommandBar({
       {mode === 'generate' && (
         <button
           type="button"
-          className="px-3 py-1 bg-white text-muted hover:text-ink border-l border-ink/15"
+          className="border-l border-ink/15 bg-graphite-700 px-3 py-1 text-muted hover:text-ink"
           onClick={() => setShowParams(!showParams)}
           aria-expanded={showParams}
         >
@@ -84,7 +91,7 @@ export function CommandBar({
           max={40}
           step={0.5}
           placeholder="auto"
-          className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-24 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={plotWidthM}
           onChange={(e) => setPlotWidthM(e.target.value)}
         />
@@ -94,9 +101,9 @@ export function CommandBar({
         <input
           type="number"
           min={1}
-          max={6}
+          max={5}
           placeholder="auto"
-          className="w-20 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-20 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={floorsOverride}
           onChange={(e) => setFloorsOverride(e.target.value)}
         />
@@ -104,7 +111,7 @@ export function CommandBar({
       <label className="flex flex-col gap-1">
         Entry faces
         <select
-          className="w-24 border border-ink/15 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-24 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={orientation}
           onChange={(e) => setOrientation(e.target.value as typeof orientation)}
         >
@@ -119,6 +126,31 @@ export function CommandBar({
     </div>
   )
 
+  const errorNotice = generateError && (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10/95 px-3 py-2 text-left shadow-sm"
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger/15 text-xs font-bold text-danger"
+        >
+          !
+        </span>
+        <span className="text-xs leading-5 text-danger">{generateError}</span>
+      </div>
+      <button
+        type="button"
+        className="shrink-0 rounded-lg border border-danger/30 bg-graphite-800 px-3 py-1.5 text-xs font-semibold text-danger transition hover:border-danger/50 hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={onSubmit}
+        disabled={generating || !prompt.trim()}
+      >
+        Try again
+      </button>
+    </div>
+  )
+
   if (heroMode) {
     return (
       <div className="absolute left-1/2 top-1/2 z-20 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 px-4">
@@ -128,7 +160,7 @@ export function CommandBar({
           </svg>
           <span className="text-sm font-semibold text-muted">Describe your building to begin</span>
         </div>
-        <div className="rounded-2xl border border-ink/10 bg-white/90 backdrop-blur p-4 shadow-xl">
+        <div className="rounded-2xl border border-ink/10 bg-graphite-800/95 p-4 shadow-[0_22px_60px_rgba(0,0,0,0.22)] backdrop-blur">
           <div className="mb-2 flex justify-center">{tablist}</div>
           {paramsRow && <div className="mb-2 flex justify-center">{paramsRow}</div>}
           <textarea
@@ -150,17 +182,15 @@ export function CommandBar({
             </div>
             <button
               aria-busy={generating}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-500 disabled:bg-brand-300"
+              className="rounded-lg bg-ink px-4 py-2 text-sm font-bold text-graphite-900 hover:bg-graphite-100 disabled:bg-graphite-500"
               onClick={onSubmit}
               disabled={generating || !prompt.trim()}
             >
-              {generating
-                ? mode === 'refine' ? 'Refining…' : 'Generating…'
-                : mode === 'refine' ? 'Refine' : 'Generate'}
+              {submitLabel}
             </button>
           </div>
         </div>
-        {generateError && <p className="mt-2 text-center text-xs text-red-500">{generateError}</p>}
+        {errorNotice && <div className="mt-2">{errorNotice}</div>}
         <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
           <span className="text-xs text-muted-light">Try:</span>
           {QUICK_STARTS.map((q) => (
@@ -168,7 +198,7 @@ export function CommandBar({
               key={q.label}
               type="button"
               onClick={() => setPrompt(q.brief)}
-              className="rounded-full border border-ink/10 bg-white/70 px-3 py-1 text-xs font-medium text-muted hover:border-brand-300 hover:text-brand-700"
+              className="rounded-full border border-ink/10 bg-graphite-800/85 px-3 py-1 text-xs font-medium text-muted hover:border-ink/20 hover:bg-graphite-800 hover:text-ink"
             >
               {q.label}
             </button>
@@ -179,13 +209,13 @@ export function CommandBar({
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 flex flex-col gap-2 rounded-2xl border border-ink/10 bg-white/90 backdrop-blur p-3 shadow-lg">
+    <div className="absolute bottom-9 left-1/2 z-20 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-ink/10 bg-graphite-800/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur">
       {tablist}
       {paramsRow}
       <div className="flex gap-2 items-end">
         <textarea
           aria-label="Layout prompt"
-          className="flex-1 border border-ink/15 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="flex-1 resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           rows={1}
           placeholder={
             mode === 'refine'
@@ -198,16 +228,14 @@ export function CommandBar({
         />
         <button
           aria-busy={generating}
-          className="bg-brand-600 hover:bg-brand-500 disabled:bg-brand-300 text-white font-medium px-4 py-2 rounded-lg text-sm self-stretch"
+          className="bg-ink hover:bg-graphite-100 disabled:bg-graphite-500 text-graphite-900 font-medium px-4 py-2 rounded-lg text-sm self-stretch"
           onClick={onSubmit}
           disabled={generating || !prompt.trim()}
         >
-          {generating
-            ? mode === 'refine' ? 'Refining…' : 'Generating…'
-            : mode === 'refine' ? 'Refine' : 'Generate'}
+          {submitLabel}
         </button>
       </div>
-      {generateError && <p className="text-xs text-red-500">{generateError}</p>}
+      {errorNotice}
     </div>
   )
 }

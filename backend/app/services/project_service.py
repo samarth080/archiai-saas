@@ -172,6 +172,18 @@ async def duplicate_project(
     )
     source_design = design_result.scalar_one_or_none()
     if source_design is not None:
+        source_version = await db.scalar(
+            select(DesignVersion)
+            .where(DesignVersion.design_id == source_design.id)
+            .where(
+                or_(
+                    DesignVersion.version_type.is_(None),
+                    DesignVersion.version_type != "auto_draft",
+                )
+            )
+            .order_by(desc(DesignVersion.created_at), desc(DesignVersion.version_number))
+            .limit(1)
+        )
         layout_json = deepcopy(source_design.layout_json)
         design = Design(
             project_id=duplicate.id,
@@ -189,6 +201,22 @@ async def duplicate_project(
             version_type="duplicate",
             change_summary=f"Copied from {source.title}",
             layout_json=deepcopy(layout_json),
+            requirements_json=(
+                deepcopy(source_version.requirements_json)
+                if source_version is not None
+                else None
+            ),
+            canonical_layout_json=(
+                deepcopy(source_version.canonical_layout_json)
+                if source_version is not None
+                else None
+            ),
+            quality_json=(
+                deepcopy(source_version.quality_json)
+                if source_version is not None
+                else None
+            ),
+            prompt_used=(source_version.prompt_used if source_version is not None else None),
         )
         db.add(version)
 

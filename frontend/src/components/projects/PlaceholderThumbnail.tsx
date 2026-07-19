@@ -2,10 +2,16 @@ interface PlaceholderThumbnailProps {
   seed: string
 }
 
-// Small decorative palette for the placeholder's "room blocks" — these are
-// purely presentational accents, not part of the single brand-accent system,
-// so reusing Tailwind's default palette here is intentional.
-const BLOCK_COLORS = ['bg-brand-200', 'bg-sky-200', 'bg-emerald-200', 'bg-amber-200', 'bg-rose-200']
+// Small decorative palette for the placeholder's "room blocks" — the same
+// muted architectural room colors the editor uses, so dashboard cards read
+// like miniature plans from the one product palette.
+const BLOCK_COLORS = [
+  'bg-[#5F6E88]',
+  'bg-[#6E7F68]',
+  'bg-[#71657E]',
+  'bg-[#84705B]',
+  'bg-[#5E7876]',
+]
 
 function hashString(value: string): number {
   let hash = 0
@@ -52,7 +58,7 @@ export function PlaceholderThumbnail({ seed }: PlaceholderThumbnailProps) {
       className="relative h-36 w-full overflow-hidden bg-surface"
       style={{
         backgroundImage:
-          'linear-gradient(rgba(38,34,47,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(38,34,47,0.05) 1px, transparent 1px)',
+          'linear-gradient(rgba(243,244,245,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(243,244,245,0.05) 1px, transparent 1px)',
         backgroundSize: '12px 12px',
       }}
     >

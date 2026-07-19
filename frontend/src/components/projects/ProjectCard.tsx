@@ -22,7 +22,7 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
   return (
     <button
       onClick={onClick}
-      className="text-left w-full overflow-hidden bg-white border border-ink/10 rounded-xl hover:border-brand-400 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-500"
+      className="text-left w-full overflow-hidden bg-graphite-800 border border-ink/10 rounded-xl hover:border-ink/30 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-ink/30"
     >
       <div className="relative">
         {project.thumbnail_url ? (
@@ -36,7 +36,7 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
         )}
         <span
           className={`absolute right-2 top-2 rounded-lg px-2 py-0.5 text-[10px] font-semibold ${
-            hasSavedLayout ? 'bg-white/85 text-emerald-700' : 'bg-white/85 text-muted'
+            hasSavedLayout ? 'bg-graphite-800/85 text-ok' : 'bg-graphite-800/85 text-muted'
           }`}
         >
           {hasSavedLayout ? 'Saved' : 'Draft'}

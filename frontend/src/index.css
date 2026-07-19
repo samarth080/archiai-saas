@@ -1,3 +1,32 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-ink antialiased;
+  }
+
+  ::selection {
+    @apply bg-graphite-100 text-graphite-900;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #43464c transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #43464c;
+    border-radius: 4px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

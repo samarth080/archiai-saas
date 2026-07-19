@@ -26,6 +26,12 @@ class DesignVersion(Base):
     version_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     layout_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # Additive MVP-pipeline artifacts. ``layout_json`` remains the legacy
+    # center-based canvas snapshot so existing editor/version/share flows keep
+    # working; the canonical NW-origin LayoutPlan is stored separately.
+    requirements_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    canonical_layout_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    quality_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     prompt_used: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

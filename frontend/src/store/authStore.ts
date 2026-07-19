@@ -5,24 +5,38 @@ import { UserOut } from '../types/auth'
 interface AuthState {
   user: UserOut | null
   token: string | null
+  refreshToken: string | null
   isAuthenticated: boolean
-  login: (token: string, user: UserOut) => void
+  login: (token: string, refreshToken: string, user: UserOut) => void
+  setSessionTokens: (token: string, refreshToken: string) => void
   logout: () => void
 }
+
+const ACCESS_TOKEN_STORAGE_KEY = 'token'
+const REFRESH_TOKEN_STORAGE_KEY = 'refreshToken'
+const USER_STORAGE_KEY = 'user'
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
+  refreshToken: null,
   isAuthenticated: false,
-  login: (token, user) => {
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    set({ token, user, isAuthenticated: true })
+  login: (token, refreshToken, user) => {
+    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken)
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+    set({ token, refreshToken, user, isAuthenticated: true })
+  },
+  setSessionTokens: (token, refreshToken) => {
+    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
+    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken)
+    set({ token, refreshToken, isAuthenticated: true })
   },
   logout: () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    set({ token: null, user: null, isAuthenticated: false })
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USER_STORAGE_KEY)
+    set({ token: null, refreshToken: null, user: null, isAuthenticated: false })
   },
 }))
 
@@ -36,18 +50,32 @@ function isTokenExpired(token: string): boolean {
 }
 
 export function initAuthFromStorage(): void {
-  const token = localStorage.getItem('token')
-  const userStr = localStorage.getItem('user')
-  if (!token || !userStr || isTokenExpired(token)) {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+  const token = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
+  const userStr = localStorage.getItem(USER_STORAGE_KEY)
+  if (!token || !refreshToken || !userStr) {
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USER_STORAGE_KEY)
     return
   }
   try {
+    if (isTokenExpired(refreshToken)) {
+      localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+      localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+      localStorage.removeItem(USER_STORAGE_KEY)
+      return
+    }
     const user = JSON.parse(userStr) as UserOut
-    useAuthStore.setState({ token, user, isAuthenticated: true })
+    useAuthStore.setState({
+      token,
+      refreshToken,
+      user,
+      isAuthenticated: true,
+    })
   } catch {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USER_STORAGE_KEY)
   }
 }

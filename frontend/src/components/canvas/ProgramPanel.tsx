@@ -13,6 +13,8 @@ function typeLabel(roomType: string | undefined): string {
 interface ProgramPanelProps {
   alternatives: LayoutOption[]
   onPickAlternative: (option: LayoutOption) => void
+  /** Vertical placement — overridden when the 3D context card occupies the corner. */
+  positionClass?: string
 }
 
 /**
@@ -25,7 +27,11 @@ interface ProgramPanelProps {
  * totals across every floor, mirroring how MetricsHud derives its numbers
  * for a single floor.
  */
-export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelProps) {
+export function ProgramPanel({
+  alternatives,
+  onPickAlternative,
+  positionClass = 'top-28 bottom-9',
+}: ProgramPanelProps) {
   const [showReport, setShowReport] = useState(false)
   const [altIndex, setAltIndex] = useState(0)
   const rooms = useCanvasStore((s) => s.rooms)
@@ -82,8 +88,8 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
   }
 
   return (
-    <div className="absolute right-4 top-28 bottom-4 z-10 flex w-60 flex-col gap-2">
-      <div className="flex flex-1 min-h-0 flex-col rounded-xl border border-ink/10 bg-white/90 backdrop-blur shadow-sm">
+    <div className={`absolute right-4 z-10 flex w-60 flex-col gap-2 ${positionClass}`}>
+      <div className="flex flex-1 min-h-0 flex-col rounded-xl border border-ink/10 bg-graphite-800/90 backdrop-blur shadow-sm">
         <div className="flex items-center justify-between border-b border-ink/10 px-3 py-2.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted-light">
             Space program
@@ -97,7 +103,7 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
               type="button"
               onClick={() => selectRoom(group.sampleId)}
               className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
-                selectedGroupKey === group.roomType ? 'bg-brand-600/10' : 'hover:bg-ink/5'
+                selectedGroupKey === group.roomType ? 'bg-ink/10' : 'hover:bg-ink/5'
               }`}
             >
               <span
@@ -121,7 +127,7 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
             disabled={alternatives.length === 0}
             onClick={handleRelayout}
             title={alternatives.length === 0 ? 'No alternative layouts available' : 'Try the next alternative'}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 2v6h-6M3 22v-6h6" />
@@ -132,7 +138,7 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
           <button
             type="button"
             onClick={() => setShowReport((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-brand-700"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 4v16h16" />
@@ -144,7 +150,7 @@ export function ProgramPanel({ alternatives, onPickAlternative }: ProgramPanelPr
       </div>
 
       {showReport && (
-        <div className="rounded-xl border border-ink/10 bg-white/95 backdrop-blur p-3 shadow-sm">
+        <div className="rounded-xl border border-ink/10 bg-graphite-800/95 backdrop-blur p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-ink">Report</span>
             <button type="button" onClick={() => setShowReport(false)} aria-label="Close report" className="text-muted-light hover:text-muted">

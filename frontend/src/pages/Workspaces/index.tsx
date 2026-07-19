@@ -26,27 +26,27 @@ export default function WorkspacesPage() {
   }, [])
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-surface">
       <Sidebar userName={user?.name} userEmail={user?.email} onLogout={logOut} />
       <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Workspaces</h1>
-            <p className="mt-1 text-sm text-gray-500">Shared projects for your design teams.</p>
+            <h1 className="text-2xl font-bold text-ink">Workspaces</h1>
+            <p className="mt-1 text-sm text-muted-light">Shared projects for your design teams.</p>
           </div>
           <Button variant="primary" onClick={() => setShowModal(true)}>
             + New Workspace
           </Button>
         </div>
 
-        {loading && <p className="py-12 text-center text-gray-400">Loading...</p>}
+        {loading && <p className="py-12 text-center text-muted-light">Loading...</p>}
         {!loading && error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
             {error}
           </div>
         )}
         {!loading && !error && workspaces.length === 0 && (
-          <p className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-12 text-center text-gray-400">
+          <p className="rounded-lg border border-dashed border-ink/15 bg-graphite-800 px-4 py-12 text-center text-muted-light">
             No workspaces yet. Create one for your first shared project.
           </p>
         )}

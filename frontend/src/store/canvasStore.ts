@@ -12,7 +12,7 @@ import type { InteractionMode, PointerIntent } from './interactionModel'
 export type { CanvasObjectType } from './componentRegistry'
 export type { InteractionMode, PointerIntent } from './interactionModel'
 
-export type CanvasViewMode = '3d' | 'top' | 'floor_plan'
+export type CanvasViewMode = '3d' | 'floor_plan' | 'zoning' | 'graph'
 
 export type CanvasEditAction =
   | 'object.added'
@@ -199,7 +199,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 0 },
     size: { w: 6, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#b3b8e9',
+    color: '#5F6E88',
   },
   {
     id: 'room-2',
@@ -208,7 +208,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 7, y: 1.5, z: 0 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#6bc0a1',
+    color: '#84705B',
   },
   {
     id: 'room-3',
@@ -217,7 +217,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 0, y: 1.5, z: 6 },
     size: { w: 5, h: 3, d: 5 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#dea97d',
+    color: '#5E7876',
   },
   {
     id: 'room-4',
@@ -226,7 +226,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 6, y: 1.5, z: 6 },
     size: { w: 4, h: 3, d: 4 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#e4a6c6',
+    color: '#6E7F68',
   },
   {
     id: 'room-5',
@@ -235,7 +235,7 @@ export const INITIAL_ROOMS: Room[] = [
     position: { x: 11, y: 1.5, z: 6 },
     size: { w: 3, h: 3, d: 3 },
     rotation: { x: 0, y: 0, z: 0 },
-    color: '#9abbe4',
+    color: '#4E5B72',
   },
 ]
 
@@ -354,6 +354,18 @@ function clampToFootprint(
     ...position,
     x: clampAxis(position.x, size.w / 2, footprint.x, footprint.w),
     z: clampAxis(position.z, size.d / 2, footprint.z, footprint.d),
+  }
+}
+
+function clampSizeToFootprint(
+  size: ComponentSize,
+  footprint?: { x: number; z: number; w: number; d: number },
+) {
+  if (!footprint || footprint.w <= 0 || footprint.d <= 0) return size
+  return {
+    ...size,
+    w: Math.min(size.w, footprint.w),
+    d: Math.min(size.d, footprint.d),
   }
 }
 
@@ -581,10 +593,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               : room.roomType,
       }
 
-      updated.size = clampComponentSize(
-        objectType,
-        (nextPatch.size as ComponentSize | undefined) ?? room.size,
-        room.size,
+      const updatedFootprint = footprintForLevel(state.floors, updated.floorLevel)
+      updated.size = clampSizeToFootprint(
+        clampComponentSize(
+          objectType,
+          (nextPatch.size as ComponentSize | undefined) ?? room.size,
+          room.size,
+        ),
+        updatedFootprint,
       )
 
       const patchPosition = nextPatch.position as Room['position'] | undefined
@@ -600,14 +616,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         updated.position = clampToFootprint(
           nextPosition,
           updated.size,
-          footprintForLevel(state.floors, updated.floorLevel),
+          updatedFootprint,
         )
       } else if (nextPatch.size || nextPatch.floorLevel !== undefined || nextPatch.floorId !== undefined) {
         updated = withFloorElevation(updated, state.floors)
         updated.position = clampToFootprint(
           updated.position,
           updated.size,
-          footprintForLevel(state.floors, updated.floorLevel),
+          updatedFootprint,
         )
       }
 
@@ -637,14 +653,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const room = state.rooms.find((r) => r.id === id)
       if (!room) return state
 
-      const clampedSize = clampComponentSize(room.objectType, size, room.size)
+      const footprint = footprintForLevel(state.floors, room.floorLevel)
+      const clampedSize = clampSizeToFootprint(
+        clampComponentSize(room.objectType, size, room.size),
+        footprint,
+      )
       let nextPosition = position ?? room.position
       nextPosition = applyGridToPosition(nextPosition, state)
       const elevation = floorElevation(state.floors, room.floorLevel)
       const clampedPosition = clampToFootprint(
         { ...nextPosition, y: elevation + clampedSize.h / 2 },
         clampedSize,
-        footprintForLevel(state.floors, room.floorLevel),
+        footprint,
       )
       const updated: Room = { ...room, size: clampedSize, position: clampedPosition }
 
@@ -945,11 +965,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
   loadLayout: (layout) => {
     const { floors, rooms, floorHeight } = normalizeLayout(layout)
+    // viewMode is deliberately left untouched: switching 2D/3D/zoning/graph
+    // must survive generation, refine, restore, and recovery loads.
     set({
       rooms,
       floors,
       selectedFloor: floors[0]?.level ?? 0,
-      viewMode: '3d',
       floorHeight,
       designId: layout.designId ?? null,
       designVersionId: layout.designVersionId ?? null,
@@ -974,7 +995,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       rooms: [],
       floors: [DEFAULT_FLOOR],
       selectedFloor: 0,
-      viewMode: '3d',
       floorHeight: DEFAULT_FLOOR_HEIGHT,
       designId: null,
       designVersionId: null,

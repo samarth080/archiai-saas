@@ -52,7 +52,7 @@ export function RegisterForm() {
         })}
         error={errors.password?.message}
       />
-      {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+      {serverError && <p className="text-sm text-danger">{serverError}</p>}
       <Button type="submit" loading={loading}>
         Create Account
       </Button>

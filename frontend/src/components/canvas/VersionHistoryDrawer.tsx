@@ -11,9 +11,9 @@ interface Props {
 }
 
 const TYPE_BADGE: Record<string, string> = {
-  generated: 'bg-brand-100 text-brand-700',
-  manual: 'bg-emerald-100 text-emerald-700',
-  refined: 'bg-amber-100 text-amber-700',
+  generated: 'bg-ink/15 text-ink',
+  manual: 'bg-ok/15 text-ok',
+  refined: 'bg-warn/15 text-warn',
   duplicate: 'bg-ink/5 text-muted',
 }
 
@@ -85,7 +85,7 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Version history"
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-graphite-800 shadow-xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
@@ -103,7 +103,7 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
           {loading && <p className="text-sm text-muted-light">Loading…</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           {!loading && !error && versions.length === 0 && (
             <p className="text-sm text-muted-light">No versions saved yet.</p>
           )}
@@ -121,7 +121,7 @@ export function VersionHistoryDrawer({ projectId, open, onClose }: Props) {
                   aria-label="Restore"
                   disabled={restoringId === v.id}
                   onClick={() => handleRestore(v.id)}
-                  className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50 whitespace-nowrap"
+                  className="text-xs text-ink hover:text-ink disabled:opacity-50 whitespace-nowrap"
                 >
                   {restoringId === v.id ? 'Restoring…' : 'Restore'}
                 </button>

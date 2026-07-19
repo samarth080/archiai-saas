@@ -1,4 +1,3 @@
-import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
 import { Avatar } from '../ui/Avatar'
 import { LevelMenu } from './LevelMenu'
 import { OverflowMenu } from './OverflowMenu'
@@ -48,12 +47,6 @@ interface EditorTopBarProps {
   deleteError: string | null
 }
 
-const VIEW_MODES: { value: CanvasViewMode; label: string }[] = [
-  { value: 'top', label: '2D' },
-  { value: 'floor_plan', label: 'Plan' },
-  { value: '3d', label: '3D' },
-]
-
 export function EditorTopBar({
   projectTitle,
   onBackToDashboard,
@@ -93,14 +86,6 @@ export function EditorTopBar({
   duplicateError,
   deleteError,
 }: EditorTopBarProps) {
-  const rooms = useCanvasStore((s) => s.rooms)
-  const viewMode = useCanvasStore((s) => s.viewMode)
-  const setViewMode = useCanvasStore((s) => s.setViewMode)
-
-  const netArea = rooms
-    .filter((room) => room.objectType === 'room')
-    .reduce((sum, room) => sum + room.size.w * room.size.d, 0)
-
   return (
     <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-4 pointer-events-none">
       <div className="flex flex-wrap items-center gap-2.5 pointer-events-auto">
@@ -111,26 +96,26 @@ export function EditorTopBar({
           title="Back to projects"
         >
           <span className="text-sm font-extrabold tracking-wide">ARCHI</span>
-          <span className="text-sm font-extrabold tracking-wide text-brand-600">·AI</span>
+          <span className="text-sm font-extrabold tracking-wide text-ink">·AI</span>
         </button>
         <span className="h-3.5 w-px bg-ink/15" />
 
         {editing ? (
-          <div className="flex flex-col gap-1 rounded-xl border border-ink/10 bg-white/95 p-2 shadow-sm">
+          <div className="flex flex-col gap-1 rounded-xl border border-ink/10 bg-graphite-800/95 p-2 shadow-[0_8px_28px_rgba(0,0,0,0.16)] backdrop-blur">
             <input
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              className="rounded-lg border border-ink/15 px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               rows={2}
               placeholder="Description (optional)"
-              className="w-56 resize-none rounded-lg border border-ink/15 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-56 resize-none rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
-            {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+            {saveError && <p className="text-xs text-danger">{saveError}</p>}
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -144,7 +129,7 @@ export function EditorTopBar({
                 type="button"
                 onClick={onSaveTitle}
                 disabled={savingTitle || !editTitle.trim()}
-                className="flex-1 rounded-lg bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-500 disabled:bg-brand-300"
+                className="flex-1 rounded-lg bg-ink px-2 py-1 text-xs font-medium text-graphite-900 hover:bg-graphite-100 disabled:bg-graphite-500"
               >
                 Save
               </button>
@@ -168,28 +153,6 @@ export function EditorTopBar({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3 pointer-events-auto">
-        <div className="flex items-baseline gap-2 rounded-lg bg-white/70 px-3 py-1.5">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">Net area</span>
-          <span className="font-mono text-sm font-semibold tabular-nums text-brand-700">
-            {netArea.toFixed(0)} m²
-          </span>
-        </div>
-
-        <div className="flex items-center gap-0.5 rounded-lg border border-ink/10 bg-white/70 p-1">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.value}
-              type="button"
-              onClick={() => setViewMode(mode.value)}
-              className={`rounded-lg px-2.5 py-1 font-mono text-xs font-semibold ${
-                viewMode === mode.value ? 'bg-brand-600 text-white' : 'text-muted hover:text-ink'
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
         <OverflowMenu
           onHistory={onHistory}
           onActivity={onActivity}
@@ -212,7 +175,7 @@ export function EditorTopBar({
           type="button"
           aria-label="Share project"
           onClick={onShare}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink/10 bg-white/70 text-ink/70 hover:bg-white/90"
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink/10 bg-graphite-800/90 text-ink/70 hover:bg-graphite-750"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="18" cy="5" r="3" />

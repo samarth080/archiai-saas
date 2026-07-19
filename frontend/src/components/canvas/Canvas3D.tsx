@@ -4,7 +4,9 @@ import { Scene } from './Scene'
 import { RoomMesh } from './RoomMesh'
 import { useCanvasStore } from '../../store/canvasStore'
 import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
-import { getCanvasShortcut } from './keyboardShortcuts'
+import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
+import { shouldRenderCanvasObject } from './canvasObjectVisibility'
+import { EDITOR_PALETTE } from './editorPalette'
 
 interface Canvas3DProps {
   className?: string
@@ -20,57 +22,19 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const clearClipboardMessage = useCanvasStore((s) => s.clearClipboardMessage)
   const visibleRooms =
     selectedFloor === 'all'
-      ? rooms
-      : rooms.filter((room) => (room.floorLevel ?? 0) === selectedFloor)
+      ? rooms.filter((room) => shouldRenderCanvasObject(room, viewMode))
+      : rooms.filter(
+          (room) =>
+            (room.floorLevel ?? 0) === selectedFloor &&
+            shouldRenderCanvasObject(room, viewMode),
+        )
   const camera =
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
       : { position: [0, 28, 0.01] as [number, number, number], fov: 42 }
-  const background = viewMode === 'floor_plan' ? '#f8fafc' : '#eef2f7'
+  const background = `radial-gradient(circle at 50% 10%, ${EDITOR_PALETTE.workspaceHighlight} 0%, ${EDITOR_PALETTE.workspaceStart} 48%, ${EDITOR_PALETTE.workspaceEnd} 100%)`
 
-  useEffect(() => {
-    if (readOnly) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const shortcut = getCanvasShortcut(event)
-      if (!shortcut) return
-
-      const store = useCanvasStore.getState()
-      if (shortcut === 'copy') {
-        event.preventDefault()
-        store.copySelected()
-      } else if (shortcut === 'paste') {
-        event.preventDefault()
-        store.pasteClipboard()
-      } else if (shortcut === 'undo') {
-        event.preventDefault()
-        store.undo()
-      } else if (shortcut === 'redo') {
-        event.preventDefault()
-        store.redo()
-      } else if (shortcut === 'duplicate') {
-        event.preventDefault()
-        store.duplicateSelected()
-      } else if (shortcut === 'delete') {
-        if (store.selectedId) {
-          event.preventDefault()
-          store.deleteRoom(store.selectedId)
-        }
-      } else if (shortcut === 'escape') {
-        event.preventDefault()
-        window.dispatchEvent(new Event('archiai:cancel-canvas-interaction'))
-        if (orbitRef.current) orbitRef.current.enabled = true
-        store.setPlacementMode(null)
-        store.setShowDimensions(false)
-        store.clearMeasure()
-        store.resetInteraction()
-        store.deselectAll()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [readOnly])
+  useCanvasKeyboardShortcuts({ disabled: readOnly })
 
   useEffect(() => {
     if (!clipboardMessage) return
@@ -86,8 +50,10 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
     >
       <Canvas
         key={viewMode}
+        shadows={viewMode === '3d'}
+        dpr={[1, 2]}
         camera={camera}
-        gl={{ preserveDrawingBuffer: true }}
+        gl={{ preserveDrawingBuffer: true, antialias: true }}
         onPointerMissed={
           readOnly
             ? undefined
@@ -117,7 +83,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       {clipboardMessage && (
         <div
           role="status"
-          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-ink/10 bg-white/95 px-3 py-2 text-xs font-medium text-ink shadow-sm"
+          className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-lg border border-ink/10 bg-graphite-800/95 px-3 py-2 text-xs font-medium text-ink shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
         >
           {clipboardMessage}
         </div>

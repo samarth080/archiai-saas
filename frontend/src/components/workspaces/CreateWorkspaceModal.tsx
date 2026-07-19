@@ -37,8 +37,8 @@ export function CreateWorkspaceModal({ onClose, onCreated }: CreateWorkspaceModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">New Workspace</h2>
+      <div className="w-full max-w-md rounded-lg bg-graphite-800 p-6">
+        <h2 className="mb-4 text-lg font-semibold text-ink">New Workspace</h2>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
             label="Name"
@@ -46,18 +46,18 @@ export function CreateWorkspaceModal({ onClose, onCreated }: CreateWorkspaceModa
             {...register('name', { required: 'Name is required' })}
           />
           <div>
-            <label htmlFor="workspace-description" className="mb-1 block text-sm font-medium text-gray-700">
-              Description <span className="font-normal text-gray-400">(optional)</span>
+            <label htmlFor="workspace-description" className="mb-1 block text-sm font-medium text-muted">
+              Description <span className="font-normal text-muted-light">(optional)</span>
             </label>
             <textarea
               id="workspace-description"
               {...register('description')}
               rows={3}
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ink/30"
               placeholder="Describe this workspace..."
             />
           </div>
-          {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+          {submitError && <p className="text-sm text-danger">{submitError}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel

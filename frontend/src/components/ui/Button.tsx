@@ -15,12 +15,12 @@ export function Button({
   ...props
 }: ButtonProps) {
   const base =
-    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed'
+    'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface disabled:cursor-not-allowed'
   const variants = {
     primary:
-      'bg-brand-600 text-white hover:bg-brand-500 focus:ring-brand-500 disabled:opacity-50',
+      'bg-ink text-graphite-900 hover:bg-graphite-100 focus:ring-ink/40 disabled:opacity-50',
     secondary:
-      'bg-ink/5 text-ink hover:bg-ink/10 focus:ring-ink/20 disabled:opacity-50',
+      'border border-ink/15 bg-ink/5 text-ink hover:bg-ink/10 focus:ring-ink/20 disabled:opacity-50',
   }
 
   return (

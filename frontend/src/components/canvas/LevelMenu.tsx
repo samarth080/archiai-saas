@@ -32,7 +32,7 @@ export function LevelMenu() {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         className={`flex items-center gap-1.5 rounded-lg border border-ink/10 px-2.5 py-1.5 text-ink transition-colors ${
-          open ? 'bg-white/95' : 'bg-white/70 hover:bg-white/90'
+          open ? 'bg-graphite-800/95' : 'bg-graphite-800/70 hover:bg-graphite-800/90'
         }`}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7A6CD6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -46,14 +46,14 @@ export function LevelMenu() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-10 z-40 w-48 rounded-2xl border border-ink/10 bg-white p-1.5 shadow-2xl">
+        <div className="absolute left-0 top-10 z-40 w-48 rounded-2xl border border-ink/10 bg-graphite-800 p-1.5 shadow-2xl">
           <button
             type="button"
             onClick={() => {
               addFloorAbove()
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-brand-600 hover:bg-brand-600/10"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink hover:bg-ink/10"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M12 5v14M5 12h14" />
@@ -65,7 +65,7 @@ export function LevelMenu() {
             type="button"
             onClick={() => setSelectedFloor('all')}
             className={`flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-sm ${
-              selectedFloor === 'all' ? 'bg-brand-600/10 font-semibold' : 'font-medium hover:bg-ink/5'
+              selectedFloor === 'all' ? 'bg-ink/10 font-semibold' : 'font-medium hover:bg-ink/5'
             }`}
           >
             <span className="flex w-4 flex-shrink-0 justify-center">
@@ -87,7 +87,7 @@ export function LevelMenu() {
                 setOpen(false)
               }}
               className={`flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-sm ${
-                selectedFloor === floor.level ? 'bg-brand-600/10 font-semibold' : 'font-medium hover:bg-ink/5'
+                selectedFloor === floor.level ? 'bg-ink/10 font-semibold' : 'font-medium hover:bg-ink/5'
               }`}
             >
               <span className="flex w-4 flex-shrink-0 justify-center">
@@ -107,7 +107,7 @@ export function LevelMenu() {
               addFloorBelow()
               setOpen(false)
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-brand-600 hover:bg-brand-600/10"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-ink hover:bg-ink/10"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M12 5v14M5 12h14" />
@@ -125,7 +125,7 @@ export function LevelMenu() {
               setOpen(false)
             }}
             className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium ${
-              canDelete ? 'text-red-600 hover:bg-red-50' : 'cursor-default text-ink/25'
+              canDelete ? 'text-danger hover:bg-danger/10' : 'cursor-default text-ink/25'
             }`}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">

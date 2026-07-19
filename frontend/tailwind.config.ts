@@ -1,26 +1,38 @@
 import type { Config } from 'tailwindcss'
 import defaultTheme from 'tailwindcss/defaultTheme'
 
+// ArchiAI design tokens — dark ash-gray / graphite system with white as the
+// primary accent. One consistent product layout: the website pages, the
+// editor chrome, and the canvases all draw from this single scale.
 const config: Config = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#F5F3FC',
-          100: '#EBE7F9',
-          200: '#D6CDF2',
-          300: '#B7A8E8',
-          400: '#9986DD',
-          500: '#8B7EE0',
-          600: '#7A6CD6',
-          700: '#6354B8',
-          800: '#4E3F94',
-          900: '#3A2F70',
+        graphite: {
+          950: '#0E0F11', // deepest — editor grid wells
+          900: '#131417', // app background
+          850: '#17191C', // page section alternation
+          800: '#1C1E22', // panels
+          750: '#212327', // raised panels / hover surfaces
+          700: '#26282D', // inputs
+          600: '#31343A', // strong borders / disabled surfaces
+          500: '#43464C', // disabled text on panels
+          400: '#5C6067',
+          300: '#8A8E95',
+          200: '#B9BCC1',
+          100: '#DDDEE1',
+          50: '#F3F4F5',
         },
-        ink: '#26222F',
-        muted: { DEFAULT: '#6E6A7A', light: '#9A95A8' },
-        surface: '#F2F1F7',
+        // Semantic tokens (dark theme): ink = primary text, muted = secondary,
+        // muted-light = tertiary/disabled, surface = app background.
+        ink: '#F3F4F5',
+        muted: { DEFAULT: '#A2A6AD', light: '#75797F' },
+        surface: '#131417',
+        // Status colors, deliberately muted per the approved direction.
+        ok: '#8FAE94',
+        warn: '#C9A96E',
+        danger: '#C97B70',
       },
       fontFamily: {
         sans: ['Archivo', ...defaultTheme.fontFamily.sans],
