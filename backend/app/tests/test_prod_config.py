@@ -43,6 +43,17 @@ def test_allowed_origins_parses_csv():
     assert settings.allowed_origins_list == ["http://a.com", "http://b.com"]
 
 
+def test_local_llm_timeout_defaults_to_one_minute(monkeypatch):
+    monkeypatch.delenv("LLM_TIMEOUT_S", raising=False)
+    settings = Settings(
+        ENV="development",
+        SECRET_KEY="dev",
+        DATABASE_URL=_DB,
+        _env_file=None,
+    )
+    assert settings.LLM_TIMEOUT_S == 60.0
+
+
 async def test_security_headers_absent_in_development(client: AsyncClient):
     response = await client.get("/api/health")
     assert "content-security-policy" not in response.headers

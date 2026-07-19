@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # http://host.docker.internal:1234/v1 (set in docker-compose). Enable
     # "Serve on Local Network" in LM Studio or the container cannot reach it.
     LLM_BASE_URL: str = "http://localhost:1234/v1"
-    LLM_TIMEOUT_S: float = 30.0
+    LLM_TIMEOUT_S: float = 60.0
     # Optional override. Empty = read the exact identifier of whatever model LM
     # Studio has loaded from GET /v1/models (a mismatched hard-coded name errors).
     LLM_MODEL: str = ""

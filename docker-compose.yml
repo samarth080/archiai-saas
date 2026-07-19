@@ -26,7 +26,7 @@ services:
       # through the host gateway. Requires "Serve on Local Network" in LM Studio.
       LLM_BASE_URL: http://host.docker.internal:1234/v1
       LLM_MODEL: ${LLM_MODEL:-}
-      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-30}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-60}
     extra_hosts:
       # host.docker.internal does not resolve on Linux without this mapping.
       - "host.docker.internal:host-gateway"
