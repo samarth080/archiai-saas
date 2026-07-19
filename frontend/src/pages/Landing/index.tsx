@@ -8,6 +8,7 @@ import { FeatureCard } from '../../components/website/FeatureCard'
 import { PricingCard } from '../../components/website/PricingCard'
 import { DemoModal } from '../../components/website/DemoModal'
 import { PLANS, type PlanDefinition } from '../../constants/plans'
+import { useHashScroll } from '../../hooks/useHashScroll'
 
 const TRUST_ITEMS = [
   'AI-assisted design',
@@ -81,6 +82,7 @@ const SOLUTIONS = [
 
 export default function Landing() {
   const navigate = useNavigate()
+  useHashScroll()
   const [demoModal, setDemoModal] = useState<'watch' | 'book' | null>(null)
 
   const goToPricing = (plan?: PlanDefinition) => {

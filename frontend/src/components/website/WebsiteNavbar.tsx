@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 
@@ -22,6 +22,12 @@ const NAV_LINKS: { label: string; to: string }[] = [
 export function WebsiteNavbar({ onBookDemo }: WebsiteNavbarProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [menuOpen, setMenuOpen] = useState(false)
+  const { pathname } = useLocation()
+
+  const isActiveLink = (to: string) => {
+    const path = to.split('#')[0] || '/'
+    return path !== '/' && pathname.startsWith(path)
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-ink/10 bg-surface/90 backdrop-blur">
@@ -36,7 +42,12 @@ export function WebsiteNavbar({ onBookDemo }: WebsiteNavbarProps) {
               <Link
                 key={link.label}
                 to={link.to}
-                className="text-sm font-medium text-muted transition-colors hover:text-ink"
+                aria-current={isActiveLink(link.to) ? 'page' : undefined}
+                className={`rounded-md px-1 py-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 ${
+                  isActiveLink(link.to)
+                    ? 'text-ink underline decoration-ink/40 underline-offset-8'
+                    : 'text-muted hover:text-ink'
+                }`}
               >
                 {link.label}
               </Link>
@@ -48,14 +59,14 @@ export function WebsiteNavbar({ onBookDemo }: WebsiteNavbarProps) {
           {isAuthenticated ? (
             <Link
               to="/dashboard"
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
             >
               Dashboard
             </Link>
           ) : (
             <Link
               to="/login"
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
             >
               Log in
             </Link>
@@ -63,13 +74,13 @@ export function WebsiteNavbar({ onBookDemo }: WebsiteNavbarProps) {
           <button
             type="button"
             onClick={onBookDemo}
-            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
           >
             Book a Demo
           </button>
           <Link
             to="/pricing"
-            className="rounded-lg bg-ink px-3.5 py-1.5 text-sm font-semibold text-graphite-900 hover:bg-graphite-100"
+            className="rounded-lg bg-ink px-3.5 py-1.5 text-sm font-semibold text-graphite-900 hover:bg-graphite-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           >
             Start Free Trial
           </Link>

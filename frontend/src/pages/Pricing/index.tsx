@@ -10,6 +10,7 @@ import {
   type BillingCycle,
   type PlanDefinition,
 } from '../../constants/plans'
+import { useHashScroll } from '../../hooks/useHashScroll'
 
 interface ComparisonRow {
   label: string
@@ -31,6 +32,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
 
 export default function PricingPage() {
   const navigate = useNavigate()
+  useHashScroll()
   const [searchParams] = useSearchParams()
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
   const [demoOpen, setDemoOpen] = useState(false)
