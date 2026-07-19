@@ -63,7 +63,7 @@ export default function SharedProjectPage() {
       <header className="border-b border-ink/10 bg-graphite-800 px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase text-indigo-600">ArchiAI shared project</p>
+            <p className="text-xs font-semibold uppercase text-muted">ArchiAI shared project</p>
             <h1 className="mt-1 text-xl font-bold text-ink">{sharedProject.project.title}</h1>
             {sharedProject.project.description && (
               <p className="mt-1 text-sm text-muted-light">{sharedProject.project.description}</p>

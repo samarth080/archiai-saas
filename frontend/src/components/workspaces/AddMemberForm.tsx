@@ -47,7 +47,7 @@ export function AddMemberForm({ workspaceId, onAdded }: AddMemberFormProps) {
           onChange={(event) => setEmail(event.target.value)}
           required
           placeholder="teammate@example.com"
-          className="mt-1 w-full rounded border border-ink/15 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="mt-1 w-full rounded border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ink/30"
         />
       </label>
       <label className="text-sm font-medium text-muted">
@@ -55,7 +55,7 @@ export function AddMemberForm({ workspaceId, onAdded }: AddMemberFormProps) {
         <select
           value={role}
           onChange={(event) => setRole(event.target.value as AssignableWorkspaceRole)}
-          className="mt-1 block rounded border border-ink/15 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="mt-1 block rounded border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ink/30"
         >
           <option value="admin">Admin</option>
           <option value="editor">Editor</option>

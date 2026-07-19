@@ -48,7 +48,7 @@ export function Inspector() {
           <input
             type="text"
             aria-label="Object label"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-semibold text-ink"
+            className="w-full border border-ink/15 bg-graphite-700 rounded-lg px-2 py-1 text-sm font-semibold text-ink"
             value={room.label}
             onChange={(e) => {
               updateRoom(
@@ -66,7 +66,7 @@ export function Inspector() {
           <span className="text-xs font-semibold text-muted uppercase tracking-wide">Type</span>
           <select
             aria-label="Object type"
-            className="w-full rounded-lg border border-ink/15 px-2 py-1 text-sm text-ink/80"
+            className="w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm text-ink/80"
             value={room.objectType}
             onChange={(e) => {
               const objectType = e.target.value as CanvasObjectType
@@ -93,7 +93,7 @@ export function Inspector() {
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">Floor</span>
             <select
               aria-label="Object floor"
-              className="w-full rounded-lg border border-ink/15 px-2 py-1 text-sm text-ink/80"
+              className="w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm text-ink/80"
               value={room.floorLevel ?? 0}
               onChange={(e) => {
                 const floor = floors.find((candidate) => candidate.level === Number(e.target.value))

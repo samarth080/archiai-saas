@@ -106,14 +106,14 @@ export function EditorTopBar({
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              className="rounded-lg border border-ink/15 px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
             <textarea
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               rows={2}
               placeholder="Description (optional)"
-              className="w-56 resize-none rounded-lg border border-ink/15 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-56 resize-none rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
             {saveError && <p className="text-xs text-danger">{saveError}</p>}
             <div className="flex gap-1.5">

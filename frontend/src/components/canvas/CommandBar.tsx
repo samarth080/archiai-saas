@@ -53,7 +53,7 @@ export function CommandBar({
       <button
         role="tab"
         aria-selected={mode === 'generate'}
-        className={`px-3 py-1 ${mode === 'generate' ? 'bg-ink text-graphite-900' : 'bg-[#E8ECF1] text-muted'}`}
+        className={`px-3 py-1 ${mode === 'generate' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'}`}
         onClick={() => onModeChange('generate')}
       >
         Generate
@@ -63,7 +63,7 @@ export function CommandBar({
         aria-selected={mode === 'refine'}
         disabled={!designId}
         title={designId ? '' : 'Generate a layout first'}
-        className={`px-3 py-1 ${mode === 'refine' ? 'bg-ink text-graphite-900' : 'bg-[#E8ECF1] text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`px-3 py-1 ${mode === 'refine' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
         onClick={() => onModeChange('refine')}
       >
         Refine
@@ -71,7 +71,7 @@ export function CommandBar({
       {mode === 'generate' && (
         <button
           type="button"
-          className="border-l border-ink/15 bg-[#E8ECF1] px-3 py-1 text-muted hover:text-ink"
+          className="border-l border-ink/15 bg-graphite-700 px-3 py-1 text-muted hover:text-ink"
           onClick={() => setShowParams(!showParams)}
           aria-expanded={showParams}
         >
@@ -91,7 +91,7 @@ export function CommandBar({
           max={40}
           step={0.5}
           placeholder="auto"
-          className="w-24 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+          className="w-24 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={plotWidthM}
           onChange={(e) => setPlotWidthM(e.target.value)}
         />
@@ -103,7 +103,7 @@ export function CommandBar({
           min={1}
           max={5}
           placeholder="auto"
-          className="w-20 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+          className="w-20 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={floorsOverride}
           onChange={(e) => setFloorsOverride(e.target.value)}
         />
@@ -111,7 +111,7 @@ export function CommandBar({
       <label className="flex flex-col gap-1">
         Entry faces
         <select
-          className="w-24 rounded-lg border border-ink/15 bg-[#FCFAF5] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+          className="w-24 rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           value={orientation}
           onChange={(e) => setOrientation(e.target.value as typeof orientation)}
         >
@@ -215,7 +215,7 @@ export function CommandBar({
       <div className="flex gap-2 items-end">
         <textarea
           aria-label="Layout prompt"
-          className="flex-1 resize-none rounded-lg border border-ink/15 bg-[#FCFAF5] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+          className="flex-1 resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
           rows={1}
           placeholder={
             mode === 'refine'

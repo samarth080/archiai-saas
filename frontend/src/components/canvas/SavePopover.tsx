@@ -24,7 +24,7 @@ function statusLabel(status: SaveStatus, lastSavedAt: string | null) {
 const STATUS_DOT: Record<SaveStatus, string> = {
   saved: 'bg-ok/100',
   saving: 'bg-warn/100',
-  unsaved: 'bg-sky-500',
+  unsaved: 'bg-warn',
   error: 'bg-danger/100',
 }
 
@@ -64,14 +64,14 @@ export function SavePopover({
             value={versionName}
             onChange={(e) => setVersionName(e.target.value)}
             placeholder="Version name (optional)"
-            className="mb-2 h-8 w-full rounded-lg border border-ink/15 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ink/30"
+            className="mb-2 h-8 w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
           />
           <input
             type="text"
             value={changeSummary}
             onChange={(e) => setChangeSummary(e.target.value)}
             placeholder="Change summary (optional)"
-            className="mb-3 h-8 w-full rounded-lg border border-ink/15 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ink/30"
+            className="mb-3 h-8 w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
           />
           <button
             type="button"

@@ -53,7 +53,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: CreateWorkspaceModa
               id="workspace-description"
               {...register('description')}
               rows={3}
-              className="w-full resize-none rounded-lg border border-ink/15 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ink/30"
               placeholder="Describe this workspace..."
             />
           </div>

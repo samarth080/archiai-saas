@@ -34,7 +34,7 @@ export function MemberList({ members, canManage, onRoleChange, onRemove }: Membe
                 onChange={(event) =>
                   onRoleChange(member, event.target.value as AssignableWorkspaceRole)
                 }
-                className="rounded border border-ink/15 px-2 py-1.5 text-sm capitalize focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="rounded border border-ink/15 bg-graphite-700 px-2 py-1.5 text-sm capitalize focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ink/30"
               >
                 <option value="admin">Admin</option>
                 <option value="editor">Editor</option>

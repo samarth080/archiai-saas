@@ -102,7 +102,7 @@ export function BriefReviewPanel({
                       ),
                     )
                   }
-                  className="mt-1.5 w-full resize-none rounded-lg border border-ink/15 px-3 py-2 text-sm font-normal focus:outline-none focus:ring-2 focus:ring-ink/30"
+                  className="mt-1.5 w-full resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm font-normal text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
                   disabled={busy}
                 />
               </label>

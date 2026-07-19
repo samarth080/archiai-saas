@@ -10,7 +10,7 @@ export default function Register() {
         <RegisterForm />
         <p className="mt-4 text-sm text-muted">
           Already have an account?{' '}
-          <Link to="/login" className="text-indigo-600 hover:underline">
+          <Link to="/login" className="font-medium text-ink hover:underline">
             Sign In
           </Link>
         </p>
