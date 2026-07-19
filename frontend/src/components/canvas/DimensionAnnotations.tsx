@@ -1,6 +1,7 @@
 import { Html, Line } from '@react-three/drei'
 import { Room } from '../../store/canvasStore'
 import { ACCENT_HEX, DIM_HEX } from '../../constants/theme'
+import { formatArea, formatDims, formatMeters } from '../../utils/format'
 
 interface DimensionAnnotationsProps {
   room: Room
@@ -10,10 +11,6 @@ interface DimensionAnnotationsProps {
 
 const OFFSET = 0.45
 const TICK = 0.18
-
-function formatMeters(value: number) {
-  return `${value.toFixed(2)} m`
-}
 
 export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsProps) {
   const { x, y, z } = room.position
@@ -56,8 +53,10 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       />
       <Html position={[x, lineY, widthLineZ - 0.3]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
         <span
-          className={`rounded-lg px-1.5 py-0.5 text-[10px] font-mono font-medium shadow-sm ${
-            emphasized ? 'bg-ink text-graphite-900' : 'bg-graphite-800/85 text-muted'
+          className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm ${
+            emphasized
+              ? 'bg-ink text-graphite-900'
+              : 'border border-ink/10 bg-graphite-800/90 text-muted'
           }`}
         >
           {formatMeters(w)}
@@ -91,8 +90,10 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       />
       <Html position={[depthLineX - 0.3, lineY, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
         <span
-          className={`rounded-lg px-1.5 py-0.5 text-[10px] font-mono font-medium shadow-sm ${
-            emphasized ? 'bg-ink text-graphite-900' : 'bg-graphite-800/85 text-muted'
+          className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums shadow-sm ${
+            emphasized
+              ? 'bg-ink text-graphite-900'
+              : 'border border-ink/10 bg-graphite-800/90 text-muted'
           }`}
         >
           {formatMeters(d)}
@@ -102,8 +103,8 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
       {/* Area badge — selected room only; sits above the room label */}
       {emphasized && (
         <Html position={[x, y + h / 2 + 0.65, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="rounded-lg border border-ink/20 bg-graphite-800/95 px-2 py-1 text-[11px] font-mono font-semibold text-ink shadow-sm">
-            {w.toFixed(2)} × {d.toFixed(2)} m · {(w * d).toFixed(1)} m²
+          <span className="rounded-md border border-ink/15 bg-graphite-800/95 px-2 py-1 font-mono text-[11px] font-semibold tabular-nums text-ink shadow-sm">
+            {formatDims(w, d)} · {formatArea(w * d)}
           </span>
         </Html>
       )}

@@ -1,6 +1,7 @@
 import { useCanvasStore } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { VIEW_MODE_OPTIONS } from './ViewModeSwitcher'
+import { formatDims } from '../../utils/format'
 
 function saveStatusLabel(status: string, lastSavedAt: string | null) {
   if (status === 'saving') return 'Saving…'
@@ -72,7 +73,7 @@ export function BottomStatusBar() {
       <div className="flex min-w-0 items-center gap-3">
         {selected ? (
           <span className="truncate text-ink">
-            {selected.label} · {selected.size.w.toFixed(1)} × {selected.size.d.toFixed(1)} m
+            {selected.label} · {formatDims(selected.size.w, selected.size.d)}
           </span>
         ) : (
           <span className="hidden sm:inline">

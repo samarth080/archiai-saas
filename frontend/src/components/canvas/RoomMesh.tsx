@@ -15,6 +15,7 @@ import { DimensionAnnotations } from './DimensionAnnotations'
 import { ResizeHandles } from './ResizeHandles'
 import { roomVisualTreatment } from './roomVisualTreatment'
 import { displayRoomColor } from './editorPalette'
+import { formatArea } from '../../utils/format'
 
 interface OrbitHandle {
   enabled: boolean
@@ -328,7 +329,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
         </div>
         {isSpace && (
           <div className="mt-0.5 pl-3 text-[9px] font-medium text-muted-light">
-            {(room.size.w * room.size.d).toFixed(1)} m²
+            {formatArea(room.size.w * room.size.d)}
           </div>
         )}
       </div>

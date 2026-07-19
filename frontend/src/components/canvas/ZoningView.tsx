@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import { EDITOR_PALETTE, ZONE_META } from './editorPalette'
 import { derivePlanBounds } from './plan2dGeometry'
+import { formatArea } from '../../utils/format'
 import { isZonableObject, zoneForRoom } from './zoneModel'
 
 interface ZoningViewProps {
@@ -117,7 +118,7 @@ export function ZoningView({ className }: ZoningViewProps) {
                     fill="#DFDFE1"
                     fillOpacity={0.85}
                   >
-                    {ZONE_META[zone].label} · {(room.size.w * room.size.d).toFixed(0)} m²
+                    {ZONE_META[zone].label} · {formatArea(room.size.w * room.size.d)}
                   </text>
                 </g>
               )}

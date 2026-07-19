@@ -126,7 +126,7 @@ export function EditorPreviewCard() {
               fill="#F5F5F6"
               fontFamily="monospace"
             >
-              6.20 m
+              6.2 m
             </text>
           </svg>
 
@@ -163,8 +163,8 @@ export function EditorPreviewCard() {
           <p className="text-[6px] font-semibold uppercase tracking-wide text-muted-light">Properties</p>
           <p className="mt-1 text-[8px] font-semibold text-ink">Conference 02</p>
           {[
-            ['Width', '6.20 m'],
-            ['Depth', '4.80 m'],
+            ['Width', '6.2 m'],
+            ['Depth', '4.8 m'],
             ['Area', '29.8 m²'],
             ['Zone', 'Collab'],
           ].map(([key, value]) => (

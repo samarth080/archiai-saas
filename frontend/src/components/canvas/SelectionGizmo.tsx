@@ -1,5 +1,6 @@
 import { useCanvasStore } from '../../store/canvasStore'
 import { displayRoomColor } from './editorPalette'
+import { formatArea, formatDims } from '../../utils/format'
 
 /**
  * A floating top-center pill shown when a room is selected — type, color
@@ -39,7 +40,7 @@ export function SelectionGizmo() {
       />
       <span className="text-xs font-semibold text-ink">{room.label}</span>
       <span className="font-mono text-xs tabular-nums text-muted">
-        {room.size.w.toFixed(1)} × {room.size.d.toFixed(1)} m · {area.toFixed(1)} m²
+        {formatDims(room.size.w, room.size.d)} · {formatArea(area)}
       </span>
       <span className="h-4 w-px bg-ink/10" />
       <button

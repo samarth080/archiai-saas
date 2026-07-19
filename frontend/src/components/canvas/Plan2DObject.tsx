@@ -2,6 +2,8 @@ import type { KeyboardEvent, PointerEvent } from 'react'
 import type { Room } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { PLAN_RESIZE_HANDLES, type PlanResizeHandle } from './plan2dGeometry'
+import { EDITOR_PALETTE } from './editorPalette'
+import { formatArea, formatMeters } from '../../utils/format'
 import { displayRoomColor } from './editorPalette'
 
 interface Plan2DObjectProps {
@@ -231,7 +233,7 @@ export function Plan2DObject({
               fontWeight="600"
               fill={selected ? '#DFDFE1' : '#A2A2A6'}
             >
-              {(room.size.w * room.size.d).toFixed(1)} m²
+              {formatArea(room.size.w * room.size.d)}
             </text>
           )}
         </g>
@@ -250,12 +252,17 @@ export function Plan2DObject({
           />
           <text
             x={0}
-            y={-room.size.d / 2 - dimensionOffset - fontSize * 0.35}
+            y={-room.size.d / 2 - dimensionOffset - fontSize * 0.4}
             textAnchor="middle"
             fontSize={fontSize * 0.78}
+            fontFamily='"IBM Plex Mono", monospace'
             fill={selected ? '#F5F5F6' : '#909094'}
+            stroke={EDITOR_PALETTE.workspaceStart}
+            strokeWidth={fontSize * 0.3}
+            strokeLinejoin="round"
+            paintOrder="stroke"
           >
-            {room.size.w.toFixed(2)} m
+            {formatMeters(room.size.w)}
           </text>
           <line
             x1={-room.size.w / 2 - dimensionOffset}
@@ -267,15 +274,20 @@ export function Plan2DObject({
             vectorEffect="non-scaling-stroke"
           />
           <text
-            x={-room.size.w / 2 - dimensionOffset - fontSize * 0.35}
+            x={-room.size.w / 2 - dimensionOffset - fontSize * 0.4}
             y={0}
             textAnchor="middle"
             dominantBaseline="middle"
             fontSize={fontSize * 0.78}
+            fontFamily='"IBM Plex Mono", monospace'
             fill={selected ? '#F5F5F6' : '#909094'}
-            transform={`rotate(-90 ${-room.size.w / 2 - dimensionOffset - fontSize * 0.35} 0)`}
+            stroke={EDITOR_PALETTE.workspaceStart}
+            strokeWidth={fontSize * 0.3}
+            strokeLinejoin="round"
+            paintOrder="stroke"
+            transform={`rotate(-90 ${-room.size.w / 2 - dimensionOffset - fontSize * 0.4} 0)`}
           >
-            {room.size.d.toFixed(2)} m
+            {formatMeters(room.size.d)}
           </text>
         </g>
       )}
