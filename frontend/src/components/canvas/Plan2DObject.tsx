@@ -3,7 +3,7 @@ import type { Room } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { PLAN_RESIZE_HANDLES, type PlanResizeHandle } from './plan2dGeometry'
 import { EDITOR_PALETTE } from './editorPalette'
-import { formatArea, formatMeters } from '../../utils/format'
+import { formatArea, formatDims, formatMeters } from '../../utils/format'
 import { displayRoomColor } from './editorPalette'
 
 interface Plan2DObjectProps {
@@ -65,7 +65,19 @@ export function Plan2DObject({
   const isOpening = definition.category === 'opening'
   const isThin = definition.renderingTreatment === 'thin'
   const isOpenSpace = room.objectType === 'open_space'
-  const labelFits = room.size.w >= fontSize * 3.5 && room.size.d >= fontSize * 2.2
+  // Adaptive labels: the room name comes first and scales down (to a floor)
+  // in small rooms; the area line renders only when there's comfortably room
+  // for both; below that, the room shows no text and relies on the native
+  // tooltip + Inspector/status bar for details — no overlapping labels.
+  const labelLength = Math.max(room.label.length, 4)
+  const nameFontSize = Math.min(fontSize, (room.size.w * 0.85) / (labelLength * 0.58))
+  const showName = nameFontSize >= fontSize * 0.55 && room.size.d >= nameFontSize * 1.9
+  const showArea =
+    isSpace &&
+    showName &&
+    room.size.w * room.size.d >= 4 &&
+    room.size.w >= fontSize * 4.5 &&
+    room.size.d >= fontSize * 3.4
   const showObjectDimensions = definition.canResize && (selected || showDimensions)
   const dimensionOffset = Math.max(fontSize * 1.5, handleSize * 1.4)
   const rotation = Number.isFinite(room.rotation.y) ? room.rotation.y : 0
@@ -108,6 +120,10 @@ export function Plan2DObject({
           : (event) => handleKeyboardSelect(event, () => onSelect(room.id))
       }
     >
+      {/* Native tooltip — full details even when the room is too small for labels */}
+      <title>
+        {`${room.label} — ${formatDims(room.size.w, room.size.d)} · ${formatArea(room.size.w * room.size.d)}`}
+      </title>
       {selected && (
         <rect
           data-testid={`plan-selection-halo-${room.id}`}
@@ -210,20 +226,20 @@ export function Plan2DObject({
           />
         ))}
 
-      {labelFits && (
+      {showName && (
         <g pointerEvents="none">
           <text
             x={0}
-            y={-fontSize * 0.12}
+            y={showArea ? -fontSize * 0.12 : 0}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize={fontSize}
+            fontSize={nameFontSize}
             fontWeight={selected ? 700 : 600}
             fill={selected ? '#FFFFFF' : '#EAEAEC'}
           >
             {room.label}
           </text>
-          {isSpace && (
+          {showArea && (
             <text
               x={0}
               y={fontSize * 1.05}

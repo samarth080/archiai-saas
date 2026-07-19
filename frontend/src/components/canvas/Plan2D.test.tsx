@@ -266,3 +266,43 @@ describe('Plan2D', () => {
     expect(useCanvasStore.getState().placementMode).toBeNull()
   })
 })
+
+describe('Plan2D adaptive room labels', () => {
+  it('shows name and area in rooms large enough for both', () => {
+    useCanvasStore.getState().loadLayout(layoutWithRooms([cloneTestRoom()]))
+    render(<Plan2D />)
+
+    expect(screen.getByText('Living Room')).toBeInTheDocument()
+    expect(screen.getByText('16.0 m²')).toBeInTheDocument()
+  })
+
+  it('drops the area line first in small rooms, keeping the name', () => {
+    useCanvasStore.getState().loadLayout(
+      layoutWithRooms([
+        cloneTestRoom({ id: 'small', label: 'WC', size: { w: 1.6, h: 3, d: 1.6 } }),
+      ]),
+    )
+    render(<Plan2D />)
+
+    expect(screen.getByText('WC')).toBeInTheDocument()
+    expect(screen.queryByText('2.6 m²')).not.toBeInTheDocument()
+  })
+
+  it('hides all text in rooms too small for a readable label, leaving the tooltip', () => {
+    useCanvasStore.getState().loadLayout(
+      layoutWithRooms([
+        cloneTestRoom({
+          id: 'tiny',
+          label: 'Storage Closet',
+          size: { w: 0.9, h: 3, d: 0.9 },
+        }),
+      ]),
+    )
+    const { container } = render(<Plan2D />)
+
+    expect(screen.queryByText('Storage Closet')).not.toBeInTheDocument()
+    const title = container.querySelector('[data-testid="plan-object-tiny"] title')
+    expect(title?.textContent).toContain('Storage Closet')
+    expect(title?.textContent).toContain('1.0 × 1.0 m')
+  })
+})
