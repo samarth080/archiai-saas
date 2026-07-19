@@ -24,7 +24,11 @@ vi.mock('../../hooks/useAuth', () => ({
 }))
 
 vi.mock('../../components/canvas/Canvas3D', () => ({ Canvas3D: () => null }))
-vi.mock('../../components/canvas/Inspector', () => ({ Inspector: () => null }))
+vi.mock('../../components/canvas/Inspector', () => ({
+  InspectorProperties: ({ room }: { room: { label: string } }) => (
+    <div data-testid="inspector-properties">{room.label}</div>
+  ),
+}))
 
 vi.mock('../../services/project.service', () => ({
   default: {

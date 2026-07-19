@@ -6,7 +6,7 @@ import { Canvas3D } from '../../components/canvas/Canvas3D'
 import { Plan2D } from '../../components/canvas/Plan2D'
 import { ZoningView } from '../../components/canvas/ZoningView'
 import { RoomGraphView } from '../../components/canvas/RoomGraphView'
-import { Inspector } from '../../components/canvas/Inspector'
+import { RightPanel } from '../../components/canvas/RightPanel'
 import { EditorTopBar } from '../../components/canvas/EditorTopBar'
 import { ViewModeSwitcher } from '../../components/canvas/ViewModeSwitcher'
 import { BottomStatusBar } from '../../components/canvas/BottomStatusBar'
@@ -1014,7 +1014,7 @@ export default function ProjectPage() {
 
             <BottomStatusBar />
           </div>
-          {viewMode !== 'graph' && <Inspector />}
+          <RightPanel />
         </div>
       </main>
 

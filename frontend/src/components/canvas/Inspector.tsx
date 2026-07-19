@@ -1,32 +1,28 @@
-import { CanvasObjectType, useCanvasStore } from '../../store/canvasStore'
-import { COMPONENT_DEFINITIONS, COMPONENT_REGISTRY, componentTypeToRoomType } from '../../store/componentRegistry'
+import { CanvasObjectType, Room, useCanvasStore } from '../../store/canvasStore'
+import {
+  COMPONENT_DEFINITIONS,
+  COMPONENT_REGISTRY,
+  componentTypeToRoomType,
+} from '../../store/componentRegistry'
+import { formatArea, formatMeters, roomArea, roomPerimeter } from '../../utils/format'
 
-const ACTION_LABELS = {
-  'object.added': 'Added',
-  'object.deleted': 'Deleted',
-  'object.duplicated': 'Duplicated',
-  'object.pasted': 'Pasted',
-  'object.moved': 'Moved',
-  'object.resized': 'Resized',
-  'object.rotated': 'Rotated',
-  'object.renamed': 'Renamed',
-  'object.updated': 'Updated',
+interface InspectorPropertiesProps {
+  room: Room
 }
 
-export function Inspector() {
-  const selectedId = useCanvasStore((s) => s.selectedId)
-  const rooms = useCanvasStore((s) => s.rooms)
+const FIELD_CLASS =
+  'w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm font-mono tabular-nums text-ink/80 focus:outline-none focus:ring-2 focus:ring-ink/30 disabled:bg-ink/5 disabled:cursor-not-allowed'
+
+/**
+ * The editable property form for the selected canvas object. Rendered
+ * inside RightPanel's Properties tab — it owns only the fields, not the
+ * panel chrome, so every editor view shares one consistent sidebar.
+ */
+export function InspectorProperties({ room }: InspectorPropertiesProps) {
   const floors = useCanvasStore((s) => s.floors)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
   const deleteRoom = useCanvasStore((s) => s.deleteRoom)
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
-  const activityLog = useCanvasStore((s) => s.activityLog)
-
-  const room = rooms.find((r) => r.id === selectedId) ?? null
-
-  if (selectedId === null || room === null) {
-    return null
-  }
 
   const definition = COMPONENT_REGISTRY[room.objectType]
 
@@ -41,14 +37,14 @@ export function Inspector() {
   }
 
   return (
-    <div className="w-56 bg-graphite-800/90 backdrop-blur border-l border-ink/10 p-4 flex flex-col gap-4 overflow-y-auto">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-muted uppercase tracking-wide">Label</span>
           <input
             type="text"
             aria-label="Object label"
-            className="w-full border border-ink/15 bg-graphite-700 rounded-lg px-2 py-1 text-sm font-semibold text-ink"
+            className="w-full rounded-lg border border-ink/15 bg-graphite-700 px-2 py-1 text-sm font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             value={room.label}
             onChange={(e) => {
               updateRoom(
@@ -122,6 +118,23 @@ export function Inspector() {
         )}
       </div>
 
+      {/* Derived measurements — read-only, one rounding rule with the canvas */}
+      {definition.category === 'space' && (
+        <dl className="grid grid-cols-2 gap-1.5 rounded-lg bg-graphite-850/80 p-2.5">
+          {[
+            ['Area', formatArea(roomArea(room.size))],
+            ['Perimeter', formatMeters(roomPerimeter(room.size))],
+            ['Width', formatMeters(room.size.w)],
+            ['Depth', formatMeters(room.size.d)],
+          ].map(([key, value]) => (
+            <div key={key}>
+              <dt className="text-[10px] uppercase tracking-wide text-muted-light">{key}</dt>
+              <dd className="font-mono text-xs tabular-nums text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
       {/* Position */}
       <div className="flex flex-col gap-2">
         <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Position</h3>
@@ -131,7 +144,7 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Position X"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.position.x}
             disabled={!definition.canMove}
             onChange={(e) => {
@@ -146,7 +159,7 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Position Z"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.position.z}
             disabled={!definition.canMove}
             onChange={(e) => {
@@ -167,7 +180,7 @@ export function Inspector() {
             type="number"
             min={definition.minSize.w}
             aria-label="Width"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.size.w}
             disabled={!definition.canResize}
             onChange={(e) => {
@@ -183,7 +196,7 @@ export function Inspector() {
             type="number"
             min={definition.minSize.d}
             aria-label="Depth"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.size.d}
             disabled={!definition.canResize}
             onChange={(e) => {
@@ -199,7 +212,7 @@ export function Inspector() {
             type="number"
             min={definition.minSize.h}
             aria-label="Height"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.size.h}
             disabled={!definition.canResize}
             onChange={(e) => {
@@ -222,7 +235,7 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation X"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.rotation.x}
             disabled={!definition.canRotate}
             onChange={(e) => {
@@ -243,7 +256,7 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation Y"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.rotation.y}
             disabled={!definition.canRotate}
             onChange={(e) => {
@@ -291,7 +304,7 @@ export function Inspector() {
           <input
             type="number"
             aria-label="Rotation Z"
-            className="w-full border border-ink/15 rounded-lg px-2 py-1 text-sm font-mono tabular-nums text-ink/80 disabled:bg-ink/5 disabled:cursor-not-allowed"
+            className={FIELD_CLASS}
             value={room.rotation.z}
             disabled={!definition.canRotate}
             onChange={(e) => {
@@ -321,22 +334,6 @@ export function Inspector() {
         >
           Delete
         </button>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-ink/10 pt-4">
-        <h3 className="text-xs font-semibold text-muted uppercase tracking-wide">Recent edits</h3>
-        {activityLog.length === 0 ? (
-          <p className="text-xs text-muted-light">No edits yet</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {activityLog.slice(0, 5).map((entry) => (
-              <div key={entry.id} className="rounded-lg border border-ink/10 px-2 py-1">
-                <p className="text-xs font-medium text-ink/80">{ACTION_LABELS[entry.action]}</p>
-                <p className="truncate text-xs text-muted">{entry.objectLabel}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )

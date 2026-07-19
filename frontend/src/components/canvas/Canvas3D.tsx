@@ -80,6 +80,13 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
           <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         ))}
       </Canvas>
+      {viewMode === '3d' && !readOnly && (
+        <div className="pointer-events-none absolute bottom-36 left-4 max-w-xs rounded-lg border border-ink/10 bg-graphite-800/90 px-3 py-2 text-[11px] font-medium text-muted shadow-lg backdrop-blur">
+          Left click selects · drag selected moves · right drag pans · middle drag
+          orbits. Room blocks can be molded to fit irregular footprints — use the
+          corner handles in 2D Plan or the W/D/H fields in the panel.
+        </div>
+      )}
       {clipboardMessage && (
         <div
           role="status"

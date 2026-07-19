@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import { EDITOR_PALETTE, ZONE_META } from './editorPalette'
 import { derivePlanBounds } from './plan2dGeometry'
-import { isZonableObject, summarizeZones, zoneForRoom } from './zoneModel'
+import { isZonableObject, zoneForRoom } from './zoneModel'
 
 interface ZoningViewProps {
   className?: string
@@ -36,13 +36,11 @@ export function ZoningView({ className }: ZoningViewProps) {
 
   const floorRooms = rooms.filter((room) => (room.floorLevel ?? 0) === activeLevel)
   const zonableRooms = floorRooms.filter(isZonableObject)
-  const summary = useMemo(() => summarizeZones(floorRooms), [floorRooms])
   const bounds = useMemo(
     () => derivePlanBounds(activeFloor?.footprint, zonableRooms),
     [activeFloor?.footprint, zonableRooms],
   )
   const fontSize = Math.max(0.2, Math.min(0.5, Math.max(bounds.w, bounds.d) / 40))
-  const selectedRoom = zonableRooms.find((room) => room.id === selectedId) ?? null
 
   return (
     <div className={`relative overflow-hidden bg-graphite-900 ${className ?? ''}`}>
@@ -127,49 +125,6 @@ export function ZoningView({ className }: ZoningViewProps) {
           )
         })}
       </svg>
-
-      {/* Zone legend + selected-zone details */}
-      <div
-        data-testid="zone-legend"
-        className="absolute left-16 top-20 z-10 w-56 rounded-xl border border-ink/10 bg-graphite-800/95 p-3 shadow-lg backdrop-blur"
-      >
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-light">
-          Zones — {activeFloor?.name ?? 'Ground Floor'}
-        </p>
-        {summary.length === 0 ? (
-          <p className="text-[11px] text-muted-light">
-            Generate or add rooms to see zoning.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {summary.map((row) => (
-              <li key={row.zone} className="flex items-center gap-2 text-[11px]">
-                <span
-                  aria-hidden="true"
-                  className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
-                  style={{ backgroundColor: row.color }}
-                />
-                <span className="flex-1 text-ink">{row.label}</span>
-                <span className="font-mono tabular-nums text-muted">
-                  {row.areaSqm.toFixed(0)} m² · {row.percent.toFixed(0)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {selectedRoom && (
-          <div className="mt-2.5 border-t border-ink/10 pt-2 text-[11px]">
-            <p className="font-semibold text-ink">{selectedRoom.label}</p>
-            <p className="text-muted">
-              {ZONE_META[zoneForRoom(selectedRoom)].label} zone ·{' '}
-              {(selectedRoom.size.w * selectedRoom.size.d).toFixed(1)} m²
-            </p>
-          </div>
-        )}
-        <p className="mt-2.5 border-t border-ink/10 pt-2 text-[10px] leading-snug text-muted-light">
-          Zones are derived from room types. Custom zone editing is coming soon.
-        </p>
-      </div>
 
       {zonableRooms.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-light">
