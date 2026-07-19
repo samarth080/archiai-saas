@@ -166,7 +166,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                 key={`${edge.source}-${edge.target}`}
                 d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
                 fill="none"
-                stroke={touched ? '#FFFFFF' : edge.kind === 'direct' ? '#8A8E95' : '#5C6067'}
+                stroke={touched ? '#FFFFFF' : edge.kind === 'direct' ? '#909094' : '#6A6A6E'}
                 strokeWidth={touched ? 2 : 1.2}
                 strokeDasharray={edge.kind === 'proximity' ? '4 4' : undefined}
                 opacity={selectedId && !touched ? 0.35 : 0.9}
@@ -195,7 +195,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     width={NODE_W}
                     height={NODE_H}
                     rx={9}
-                    fill={selected ? '#F3F4F5' : '#1C1E22'}
+                    fill={selected ? '#F5F5F6' : '#2B2B2C'}
                     stroke={selected ? '#FFFFFF' : ZONE_META[node.zone].color}
                     strokeWidth={selected ? 2 : 1.2}
                   />
@@ -210,7 +210,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     y={NODE_H / 2 - 3}
                     fontSize={11.5}
                     fontWeight={600}
-                    fill={selected ? '#131417' : '#F3F4F5'}
+                    fill={selected ? '#1B1B1C' : '#F5F5F6'}
                   >
                     {node.label.length > 17 ? `${node.label.slice(0, 16)}…` : node.label}
                   </text>
@@ -218,7 +218,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
                     x={30}
                     y={NODE_H / 2 + 11}
                     fontSize={9.5}
-                    fill={selected ? '#43464C' : '#8A8E95'}
+                    fill={selected ? '#464648' : '#909094'}
                   >
                     {node.areaSqm.toFixed(0)} m²
                   </text>
@@ -237,7 +237,7 @@ export function RoomGraphView({ className }: RoomGraphViewProps) {
         </span>
         <span className="flex items-center gap-1.5">
           <svg width="20" height="2" aria-hidden="true">
-            <line x1="0" y1="1" x2="20" y2="1" stroke="#5C6067" strokeWidth="2" strokeDasharray="4 3" />
+            <line x1="0" y1="1" x2="20" y2="1" stroke="#6A6A6E" strokeWidth="2" strokeDasharray="4 3" />
           </svg>
           Proximity
         </span>

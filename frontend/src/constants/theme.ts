@@ -3,4 +3,4 @@
 // prop passed straight to a Three.js/drei element. The product accent is
 // white on the graphite system; DIM_HEX is the de-emphasized line color.
 export const ACCENT_HEX = '#FFFFFF'
-export const DIM_HEX = '#6C7078'
+export const DIM_HEX = '#747478'

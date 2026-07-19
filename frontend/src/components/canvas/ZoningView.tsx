@@ -93,7 +93,7 @@ export function ZoningView({ className }: ZoningViewProps) {
                 height={room.size.d}
                 fill={ZONE_META[zone].color}
                 fillOpacity={selected ? 0.95 : 0.78}
-                stroke={selected ? '#FFFFFF' : '#B9BCC1'}
+                stroke={selected ? '#FFFFFF' : '#BDBDC0'}
                 strokeWidth={selected ? Math.max(0.06, fontSize * 0.16) : Math.max(0.02, fontSize * 0.06)}
                 vectorEffect="non-scaling-stroke"
               />
@@ -106,7 +106,7 @@ export function ZoningView({ className }: ZoningViewProps) {
                     dominantBaseline="middle"
                     fontSize={fontSize * 0.9}
                     fontWeight={selected ? 700 : 600}
-                    fill="#F3F4F5"
+                    fill="#F5F5F6"
                   >
                     {room.label}
                   </text>
@@ -116,7 +116,7 @@ export function ZoningView({ className }: ZoningViewProps) {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     fontSize={fontSize * 0.62}
-                    fill="#DDDEE1"
+                    fill="#DFDFE1"
                     fillOpacity={0.85}
                   >
                     {ZONE_META[zone].label} · {(room.size.w * room.size.d).toFixed(0)} m²

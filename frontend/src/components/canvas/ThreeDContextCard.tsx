@@ -132,9 +132,9 @@ export function ThreeDContextCard() {
               <path d={box.right} fill={box.color} opacity={0.75} />
               <path
                 d={box.top}
-                fill={box.selected ? '#F3F4F5' : box.color}
+                fill={box.selected ? '#F5F5F6' : box.color}
                 opacity={box.selected ? 0.95 : 0.9}
-                stroke={box.selected ? '#FFFFFF' : '#131417'}
+                stroke={box.selected ? '#FFFFFF' : '#1B1B1C'}
                 strokeWidth={box.selected ? 0.12 : 0.05}
               />
             </g>

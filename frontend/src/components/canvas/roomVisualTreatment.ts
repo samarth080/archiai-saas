@@ -43,6 +43,6 @@ export function roomVisualTreatment(
     metalness: definition.category === 'structure' ? 0.07 : 0.02,
     emissive: selected ? '#ffffff' : '#000000',
     emissiveIntensity: selected ? 0.12 : 0,
-    edgeColor: selected ? '#ffffff' : '#1e2024',
+    edgeColor: selected ? '#ffffff' : '#1E1E1F',
   }
 }
