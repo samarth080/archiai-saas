@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { LayoutOption } from '../../services/design.service'
 import { useCanvasStore } from '../../store/canvasStore'
 import { useEscapeToClose } from '../../hooks/useEscapeToClose'
+import { LayoutThumbnail } from './LayoutThumbnail'
 
 function stringMetadata(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
@@ -102,16 +103,23 @@ export function InsightsStrip({ alternatives, onPickAlternative }: InsightsStrip
                     onPickAlternative(option)
                     setOpen(false)
                   }}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left hover:bg-ink/10/60"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-ink/10"
                 >
+                  <LayoutThumbnail
+                    rooms={option.rooms}
+                    floors={option.floors}
+                    className="h-12 w-16 flex-shrink-0 overflow-hidden rounded-md border border-ink/10"
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">
+                      {engineLabel(option.metadata)}
+                    </span>
+                    <span className="font-mono text-[11px] tabular-nums text-muted">
+                      {roomCount(option)} rooms · {totalArea(option).toFixed(0)} m²
+                    </span>
+                  </span>
                   <span className="font-mono text-sm font-semibold tabular-nums text-ink">
                     {option.insights?.score ?? '—'}
-                  </span>
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-light">
-                    {engineLabel(option.metadata)}
-                  </span>
-                  <span className="font-mono text-[11px] tabular-nums text-muted">
-                    {roomCount(option)}r · {totalArea(option).toFixed(0)}m²
                   </span>
                 </button>
               ))}

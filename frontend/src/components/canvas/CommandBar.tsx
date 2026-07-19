@@ -129,7 +129,7 @@ export function CommandBar({
   const errorNotice = generateError && (
     <div
       role="alert"
-      className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10/95 px-3 py-2 text-left shadow-sm"
+      className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-left shadow-sm"
     >
       <div className="flex min-w-0 items-start gap-2">
         <span
