@@ -20,7 +20,7 @@ export function EditorPreviewCard() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none select-none overflow-hidden rounded-2xl border border-ink/15 bg-graphite-850 shadow-[0_30px_80px_rgba(0,0,0,0.5)]"
+      className="pointer-events-none select-none overflow-hidden rounded-2xl border border-ink/15 bg-graphite-850 shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/5"
     >
       {/* Editor top bar */}
       <div className="flex items-center justify-between border-b border-ink/10 bg-graphite-800 px-3 py-2">

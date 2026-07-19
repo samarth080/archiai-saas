@@ -186,6 +186,14 @@ export default function CheckoutPage() {
 
               {error && <p className="mt-3 text-xs text-danger">{error}</p>}
 
+              <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-snug text-muted-light">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0" aria-hidden="true">
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                Demo environment — card fields stay disabled and no payment data
+                is collected, transmitted, or stored.
+              </p>
               <button
                 type="button"
                 onClick={handleSubscribe}

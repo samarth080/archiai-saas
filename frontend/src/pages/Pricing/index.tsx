@@ -90,7 +90,7 @@ export default function PricingPage() {
         </div>
 
         {/* Plan cards */}
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((plan) => (
             <div
               key={plan.id}
@@ -118,20 +118,32 @@ export default function PricingPage() {
                 <tr className="bg-graphite-800 text-left">
                   <th className="px-4 py-3 font-semibold text-muted">Feature</th>
                   {PLANS.map((plan) => (
-                    <th key={plan.id} className="px-4 py-3 font-semibold text-ink">
+                    <th
+                      key={plan.id}
+                      className={`px-4 py-3 font-semibold text-ink ${
+                        plan.highlighted ? 'bg-ink/5' : ''
+                      }`}
+                    >
                       {plan.name}
+                      {plan.highlighted && (
+                        <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-muted-light">
+                          Popular
+                        </span>
+                      )}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink/5">
                 {COMPARISON_ROWS.map((row) => (
-                  <tr key={row.label} className="bg-graphite-850/60">
+                  <tr key={row.label} className="bg-graphite-850/60 transition-colors hover:bg-graphite-800/80">
                     <td className="px-4 py-2.5 text-muted">{row.label}</td>
                     {row.values.map((value, index) => (
                       <td
                         key={PLANS[index].id}
-                        className={`px-4 py-2.5 ${value === '—' ? 'text-muted-light' : 'text-ink'}`}
+                        className={`px-4 py-2.5 ${value === '—' ? 'text-muted-light' : 'text-ink'} ${
+                          PLANS[index].highlighted ? 'bg-ink/5' : ''
+                        }`}
                       >
                         {value}
                       </td>

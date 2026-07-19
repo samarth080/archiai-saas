@@ -94,7 +94,7 @@ export default function Landing() {
       <WebsiteNavbar onBookDemo={() => setDemoModal('book')} />
 
       {/* Hero */}
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 lg:grid-cols-[1.05fr_1.2fr] lg:pt-20">
+      <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-20 pt-14 sm:px-6 lg:grid-cols-[1.05fr_1.2fr] lg:pt-24">
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 bg-ink/5 px-3 py-1 text-xs font-medium text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />
@@ -131,7 +131,15 @@ export default function Landing() {
           </p>
         </div>
 
-        <EditorPreviewCard />
+        <div className="relative">
+          <div
+            aria-hidden="true"
+            className="absolute -inset-8 rounded-[2rem] bg-gradient-to-tr from-transparent via-ink/5 to-ink/10 blur-2xl"
+          />
+          <div className="relative">
+            <EditorPreviewCard />
+          </div>
+        </div>
       </section>
 
       {/* Trust / value row */}

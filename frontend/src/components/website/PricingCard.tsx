@@ -12,9 +12,9 @@ export function PricingCard({ plan, cycle, compact = false, onSelect }: PricingC
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border p-5 ${
+      className={`relative flex h-full flex-col rounded-2xl border p-6 ${
         plan.highlighted
-          ? 'border-ink/40 bg-graphite-750 shadow-[0_18px_50px_rgba(0,0,0,0.35)]'
+          ? 'border-ink/40 bg-graphite-750 shadow-[0_18px_50px_rgba(0,0,0,0.4)] ring-1 ring-white/10'
           : 'border-ink/10 bg-graphite-800/80'
       }`}
     >
@@ -31,7 +31,7 @@ export function PricingCard({ plan, cycle, compact = false, onSelect }: PricingC
           <span className="ml-1.5 align-middle text-[11px] font-medium text-ok">2 months free</span>
         )}
       </p>
-      <ul className={`mt-4 flex flex-col gap-1.5 ${compact ? '' : 'flex-1'}`}>
+      <ul className={`mt-5 flex flex-col gap-2 ${compact ? '' : 'flex-1'}`}>
         {(compact ? plan.features.slice(0, 4) : plan.features).map((feature) => (
           <li key={feature} className="flex items-start gap-2 text-[13px] text-muted">
             <svg
@@ -55,7 +55,7 @@ export function PricingCard({ plan, cycle, compact = false, onSelect }: PricingC
       <button
         type="button"
         onClick={() => onSelect(plan)}
-        className={`mt-5 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+        className={`mt-6 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 active:translate-y-px ${
           plan.highlighted
             ? 'bg-ink text-graphite-900 hover:bg-graphite-100'
             : 'border border-ink/15 text-ink hover:bg-ink/5'
