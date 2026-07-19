@@ -29,6 +29,13 @@ jobs:
 
       - name: Run backend tests
         run: pytest
+        # Settings requires DATABASE_URL and SECRET_KEY with no defaults and
+        # .env is gitignored, so CI provides dummy values. The test suite
+        # itself runs on in-memory SQLite (see app/tests/conftest.py); these
+        # are fixtures, not secrets.
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
+          SECRET_KEY: ci-only-dummy-secret-key-0123456789abcdef
 
   frontend:
     name: Frontend tests and build
