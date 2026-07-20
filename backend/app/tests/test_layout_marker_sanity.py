@@ -157,15 +157,15 @@ def _cell(id_: str, room_type: str, x: float, z: float, w: float, d: float) -> d
 
 
 def test_service_room_opens_into_private_neighbour_not_public():
-    # Bathroom touches both a dining room (public) and a bedroom (private):
-    # it must become an ensuite, not open into the dining room. The living
-    # room gives the dining room its own public access so the bathroom is
-    # never needed as anyone else's access path.
+    # 2x2 grid: bathroom touches both a dining room (public) and a bedroom
+    # (private) — it must become an ensuite, not open into the dining room.
+    # Every room stays reachable without passing through the bathroom, so no
+    # connectivity-completion door is needed there either.
     rooms = [
-        _cell("living", "living_room", -2.0, 2.0, 4.0, 4.0),
-        _cell("dining", "dining_room", 2.0, 2.0, 4.0, 4.0),
-        _cell("bathroom", "bathroom", 5.0, 2.0, 2.0, 4.0),
-        _cell("bedroom", "bedroom", 7.5, 2.0, 3.0, 4.0),
+        _cell("living", "living_room", 2.0, 2.0, 4.0, 4.0),
+        _cell("dining", "dining_room", 6.0, 2.0, 4.0, 4.0),
+        _cell("bedroom", "bedroom", 2.0, 6.0, 4.0, 4.0),
+        _cell("bathroom", "bathroom", 6.0, 6.0, 4.0, 4.0),
     ]
     markers = _generate_partition_walls(
         rooms, floor_id="floor_0", floor_level=0, elevation=0.0

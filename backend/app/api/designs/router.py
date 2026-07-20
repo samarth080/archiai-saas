@@ -87,6 +87,11 @@ async def generate(
         {room.room_type for room in room_specs},
     )
     design_params = request.design_params
+    # Explicit DesignParams always win; otherwise site facts extracted from
+    # the prompt itself ("east-facing ... on a 14 m x 18 m plot") apply.
+    plot_width = (design_params.plot_width_m if design_params else None) or parsed.plot_width_m
+    plot_depth = (design_params.plot_depth_m if design_params else None) or parsed.plot_depth_m
+    orientation = (design_params.orientation if design_params else None) or parsed.facing_direction
     layout, candidates = generate_layout(
         room_specs,
         prompt=request.prompt,
@@ -97,9 +102,14 @@ async def generate(
         adjacency_constraints=parsed.adjacency_constraints,
         zone_assignments=parsed.zone_assignments,
         vastu_requested=bool(design_params and design_params.vastu) or parsed.vastu_requested,
-        plot_width_m=design_params.plot_width_m if design_params else None,
-        orientation=design_params.orientation if design_params else None,
+        plot_width_m=plot_width,
+        orientation=orientation,
         return_all_candidates=True,
+        plot_depth_m=plot_depth,
+        road_side=parsed.road_side,
+        entry_side=parsed.entry_side,
+        daylight_rooms=parsed.daylight_rooms,
+        separation_constraints=parsed.separation_constraints,
     )
     # Score how well the winning layout honours the parsed adjacency graph
     # (Sprint 18 Phase 4). Additive, explainable, deterministic — recorded in
