@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field
 from math import sqrt
 
 from app.services.layout_vocabulary_service import (
@@ -203,6 +203,7 @@ def extract_rooms(prompt: str) -> list[RoomSpec]:
 # ── Advanced parser pipeline (Stages 1-6) ─────────────────────────────────────
 
 from app.services.parser.building_inference import infer_building  # noqa: E402
+from app.services.parser.site_extractor import extract_site_info
 from app.services.parser.constraint_extractor import (  # noqa: E402
     AdjacencyConstraint,
     extract_constraints,
@@ -238,6 +239,15 @@ class ParsedRequirements:
     raw_prompt: str
     confidence: float = 1.0
     vastu_requested: bool = False
+    # Site & orientation (Sprint 22) — None/empty when the prompt doesn't say.
+    plot_width_m: float | None = None
+    plot_depth_m: float | None = None
+    facing_direction: str | None = None  # "N" | "S" | "E" | "W"
+    road_side: str | None = None
+    entry_side: str | None = None
+    daylight_rooms: list[str] = field(default_factory=list)
+    # "keep X away from Y" placement separations.
+    separation_constraints: list[tuple[str, str]] = field(default_factory=list)
 
 
 _PUBLIC_ROOM_TYPES: frozenset[str] = frozenset({
@@ -334,6 +344,7 @@ def parse_prompt(prompt: str) -> "ParsedRequirements":
     if vastu_req:
         rooms = add_vastu_special_rooms(rooms, prompt)
 
+    site = extract_site_info(prompt)
     return ParsedRequirements(
         building_type=building.building_type,
         style_hints=building.style_hints,
@@ -345,6 +356,13 @@ def parse_prompt(prompt: str) -> "ParsedRequirements":
         raw_prompt=prompt,
         confidence=_compute_confidence(explicit_count, inferred_count),
         vastu_requested=vastu_req,
+        plot_width_m=site.plot_width_m,
+        plot_depth_m=site.plot_depth_m,
+        facing_direction=site.facing_direction,
+        road_side=site.road_side,
+        entry_side=site.entry_side,
+        daylight_rooms=site.daylight_rooms,
+        separation_constraints=constraints.separations,
     )
 
 

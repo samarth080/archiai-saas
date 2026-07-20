@@ -49,9 +49,17 @@ def _features_for(room_type: str, text: str, start: int, end: int) -> dict:
 def _extract_counted_rooms(text: str) -> list[ExtractedRoom]:
     rooms: list[ExtractedRoom] = []
     occupied_spans: list[tuple[int, int]] = []
+    # Plain descriptive adjectives allowed between a count and the room token
+    # ("2 regular bedrooms", "3 spacious meeting rooms") — without this the
+    # count is silently lost and the rooms collapse to a single mention.
+    filler = (
+        r"(?:(?:regular|standard|normal|additional|extra|separate|shared|"
+        r"attached|spacious|compact|large|small|big|cozy|simple|identical|"
+        r"more|other|new|private)\s+){0,2}"
+    )
     patterns = [
         re.compile(
-            rf"\b(?P<count>\d+)\s+(?P<room>{ROOM_TOKEN_PATTERN})s?\b",
+            rf"\b(?P<count>\d+)\s+{filler}(?P<room>{ROOM_TOKEN_PATTERN})s?\b",
             re.IGNORECASE,
         ),
         re.compile(
@@ -103,8 +111,57 @@ def _extract_single_rooms(text: str, excluded: list[ExtractedRoom]) -> list[Extr
     return rooms
 
 
+# Words that read as "<adjective> room" rather than a distinct custom space.
+_CUSTOM_ROOM_STOPWORDS: frozenset[str] = frozenset({
+    "regular", "standard", "normal", "additional", "extra", "separate",
+    "shared", "attached", "spacious", "compact", "large", "small", "big",
+    "cozy", "simple", "more", "other", "new", "private", "closed", "open",
+    "spare", "the", "each", "every", "one", "single", "double", "guest",
+    "this", "that", "any", "main", "first", "second", "third",
+})
+
+_CUSTOM_ROOM_PATTERN = re.compile(
+    r"\b(?:(?P<count>\d+)\s+)?(?P<name>[a-z]+)[\s_]room\b", re.IGNORECASE
+)
+
+
+def _extract_custom_rooms(text: str, known: list[ExtractedRoom]) -> list[ExtractedRoom]:
+    """
+    Preserve '<word> room' mentions the vocabulary doesn't know (music room,
+    server room, …) as custom space types instead of silently dropping them —
+    the sizing/zoning pipeline handles unknown types with sane defaults.
+    """
+    known_raw = " ".join(room.raw_text for room in known)
+    rooms: list[ExtractedRoom] = []
+    seen: set[str] = set()
+    for match in _CUSTOM_ROOM_PATTERN.finditer(text):
+        name = match.group("name").lower()
+        phrase = f"{name} room"
+        if name in _CUSTOM_ROOM_STOPWORDS:
+            continue
+        if f"{name}_room" in ROOM_LOOKUP or phrase in ROOM_LOOKUP or name in ROOM_LOOKUP:
+            continue
+        if phrase in known_raw or f"{name}_room" in known_raw:
+            continue
+        room_type = f"{name}_room"
+        if room_type in seen:
+            continue
+        seen.add(room_type)
+        rooms.append(
+            ExtractedRoom(
+                room_type=room_type,
+                count=max(1, int(match.group("count") or 1)),
+                raw_text=match.group(0),
+                source="custom",
+                features={},
+            )
+        )
+    return rooms
+
+
 def extract_explicit_rooms(prompt: str) -> list[ExtractedRoom]:
     text = normalise(prompt)
     counted_rooms = _extract_counted_rooms(text)
     single_rooms = _extract_single_rooms(text, counted_rooms)
-    return counted_rooms + single_rooms
+    known = counted_rooms + single_rooms
+    return known + _extract_custom_rooms(text, known)

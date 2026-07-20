@@ -34,6 +34,7 @@ BASE_SIZES: dict[str, float] = {
     "checkout":           6.0,
     "changing_room":      4.0,
     "pooja_room":         6.0,
+    "study":              9.0,
     "meditation_room":    8.0,
 }
 

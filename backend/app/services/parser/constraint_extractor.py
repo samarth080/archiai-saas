@@ -9,7 +9,7 @@ from app.services.parser.normaliser import normalise
 class AdjacencyConstraint:
     room_a: str
     room_b: str
-    strength: str  # "MUST" | "SHOULD"
+    strength: str  # "MUST" | "SHOULD" | "AVOID"
 
 
 @dataclass
@@ -17,6 +17,8 @@ class Constraints:
     adjacency: list[AdjacencyConstraint] = field(default_factory=list)
     exclusions: list[str] = field(default_factory=list)
     zone_assignments: dict[str, str] = field(default_factory=dict)
+    # "keep X away from Y" — placement-level separation, not wall-level.
+    separations: list[tuple[str, str]] = field(default_factory=list)
 
 
 # ── room token lookup ──────────────────────────────────────────────────────────
@@ -101,6 +103,34 @@ _ADJACENCY_PATTERNS: list[tuple[re.Pattern, str]] = [
     ),
 ]
 
+# A negation in the same clause flips an adjacency into an AVOID constraint:
+# "do not place any bathroom beside the kitchen" previously extracted as
+# MUST bathroom<->kitchen — the exact opposite of the instruction.
+_NEGATION_PATTERN = re.compile(
+    r"\b(?:do\s+not|don'?t|never|avoid|must\s+not|should\s+not|shouldn'?t|"
+    r"cannot|can'?t|not)\b",
+    re.IGNORECASE,
+)
+
+# "keep/place <A> away from <B>" — separation, not adjacency.
+_SEPARATION_PATTERN = re.compile(
+    rf"(?P<a>{_ROOM_PAT})s?[^.;]{{0,40}}?\b(?:away|far)\s+from\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
+    re.IGNORECASE,
+)
+
+
+def _is_negated(text: str, match_start: int) -> bool:
+    """A negation token in the last 60 chars of the same sentence flips the
+    constraint. Sentence-bounded so a distant 'not' can't leak across."""
+    sentence_start = max(
+        text.rfind(".", 0, match_start),
+        text.rfind(";", 0, match_start),
+        text.rfind("!", 0, match_start),
+    )
+    window = text[sentence_start + 1 : match_start][-60:]
+    return bool(_NEGATION_PATTERN.search(window))
+
+
 # "X with ensuite / attached bath / private bath" → forced adjacency
 _WITH_ENSUITE_PATTERN = re.compile(
     rf"(?P<a>{_ROOM_PAT})s?\s+with\s+(?:an?\s+)?(?P<b>ensuite|attached\s+bath(?:room)?|private\s+bath(?:room)?)",
@@ -171,7 +201,8 @@ def _extract_explicit_adjacency(text: str) -> list[AdjacencyConstraint]:
 
     for pattern, strength in _ADJACENCY_PATTERNS:
         for match in pattern.finditer(text):
-            _add(match.group("a"), match.group("b"), strength)
+            effective = "AVOID" if _is_negated(text, match.start()) else strength
+            _add(match.group("a"), match.group("b"), effective)
 
     for match in _WITH_ENSUITE_PATTERN.finditer(text):
         a = _resolve(match.group("a"))
@@ -199,6 +230,21 @@ def _add_implicit_adjacency(
                 seen.add(key)
                 result.append(AdjacencyConstraint(room_a=a, room_b=b, strength="SHOULD"))
     return result
+
+
+def _extract_separations(text: str) -> list[tuple[str, str]]:
+    separations: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for match in _SEPARATION_PATTERN.finditer(text):
+        a = _resolve(match.group("a"))
+        b = _resolve(match.group("b"))
+        if not a or not b or a == b:
+            continue
+        pair = (a, b)
+        if pair not in seen:
+            seen.add(pair)
+            separations.append(pair)
+    return separations
 
 
 def _extract_exclusions(text: str) -> list[str]:
@@ -247,4 +293,5 @@ def extract_constraints(
         adjacency=adjacency,
         exclusions=_extract_exclusions(text),
         zone_assignments=_extract_zone_assignments(text),
+        separations=_extract_separations(text),
     )
