@@ -6,6 +6,7 @@ import { ZONE_META } from './editorPalette'
 import { buildRoomGraph, connectionsFor } from './roomGraphModel'
 import { isZonableObject, summarizeZones, zoneForRoom } from './zoneModel'
 import { formatArea, formatDims, roomArea } from '../../utils/format'
+import { cardinalName, parseOrientation } from './orientationModel'
 
 const ACTION_LABELS: Record<string, string> = {
   'object.added': 'Added',
@@ -55,6 +56,14 @@ export function RightPanel() {
   const setViewMode = useCanvasStore((s) => s.setViewMode)
   const activityLog = useCanvasStore((s) => s.activityLog)
   const [tab, setTab] = useState<PanelTab>('properties')
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
+  const orientation = parseOrientation(layoutMetadata)
+  const designParams = (layoutMetadata.designParams ?? {}) as Record<string, unknown>
+  const programConstraints = (layoutMetadata.programConstraints ?? {}) as {
+    avoidPairs?: string[][]
+    separations?: string[][]
+    daylightRooms?: string[]
+  }
 
   const room = rooms.find((r) => r.id === selectedId) ?? null
   const activeLevel =
@@ -101,11 +110,94 @@ export function RightPanel() {
     </ul>
   )
 
+  const plotWidth = typeof designParams.plotWidthM === 'number' ? designParams.plotWidthM : null
+  const plotDepth = typeof designParams.plotDepthM === 'number' ? designParams.plotDepthM : null
+  const siteBlock =
+    orientation || plotWidth ? (
+      <div data-testid="site-orientation-block">
+        <SectionTitle>Site</SectionTitle>
+        <dl className="mt-2 flex flex-col gap-1 text-[11px]">
+          {orientation?.facingDirection && (
+            <div className="flex justify-between">
+              <dt className="text-muted-light">Facing</dt>
+              <dd className="text-ink">{cardinalName(orientation.facingDirection)}</dd>
+            </div>
+          )}
+          {orientation?.entrySide && (
+            <div className="flex justify-between">
+              <dt className="text-muted-light">Entry side</dt>
+              <dd className="text-ink">{cardinalName(orientation.entrySide)}</dd>
+            </div>
+          )}
+          {orientation?.roadSide && (
+            <div className="flex justify-between">
+              <dt className="text-muted-light">Road side</dt>
+              <dd className="text-ink">{cardinalName(orientation.roadSide)}</dd>
+            </div>
+          )}
+          {plotWidth && plotDepth && (
+            <div className="flex justify-between">
+              <dt className="text-muted-light">Plot</dt>
+              <dd className="font-mono tabular-nums text-ink">{formatDims(plotWidth, plotDepth)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <dt className="text-muted-light">Floors</dt>
+            <dd className="font-mono tabular-nums text-ink">{floors.length}</dd>
+          </div>
+        </dl>
+      </div>
+    ) : null
+
+  // Per-room planning checks: exterior wall, daylight priority, and any
+  // prompt-level avoid/separation constraints touching this room's type.
+  const roomChecks: { label: string; ok: boolean }[] = []
+  if (room && activeFloor?.footprint) {
+    const fp = activeFloor.footprint
+    const tol = 0.15
+    const touchesExterior =
+      Math.abs(room.position.x - room.size.w / 2 - fp.x) <= tol ||
+      Math.abs(room.position.x + room.size.w / 2 - (fp.x + fp.w)) <= tol ||
+      Math.abs(room.position.z - room.size.d / 2 - fp.z) <= tol ||
+      Math.abs(room.position.z + room.size.d / 2 - (fp.z + fp.d)) <= tol
+    roomChecks.push({ label: 'Exterior wall', ok: touchesExterior })
+    const roomType = typeof room.roomType === 'string' ? room.roomType : ''
+    const daylightRooms = orientation?.daylightRooms ?? programConstraints.daylightRooms ?? []
+    if (roomType && daylightRooms.includes(roomType)) {
+      roomChecks.push({ label: 'Daylight priority', ok: touchesExterior })
+    }
+    const directNeighbourTypes = new Set(
+      connections
+        .filter((connection) => connection.kind === 'direct')
+        .map((connection) => {
+          const other = rooms.find((candidate) => candidate.id === connection.otherId)
+          return typeof other?.roomType === 'string' ? other.roomType : ''
+        }),
+    )
+    for (const pair of programConstraints.avoidPairs ?? []) {
+      if (!pair.includes(roomType)) continue
+      const other = pair[0] === roomType ? pair[1] : pair[0]
+      roomChecks.push({
+        label: `Kept apart from ${other.replace(/_/g, ' ')}`,
+        ok: !directNeighbourTypes.has(other),
+      })
+    }
+    for (const pair of programConstraints.separations ?? []) {
+      if (!pair.includes(roomType)) continue
+      const other = pair[0] === roomType ? pair[1] : pair[0]
+      roomChecks.push({
+        label: `Away from ${other.replace(/_/g, ' ')}`,
+        ok: !directNeighbourTypes.has(other),
+      })
+    }
+  }
+
   let body: JSX.Element
 
   if (viewMode === 'zoning') {
     body = (
       <div className="flex flex-col gap-4" data-testid="zone-legend">
+        {siteBlock}
         <div>
           <SectionTitle>{`Zones — ${activeFloor?.name ?? 'Ground Floor'}`}</SectionTitle>
           {zoneSummary.length === 0 ? (
@@ -240,7 +332,26 @@ export function RightPanel() {
             </button>
           ))}
         </div>
-        {tab === 'properties' && <InspectorProperties room={room} />}
+        {tab === 'properties' && (
+          <>
+            {roomChecks.length > 0 && (
+              <ul
+                data-testid="room-checks"
+                className="mb-3 flex flex-col gap-1 rounded-lg bg-graphite-850/80 p-2.5"
+              >
+                {roomChecks.map((check) => (
+                  <li key={check.label} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-muted">{check.label}</span>
+                    <span className={check.ok ? 'text-ok' : 'text-warn'}>
+                      {check.ok ? 'Satisfied' : 'Warning'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <InspectorProperties room={room} />
+          </>
+        )}
         {tab === 'adjacencies' && (
           <div className="flex flex-col gap-3">
             <div>
@@ -287,6 +398,7 @@ export function RightPanel() {
   } else {
     body = (
       <div className="flex flex-col gap-4" data-testid="right-panel-empty">
+        {siteBlock}
         <div>
           <SectionTitle>{activeFloor?.name ?? 'Floor'}</SectionTitle>
           <dl className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg bg-graphite-850/80 p-2.5">

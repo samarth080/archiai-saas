@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { displayRoomColor } from './editorPalette'
+import { cardinalName, northAngleDeg, parseOrientation } from './orientationModel'
 
 const COS30 = Math.cos(Math.PI / 6)
 const SIN30 = Math.sin(Math.PI / 6)
@@ -36,6 +37,8 @@ export function ThreeDContextCard() {
   const selectedId = useCanvasStore((s) => s.selectedId)
   const selectRoom = useCanvasStore((s) => s.selectRoom)
   const setViewMode = useCanvasStore((s) => s.setViewMode)
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
+  const orientation = parseOrientation(layoutMetadata)
 
   const activeLevel =
     selectedFloor === 'all' ? Math.min(...floors.map((f) => f.level), 0) : selectedFloor
@@ -116,6 +119,41 @@ export function ThreeDContextCard() {
           Open in 3D
         </button>
       </div>
+      {orientation && (
+        <div
+          data-testid="compass-rose"
+          className="flex items-center justify-between gap-2 border-b border-ink/10 px-3 py-1.5"
+        >
+          <svg
+            width="30"
+            height="30"
+            viewBox="0 0 30 30"
+            aria-label={`North is rotated ${northAngleDeg(orientation)} degrees clockwise from up`}
+          >
+            <circle cx="15" cy="15" r="13" fill="none" stroke="#414143" strokeWidth="1.5" />
+            <g transform={`rotate(${northAngleDeg(orientation)} 15 15)`}>
+              <path d="M15 4 L18 15 L15 13 L12 15 Z" fill="#F5F5F6" />
+              <path d="M15 26 L18 15 L15 17 L12 15 Z" fill="#505053" />
+              <text x="15" y="9.5" textAnchor="middle" fontSize="6" fontWeight="700" fill="#212121">
+                N
+              </text>
+            </g>
+          </svg>
+          <div className="flex min-w-0 flex-1 flex-col text-[10px] leading-tight">
+            <span className="truncate font-semibold text-ink">
+              {orientation.facingDirection ?? orientation.entrySide} · Front
+              {orientation.roadSide &&
+              orientation.roadSide === (orientation.facingDirection ?? orientation.entrySide)
+                ? ' · Road side'
+                : ''}
+            </span>
+            <span className="truncate text-muted-light">
+              Facing {cardinalName(orientation.facingDirection ?? orientation.entrySide)?.toLowerCase()} ·
+              entry on the {cardinalName(orientation.entrySide)?.toLowerCase()} side
+            </span>
+          </div>
+        </div>
+      )}
       {boxes.length === 0 ? (
         <p className="px-3 py-5 text-center text-[11px] text-muted-light">
           Generate or add rooms to preview this floor.

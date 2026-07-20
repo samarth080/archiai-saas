@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import { EDITOR_PALETTE, ZONE_META } from './editorPalette'
 import { derivePlanBounds } from './plan2dGeometry'
+import { PlanDirectionLabels } from './PlanDirectionLabels'
+import { parseOrientation } from './orientationModel'
 import { formatArea } from '../../utils/format'
 import { isZonableObject, zoneForRoom } from './zoneModel'
 
@@ -24,6 +26,7 @@ export function ZoningView({ className }: ZoningViewProps) {
   const selectedId = useCanvasStore((s) => s.selectedId)
   const selectRoom = useCanvasStore((s) => s.selectRoom)
   const deselectAll = useCanvasStore((s) => s.deselectAll)
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
 
   const sortedFloors = useMemo(
     () => [...floors].sort((left, right) => left.level - right.level),
@@ -42,6 +45,8 @@ export function ZoningView({ className }: ZoningViewProps) {
     [activeFloor?.footprint, zonableRooms],
   )
   const fontSize = Math.max(0.2, Math.min(0.5, Math.max(bounds.w, bounds.d) / 40))
+
+  const orientation = parseOrientation(layoutMetadata)
 
   return (
     <div className={`relative overflow-hidden bg-graphite-900 ${className ?? ''}`}>
@@ -125,6 +130,13 @@ export function ZoningView({ className }: ZoningViewProps) {
             </g>
           )
         })}
+        {orientation && activeFloor?.footprint && (
+          <PlanDirectionLabels
+            footprint={activeFloor.footprint}
+            orientation={orientation}
+            fontSize={fontSize}
+          />
+        )}
       </svg>
 
       {zonableRooms.length === 0 && (

@@ -32,6 +32,8 @@ import {
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 import { EDITOR_PALETTE } from './editorPalette'
+import { PlanDirectionLabels } from './PlanDirectionLabels'
+import { parseOrientation } from './orientationModel'
 
 interface Plan2DProps {
   className?: string
@@ -111,6 +113,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   const showDimensions = useCanvasStore((state) => state.showDimensions)
   const measurePoints = useCanvasStore((state) => state.measurePoints)
   const clipboardMessage = useCanvasStore((state) => state.clipboardMessage)
+  const layoutMetadata = useCanvasStore((state) => state.layoutMetadata)
   const selectRoom = useCanvasStore((state) => state.selectRoom)
   const updateRoom = useCanvasStore((state) => state.updateRoom)
   const setInteractionMode = useCanvasStore((state) => state.setInteractionMode)
@@ -138,6 +141,13 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
       ]
     : visibleRooms
   const footprint = activeFloor?.footprint
+  const orientation = parseOrientation(layoutMetadata)
+  const entryDoor = rooms.find(
+    (room) =>
+      room.objectType === 'door' &&
+      room.label === 'Entry Door' &&
+      (room.floorLevel ?? 0) === activeLevel,
+  )
   const baseBounds = useMemo(
     () => derivePlanBounds(footprint, visibleRooms),
     [footprint, visibleRooms],
@@ -547,6 +557,15 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
             onResizePointerEnd={handleResizePointerEnd}
           />
         ))}
+
+        {orientation && footprint && (
+          <PlanDirectionLabels
+            footprint={footprint}
+            orientation={orientation}
+            fontSize={fontSize}
+            entryPoint={entryDoor ? { x: entryDoor.position.x, z: entryDoor.position.z } : null}
+          />
+        )}
 
         {measurePoints.map((point, index) => (
           <circle
