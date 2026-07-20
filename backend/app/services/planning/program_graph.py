@@ -64,6 +64,9 @@ _PRIVATE_TYPES = frozenset({
     "consultation_room", "workspace", "meeting_room", "pooja_room",
     "meditation_room", "study",
 })
+_AVOID_TYPE_FAMILIES: dict[str, frozenset[str]] = {
+    "bathroom": frozenset({"bathroom", "ensuite", "toilet", "washroom", "wc"}),
+}
 
 
 def _classify_node_type(space_type: str) -> NodeType:
@@ -160,6 +163,9 @@ class ProgramGraph:
     def first_of_space_type(self, space_type: str) -> Optional[Node]:
         return next((n for n in self.nodes if n.space_type == space_type), None)
 
+    def nodes_of_space_type(self, space_type: str) -> list[Node]:
+        return [n for n in self.nodes if n.space_type == space_type]
+
     def buildable_nodes(self) -> list[Node]:
         """Nodes that occupy real floor area (everything except pure openings /
         structural markers) — the ones the bridge turns back into RoomSpecs."""
@@ -182,6 +188,20 @@ def _apply_type_semantics(node: Node) -> Node:
     elif node.zone == "public":
         node.privacy_level = 0
     return node
+
+
+def _constraint_nodes(
+    graph: ProgramGraph,
+    space_type: str,
+    *,
+    include_family: bool,
+) -> list[Node]:
+    types = (
+        _AVOID_TYPE_FAMILIES.get(space_type, frozenset({space_type}))
+        if include_family
+        else frozenset({space_type})
+    )
+    return [node for node in graph.nodes if node.space_type in types]
 
 
 # ── Adapters ─────────────────────────────────────────────────────────────────
@@ -228,24 +248,73 @@ def from_parser_output(parsed: "ParsedRequirements", room_specs: list[RoomSpec])
             node.zone = getattr(req, "zone", node.zone) or node.zone
             node.floor_preference = getattr(req, "floor_preference", node.floor_preference)
             node.target_area_sqm = getattr(req, "area_m2", node.target_area_sqm)
+            if node.target_area_sqm is not None:
+                node.min_area_sqm = round(node.target_area_sqm * 0.6, 2)
+                node.max_area_sqm = round(node.target_area_sqm * 1.5, 2)
+            if node.width is not None:
+                node.min_width_m = round(max(1.5, node.width * 0.6), 2)
+            if node.depth is not None:
+                node.min_depth_m = round(max(1.5, node.depth * 0.6), 2)
+            if node.width and node.depth:
+                node.preferred_aspect_ratio = round(
+                    max(node.width, node.depth) / min(node.width, node.depth),
+                    2,
+                )
             _apply_type_semantics(node)
 
-    # Adjacency constraints -> edges (connect the first node of each type).
+    explicit_daylight_types = set(getattr(parsed, "daylight_rooms", []) or [])
+    for node in graph.nodes:
+        if node.space_type in explicit_daylight_types:
+            node.daylight_need = "high"
+            node.requires_external_wall = True
+
+    # Preserve every affected instance. The previous first-node-only bridge
+    # silently ignored repeated bedrooms, classrooms, consultation rooms, and
+    # other counted spaces during validation.
     for constraint in getattr(parsed, "adjacency_constraints", []) or []:
-        a = graph.first_of_space_type(constraint.room_a)
-        b = graph.first_of_space_type(constraint.room_b)
-        if a is None or b is None or a.id == b.id:
-            continue
-        graph.add_edge(
-            Edge(
-                node_a=a.id,
-                node_b=b.id,
-                relation_type="adjacent",
-                strength=constraint.strength,
-                door_required=constraint.strength == "MUST",
-                reason=f"parser adjacency {constraint.room_a}~{constraint.room_b}",
-            )
+        include_family = constraint.strength == "AVOID"
+        nodes_a = _constraint_nodes(
+            graph,
+            constraint.room_a,
+            include_family=include_family,
         )
+        nodes_b = _constraint_nodes(
+            graph,
+            constraint.room_b,
+            include_family=include_family,
+        )
+        for a in nodes_a:
+            for b in nodes_b:
+                if a.id == b.id:
+                    continue
+                graph.add_edge(
+                    Edge(
+                        node_a=a.id,
+                        node_b=b.id,
+                        relation_type="adjacent",
+                        strength=constraint.strength,
+                        door_required=constraint.strength == "MUST",
+                        reason=(
+                            f"parser adjacency "
+                            f"{constraint.room_a}~{constraint.room_b}"
+                        ),
+                    )
+                )
+
+    for room_a, room_b in getattr(parsed, "separation_constraints", []) or []:
+        for a in graph.nodes_of_space_type(room_a):
+            for b in graph.nodes_of_space_type(room_b):
+                if a.id == b.id:
+                    continue
+                graph.add_edge(
+                    Edge(
+                        node_a=a.id,
+                        node_b=b.id,
+                        relation_type="separated",
+                        strength="MUST",
+                        reason=f"parser separation {room_a}~{room_b}",
+                    )
+                )
     return graph
 
 

@@ -15,11 +15,16 @@ from app.services.planning.program_graph import (
     to_room_specs,
 )
 from app.services.planning.graph_scoring import (
+    ConstraintCheck,
     GraphSatisfaction,
     graph_satisfaction_dict,
     score_graph_satisfaction,
 )
 from app.services.planning.validation import Warning, validate
+from app.services.planning.program_validation import (
+    build_program_metadata,
+    validate_program,
+)
 
 __all__ = [
     "Node",
@@ -33,7 +38,10 @@ __all__ = [
     "to_room_specs",
     "validate",
     "Warning",
+    "ConstraintCheck",
     "GraphSatisfaction",
     "score_graph_satisfaction",
     "graph_satisfaction_dict",
+    "build_program_metadata",
+    "validate_program",
 ]

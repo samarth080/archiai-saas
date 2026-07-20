@@ -133,7 +133,12 @@ def _is_negated(text: str, match_start: int) -> bool:
 
 # "X with ensuite / attached bath / private bath" → forced adjacency
 _WITH_ENSUITE_PATTERN = re.compile(
-    rf"(?P<a>{_ROOM_PAT})s?\s+with\s+(?:an?\s+)?(?P<b>ensuite|attached\s+bath(?:room)?|private\s+bath(?:room)?)",
+    rf"(?P<a>{_ROOM_PAT})s?\s+with\s+(?:(?:an?|\d+)\s+)?(?P<b>ensuite|attached\s+bath(?:room)?|private\s+bath(?:room)?)",
+    re.IGNORECASE,
+)
+
+_COORDINATED_ROOM_PATTERN = re.compile(
+    rf"^\s*(?:,\s*|,?\s+(?:and|&|plus)\s+)(?:the\s+)?(?P<room>{_ROOM_PAT})s?",
     re.IGNORECASE,
 )
 
@@ -203,6 +208,15 @@ def _extract_explicit_adjacency(text: str) -> list[AdjacencyConstraint]:
         for match in pattern.finditer(text):
             effective = "AVOID" if _is_negated(text, match.start()) else strength
             _add(match.group("a"), match.group("b"), effective)
+
+            # Preserve coordinated requirements such as "kitchen next to the
+            # dining room and utility room". The first pair is captured by the
+            # main pattern; each immediately following room inherits the same
+            # source room and strength.
+            tail = text[match.end():]
+            while coordinated := _COORDINATED_ROOM_PATTERN.match(tail):
+                _add(match.group("a"), coordinated.group("room"), effective)
+                tail = tail[coordinated.end():]
 
     for match in _WITH_ENSUITE_PATTERN.finditer(text):
         a = _resolve(match.group("a"))

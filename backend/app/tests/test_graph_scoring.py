@@ -96,6 +96,58 @@ def test_should_is_weighted_below_must():
     assert sat.score == 0.0
 
 
+def test_avoid_constraint_rewards_separation_not_adjacency():
+    graph = _two_node_graph("AVOID")
+    adjacent = score_graph_satisfaction(
+        graph,
+        {"rooms": [_room("A", 0, 0), _room("B", 4, 0)]},
+    )
+    separated = score_graph_satisfaction(
+        graph,
+        {"rooms": [_room("A", 0, 0), _room("B", 30, 0)]},
+    )
+
+    assert adjacent.avoid_total == 1
+    assert adjacent.avoid_satisfied == 0
+    assert adjacent.score == 0.0
+    assert adjacent.checks[0].status == "failed"
+    assert separated.avoid_satisfied == 1
+    assert separated.score == 1.0
+    assert separated.checks[0].status == "satisfied"
+
+
+def test_missing_room_is_reported_as_missing_dependency():
+    graph = _two_node_graph("MUST")
+    result = score_graph_satisfaction(graph, {"rooms": [_room("A", 0, 0)]})
+
+    assert result.must_total == 1
+    assert result.must_satisfied == 0
+    assert result.checks[0].status == "missing_dependency"
+
+
+def test_unsupported_relation_is_not_evaluated_and_does_not_change_score():
+    graph = ProgramGraph()
+    graph.add_node(Node(id="a", label="A", space_type="office"))
+    graph.add_node(Node(id="b", label="B", space_type="office"))
+    graph.add_edge(
+        Edge(
+            node_a="a",
+            node_b="b",
+            relation_type="visual_connection",
+            strength="MUST",
+        )
+    )
+
+    result = score_graph_satisfaction(
+        graph,
+        {"rooms": [_room("A", 0, 0), _room("B", 30, 0)]},
+    )
+
+    assert result.score == 1.0
+    assert result.must_total == 0
+    assert result.checks[0].status == "not_evaluated"
+
+
 # ── Integration: score a really generated layout ─────────────────────────────
 
 

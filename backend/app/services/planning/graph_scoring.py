@@ -1,28 +1,50 @@
-"""Graph-satisfaction scoring (Sprint 18 Phase 4, first slice).
+"""Deterministic, explainable ProgramGraph constraint evaluation.
 
-Measures how well a *generated layout* honours the adjacency relationships in
-its ProgramGraph — the deterministic, explainable signal the roadmap leans on
-instead of a learned solver. Given a graph (typically from
-``from_parser_output``) and a generated layout dict, it checks, for each
-MUST/SHOULD `adjacent` edge, whether the two rooms actually share a wall in the
-layout, and returns a weighted satisfaction score plus the human-readable list
-of unmet MUST adjacencies (for warnings).
-
-Pure geometry + set logic, no ML. Additive: nothing here changes a generated
-layout; it only inspects one.
+The scorer evaluates the final layout geometry for every supported graph edge.
+It keeps the original aggregate adjacency ratios for compatibility and adds
+typed per-constraint results that Program Check and later editor validation can
+reuse. No placement or rendering decisions happen here.
 """
 from dataclasses import dataclass, field
+from typing import Literal
 
 from app.services.planning.program_graph import ProgramGraph
 
-# Two rooms count as adjacent if they share at least this much wall span on one
-# axis and the perpendicular gap is within tolerance (absorbs partition-wall
-# thickness / float drift at shared walls). A real corridor between them exceeds
-# this, so corridor-connected rooms are correctly *not* counted as adjacent.
 _MIN_SHARED_SPAN_M = 0.5
 _GAP_TOLERANCE_M = 0.8
-
 _SHOULD_WEIGHT = 0.4
+
+ConstraintStatus = Literal[
+    "satisfied",
+    "warning",
+    "failed",
+    "not_evaluated",
+    "missing_dependency",
+]
+
+
+@dataclass(frozen=True)
+class ConstraintCheck:
+    id: str
+    relation_type: str
+    strength: str
+    node_a: str
+    node_b: str
+    label: str
+    status: ConstraintStatus
+    reason: str = ""
+
+    def as_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "relationType": self.relation_type,
+            "strength": self.strength,
+            "nodeA": self.node_a,
+            "nodeB": self.node_b,
+            "label": self.label,
+            "status": self.status,
+            "reason": self.reason,
+        }
 
 
 @dataclass
@@ -31,8 +53,11 @@ class GraphSatisfaction:
     must_satisfied: int = 0
     should_total: int = 0
     should_satisfied: int = 0
-    score: float = 1.0  # weighted 0..1; 1.0 when there are no constraints
+    avoid_total: int = 0
+    avoid_satisfied: int = 0
+    score: float = 1.0
     unsatisfied_must: list[str] = field(default_factory=list)
+    checks: list[ConstraintCheck] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -40,13 +65,16 @@ class GraphSatisfaction:
             "mustSatisfied": self.must_satisfied,
             "shouldTotal": self.should_total,
             "shouldSatisfied": self.should_satisfied,
+            "avoidTotal": self.avoid_total,
+            "avoidSatisfied": self.avoid_satisfied,
             "score": round(self.score, 3),
             "unsatisfiedMust": list(self.unsatisfied_must),
+            "checks": [check.as_dict() for check in self.checks],
         }
 
 
 def _rooms_adjacent(a: dict, b: dict) -> bool:
-    """True if two room dicts share a wall (AABB footprints, same floor)."""
+    """Return true only when two same-floor AABBs share a usable wall span."""
     if a.get("floorLevel") != b.get("floorLevel"):
         return False
     try:
@@ -64,67 +92,164 @@ def _rooms_adjacent(a: dict, b: dict) -> bool:
 
     x_overlap = min(ax1, bx1) - max(ax0, bx0)
     z_overlap = min(az1, bz1) - max(az0, bz0)
+    z_edge_gap = min(abs(az1 - bz0), abs(bz1 - az0))
+    x_edge_gap = min(abs(ax1 - bx0), abs(bx1 - ax0))
 
-    # Share a vertical wall (overlap on X, small gap on Z) or a horizontal wall.
-    shares_x_wall = x_overlap >= _MIN_SHARED_SPAN_M and (-z_overlap) <= _GAP_TOLERANCE_M
-    shares_z_wall = z_overlap >= _MIN_SHARED_SPAN_M and (-x_overlap) <= _GAP_TOLERANCE_M
-    return shares_x_wall or shares_z_wall
+    return (
+        x_overlap >= _MIN_SHARED_SPAN_M and z_edge_gap <= _GAP_TOLERANCE_M
+    ) or (
+        z_overlap >= _MIN_SHARED_SPAN_M and x_edge_gap <= _GAP_TOLERANCE_M
+    )
 
 
 def _layout_rooms_by_label(layout: dict) -> dict[str, dict]:
-    """Map room label -> room dict from a layout (floors[].rooms preferred, with
-    the flat top-level rooms as a fallback)."""
+    """Map unique generated room labels to their final geometry."""
     rooms: dict[str, dict] = {}
-    floors = layout.get("floors") or []
-    if floors:
-        for floor in floors:
-            for room in floor.get("rooms") or []:
-                label = room.get("label")
-                if label:
-                    rooms.setdefault(label, room)
-    for room in layout.get("rooms") or []:
+
+    def add_room(room: dict) -> None:
+        if room.get("objectType") not in (None, "room"):
+            return
         label = room.get("label")
         if label:
             rooms.setdefault(label, room)
+
+    for floor in layout.get("floors") or []:
+        for room in floor.get("rooms") or []:
+            add_room(room)
+    for room in layout.get("rooms") or []:
+        add_room(room)
     return rooms
+
+
+def _missing_check(
+    index: int,
+    relation_type: str,
+    strength: str,
+    label_a: str,
+    label_b: str,
+    reason: str,
+) -> ConstraintCheck:
+    return ConstraintCheck(
+        id=f"constraint-{index + 1}",
+        relation_type=relation_type,
+        strength=strength,
+        node_a=label_a,
+        node_b=label_b,
+        label=f"{label_a} / {label_b}",
+        status="missing_dependency",
+        reason=reason or "One or both requested spaces are missing from the layout.",
+    )
 
 
 def score_graph_satisfaction(graph: ProgramGraph, layout: dict) -> GraphSatisfaction:
     result = GraphSatisfaction()
     rooms_by_label = _layout_rooms_by_label(layout)
-    nodes_by_id = {n.id: n for n in graph.nodes}
+    nodes_by_id = {node.id: node for node in graph.nodes}
 
-    for edge in graph.edges:
-        if edge.relation_type not in ("adjacent", "near"):
-            continue
+    weighted_total = 0.0
+    weighted_satisfied = 0.0
+
+    for index, edge in enumerate(graph.edges):
         node_a = nodes_by_id.get(edge.node_a)
         node_b = nodes_by_id.get(edge.node_b)
         if node_a is None or node_b is None:
+            result.checks.append(
+                _missing_check(
+                    index,
+                    edge.relation_type,
+                    edge.strength,
+                    edge.node_a,
+                    edge.node_b,
+                    edge.reason,
+                )
+            )
             continue
+
         room_a = rooms_by_label.get(node_a.label)
         room_b = rooms_by_label.get(node_b.label)
-        if room_a is None or room_b is None:
-            # Can't evaluate a relationship whose rooms aren't in the layout.
+        labels = f"{node_a.label} \u2194 {node_b.label}"
+        is_apart_rule = edge.strength == "AVOID" or edge.relation_type == "separated"
+        is_supported = edge.relation_type in ("adjacent", "near", "separated")
+
+        if is_supported is False:
+            result.checks.append(
+                ConstraintCheck(
+                    id=f"constraint-{index + 1}",
+                    relation_type=edge.relation_type,
+                    strength=edge.strength,
+                    node_a=node_a.label,
+                    node_b=node_b.label,
+                    label=labels,
+                    status="not_evaluated",
+                    reason=edge.reason or "This relationship is not geometrically evaluated yet.",
+                )
+            )
             continue
 
-        satisfied = _rooms_adjacent(room_a, room_b)
-        if edge.strength == "MUST":
+        if is_apart_rule:
+            result.avoid_total += 1
+            weighted_total += 1.0
+        elif edge.strength == "MUST" and is_supported:
             result.must_total += 1
-            if satisfied:
+            weighted_total += 1.0
+        elif edge.strength == "SHOULD" and is_supported:
+            result.should_total += 1
+            weighted_total += _SHOULD_WEIGHT
+
+        if room_a is None or room_b is None:
+            result.checks.append(
+                _missing_check(
+                    index,
+                    edge.relation_type,
+                    edge.strength,
+                    node_a.label,
+                    node_b.label,
+                    edge.reason,
+                )
+            )
+            if edge.strength == "MUST" and not is_apart_rule:
+                result.unsatisfied_must.append(labels)
+            continue
+
+        adjacent = _rooms_adjacent(room_a, room_b)
+        satisfied = not adjacent if is_apart_rule else adjacent
+        if satisfied:
+            weighted_satisfied += 1.0 if is_apart_rule or edge.strength == "MUST" else _SHOULD_WEIGHT
+            if is_apart_rule:
+                result.avoid_satisfied += 1
+            elif edge.strength == "MUST":
                 result.must_satisfied += 1
             else:
-                result.unsatisfied_must.append(
-                    f"{node_a.label} ↔ {node_b.label}"
-                )
-        else:  # SHOULD (and any non-AVOID)
-            result.should_total += 1
-            if satisfied:
                 result.should_satisfied += 1
+            status: ConstraintStatus = "satisfied"
+        elif edge.strength == "SHOULD" and not is_apart_rule:
+            status = "warning"
+        else:
+            status = "failed"
+            if edge.strength == "MUST" and not is_apart_rule:
+                result.unsatisfied_must.append(labels)
 
-    denom = result.must_total + _SHOULD_WEIGHT * result.should_total
-    if denom > 0:
-        numer = result.must_satisfied + _SHOULD_WEIGHT * result.should_satisfied
-        result.score = numer / denom
+        if is_apart_rule:
+            action = "Keep apart"
+        elif edge.strength == "MUST":
+            action = "Must be adjacent"
+        else:
+            action = "Should be adjacent"
+        result.checks.append(
+            ConstraintCheck(
+                id=f"constraint-{index + 1}",
+                relation_type=edge.relation_type,
+                strength=edge.strength,
+                node_a=node_a.label,
+                node_b=node_b.label,
+                label=f"{action}: {node_a.label} / {node_b.label}",
+                status=status,
+                reason=edge.reason,
+            )
+        )
+
+    if weighted_total > 0:
+        result.score = weighted_satisfied / weighted_total
     return result
 
 

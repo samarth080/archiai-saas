@@ -34,6 +34,48 @@ const EAST_ORIENTATION = {
   },
 }
 
+const PROGRAM_VALIDATION = {
+  ...EAST_ORIENTATION,
+  programValidation: {
+    version: 1,
+    overallStatus: 'failed',
+    summary: {
+      requestedSpaceCount: 14,
+      generatedSpaceCount: 14,
+      missingSpaceCount: 0,
+      extraSpaceCount: 0,
+      satisfiedCount: 1,
+      warningCount: 0,
+      failedCount: 1,
+      notEvaluatedCount: 0,
+    },
+    spaces: [
+      {
+        id: 'request-kitchen',
+        originalLabel: 'closed kitchen',
+        normalizedType: 'kitchen',
+        requestedCount: 1,
+        generatedCount: 1,
+        status: 'satisfied',
+      },
+    ],
+    missingSpaces: [],
+    extraSpaces: [],
+    constraintChecks: [
+      {
+        id: 'kitchen-laundry',
+        relationType: 'adjacent',
+        strength: 'MUST',
+        nodeA: 'Kitchen',
+        nodeB: 'Laundry',
+        label: 'Must be adjacent: Kitchen / Laundry',
+        status: 'failed',
+        reason: 'prompt adjacency',
+      },
+    ],
+  },
+}
+
 beforeEach(() => {
   useCanvasStore.setState({
     rooms: [],
@@ -94,5 +136,38 @@ describe('RightPanel site & orientation', () => {
     const checks = screen.getByTestId('room-checks')
     expect(checks).toHaveTextContent('Kept apart from bathroom')
     expect(checks).toHaveTextContent('Warning')
+  })
+
+  it('shows Program Check in the no-selection state', () => {
+    useCanvasStore.setState({ layoutMetadata: PROGRAM_VALIDATION })
+    render(<RightPanel />)
+
+    const check = screen.getByTestId('program-check')
+    expect(check).toHaveTextContent('Program check')
+    expect(check).toHaveTextContent('Requested')
+    expect(check).toHaveTextContent('Generated')
+    expect(check).toHaveTextContent('Kitchen / Laundry')
+    expect(check).toHaveTextContent('Failed')
+  })
+
+  it('keeps selected-room constraint results visible in 3D', () => {
+    useCanvasStore.setState({
+      rooms: [
+        room({
+          id: 'k',
+          label: 'Kitchen',
+          roomType: 'kitchen',
+        }),
+      ],
+      selectedId: 'k',
+      viewMode: '3d',
+      layoutMetadata: PROGRAM_VALIDATION,
+    })
+    render(<RightPanel />)
+
+    const check = screen.getByTestId('program-check')
+    expect(check).toHaveTextContent('Constraint check')
+    expect(check).toHaveTextContent('closed kitchen')
+    expect(check).toHaveTextContent('Kitchen / Laundry')
   })
 })

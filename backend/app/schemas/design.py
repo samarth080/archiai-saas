@@ -122,6 +122,8 @@ class GenerateMetadata(BaseModel):
     graphSatisfaction: dict[str, Any] | None = None
     orientation: dict[str, Any] | None = None
     programConstraints: dict[str, Any] | None = None
+    program: dict[str, Any] | None = None
+    programValidation: dict[str, Any] | None = None
 
 
 class BuildingResponse(BaseModel):

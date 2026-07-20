@@ -7,6 +7,8 @@ import { buildRoomGraph, connectionsFor } from './roomGraphModel'
 import { isZonableObject, summarizeZones, zoneForRoom } from './zoneModel'
 import { formatArea, formatDims, roomArea } from '../../utils/format'
 import { cardinalName, parseOrientation } from './orientationModel'
+import { ProgramCheck } from './ProgramCheck'
+import { parseProgramValidation } from './programValidationModel'
 
 const ACTION_LABELS: Record<string, string> = {
   'object.added': 'Added',
@@ -64,6 +66,10 @@ export function RightPanel() {
     separations?: string[][]
     daylightRooms?: string[]
   }
+  const programValidation = useMemo(
+    () => parseProgramValidation(layoutMetadata),
+    [layoutMetadata],
+  )
 
   const room = rooms.find((r) => r.id === selectedId) ?? null
   const activeLevel =
@@ -198,6 +204,13 @@ export function RightPanel() {
     body = (
       <div className="flex flex-col gap-4" data-testid="zone-legend">
         {siteBlock}
+        {programValidation && (
+          <ProgramCheck
+            validation={programValidation}
+            selectedRoom={room}
+            maxChecks={5}
+          />
+        )}
         <div>
           <SectionTitle>{`Zones — ${activeFloor?.name ?? 'Ground Floor'}`}</SectionTitle>
           {zoneSummary.length === 0 ? (
@@ -254,6 +267,13 @@ export function RightPanel() {
   } else if (viewMode === 'graph') {
     body = (
       <div className="flex flex-col gap-4" data-testid="room-graph-panel">
+        {programValidation && (
+          <ProgramCheck
+            validation={programValidation}
+            selectedRoom={room}
+            maxChecks={5}
+          />
+        )}
         {room ? (
           <>
             <div>
@@ -334,7 +354,15 @@ export function RightPanel() {
         </div>
         {tab === 'properties' && (
           <>
-            {roomChecks.length > 0 && (
+            {programValidation ? (
+              <div className="mb-3">
+                <ProgramCheck
+                  validation={programValidation}
+                  selectedRoom={room}
+                  maxChecks={6}
+                />
+              </div>
+            ) : roomChecks.length > 0 ? (
               <ul
                 data-testid="room-checks"
                 className="mb-3 flex flex-col gap-1 rounded-lg bg-graphite-850/80 p-2.5"
@@ -348,7 +376,7 @@ export function RightPanel() {
                   </li>
                 ))}
               </ul>
-            )}
+            ) : null}
             <InspectorProperties room={room} />
           </>
         )}
@@ -399,6 +427,9 @@ export function RightPanel() {
     body = (
       <div className="flex flex-col gap-4" data-testid="right-panel-empty">
         {siteBlock}
+        {programValidation && (
+          <ProgramCheck validation={programValidation} maxChecks={6} />
+        )}
         <div>
           <SectionTitle>{activeFloor?.name ?? 'Floor'}</SectionTitle>
           <dl className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg bg-graphite-850/80 p-2.5">

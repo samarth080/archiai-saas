@@ -41,6 +41,12 @@ async def test_generate_design_returns_multi_floor_layout_and_logs_activity(clie
     assert any(room["roomType"] == "stairs" for room in data["rooms"])
     assert data["designId"]
     assert data["designVersionId"]
+    assert data["metadata"]["program"]["requestedSpaceCount"] > 0
+    assert data["metadata"]["programValidation"]["spaces"]
+    assert isinstance(
+        data["metadata"]["programValidation"]["constraintChecks"],
+        list,
+    )
 
     async with TestSessionLocal() as session:
         activity_result = await session.scalars(select(ActivityLog.action))
@@ -51,6 +57,8 @@ async def test_generate_design_returns_multi_floor_layout_and_logs_activity(clie
         assert design is not None
         assert version is not None
         assert design.layout_json["metadata"]["totalFloors"] == 2
+        assert design.layout_json["metadata"]["program"]["requestedSpaceCount"] > 0
+        assert design.layout_json["metadata"]["programValidation"]["spaces"]
         assert version.layout_json["metadata"]["totalFloors"] == 2
         assert version.version_number == 1
 

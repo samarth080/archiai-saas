@@ -30,7 +30,12 @@ from app.services.design_service import (
 )
 from app.services.layout_service import generate_layout
 from app.services.layout_pattern_service import get_layout_pattern_rules
-from app.services.planning import from_parser_output, score_graph_satisfaction
+from app.services.planning import (
+    build_program_metadata,
+    from_parser_output,
+    score_graph_satisfaction,
+    validate_program,
+)
 from app.services.prompt_service import extract_total_area_sqm, parse_prompt, parsed_to_room_specs
 from app.services.refinement_service import apply_refinement_with_changes, parse_refinement
 from app.services.workspace_service import require_project_read_access
@@ -115,9 +120,19 @@ async def generate(
     # (Sprint 18 Phase 4). Additive, explainable, deterministic — recorded in
     # metadata so it is persisted with the design and shown to the user.
     graph = from_parser_output(parsed, room_specs)
-    layout.setdefault("metadata", {})["graphSatisfaction"] = score_graph_satisfaction(
-        graph, layout
-    ).as_dict()
+    program = build_program_metadata(parsed, graph)
+    for candidate in candidates:
+        satisfaction = score_graph_satisfaction(graph, candidate)
+        metadata = candidate.setdefault("metadata", {})
+        metadata["graphSatisfaction"] = satisfaction.as_dict()
+        metadata["program"] = program
+        metadata["programValidation"] = validate_program(
+            parsed,
+            graph,
+            candidate,
+            program=program,
+            graph_satisfaction=satisfaction,
+        )
 
     if request.project_id:
         design, version = await save_generated_design(

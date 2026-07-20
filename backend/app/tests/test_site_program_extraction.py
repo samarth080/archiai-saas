@@ -69,6 +69,7 @@ def test_example_prompt_extracts_the_full_room_program():
     assert parsed.plot_width_m == 14.0
     assert parsed.plot_depth_m == 18.0
     assert parsed.facing_direction == "E"
+    assert parsed.building_type == "family_home"
 
 
 def test_negated_adjacency_becomes_avoid_not_must():
@@ -79,7 +80,9 @@ def test_negated_adjacency_becomes_avoid_not_must():
     }
     assert strengths[frozenset({"bathroom", "kitchen"})] == "AVOID"
     assert strengths[frozenset({"kitchen", "dining_room"})] == "MUST"
+    assert strengths[frozenset({"kitchen", "laundry"})] == "MUST"
     assert strengths[frozenset({"balcony", "living_room"})] == "MUST"
+    assert strengths[frozenset({"master_bedroom", "ensuite"})] == "MUST"
 
 
 def test_away_from_entry_extracted_as_separation():
