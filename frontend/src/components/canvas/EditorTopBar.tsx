@@ -87,12 +87,12 @@ export function EditorTopBar({
   deleteError,
 }: EditorTopBarProps) {
   return (
-    <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-4 pointer-events-none">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-12 items-center justify-between gap-3 border-b border-ink/10 bg-[#191a1b]/92 px-4 backdrop-blur-md">
       <div className="flex flex-wrap items-center gap-2.5 pointer-events-auto">
         <button
           type="button"
           onClick={onBackToDashboard}
-          className="flex items-baseline gap-px"
+          className="flex items-baseline gap-px text-ink"
           title="Back to projects"
         >
           <span className="text-sm font-extrabold tracking-wide">ARCHI</span>
@@ -152,7 +152,7 @@ export function EditorTopBar({
         <LevelMenu />
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3 pointer-events-auto">
+      <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
         <OverflowMenu
           onHistory={onHistory}
           onActivity={onActivity}

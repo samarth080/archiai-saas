@@ -22,12 +22,15 @@ export function MeasurePanel() {
         )
       : null
 
-  if (!selected && !measureMode) return null
+  // Selected geometry now lives in the right inspector. Keep this floating
+  // panel exclusively for an intentional tape session so it never obscures
+  // the project header or the drawing.
+  if (!measureMode) return null
 
   return (
     <aside
       aria-label="Measurements"
-      className="absolute left-16 top-20 z-10 w-52 rounded-lg border border-ink/10 bg-graphite-800/95 p-3 text-xs shadow-[0_8px_28px_rgba(0,0,0,0.16)] backdrop-blur"
+      className="absolute left-20 top-16 z-20 w-52 rounded-lg border border-ink/10 bg-[#202122]/95 p-3 text-xs shadow-[0_8px_28px_rgba(0,0,0,0.24)] backdrop-blur"
     >
       {selected && (
         <div className="mb-2">
@@ -61,7 +64,7 @@ export function MeasurePanel() {
             measureMode ? 'bg-warn text-graphite-900' : 'bg-graphite-600 text-muted hover:bg-graphite-500'
           }`}
         >
-          {measureMode ? 'Tape: on' : 'Tape'}
+          Tape: on
         </button>
         {measurePoints.length > 0 && (
           <button
@@ -73,13 +76,11 @@ export function MeasurePanel() {
           </button>
         )}
       </div>
-      {measureMode && (
-        <p className="mt-1.5 text-[11px] text-muted">
-          {tape !== null
-            ? `Distance: ${tape.toFixed(2)} m`
-            : 'Click two points on the canvas.'}
-        </p>
-      )}
+      <p className="mt-1.5 text-[11px] text-muted">
+        {tape !== null
+          ? `Distance: ${tape.toFixed(2)} m`
+          : 'Click two points on the canvas.'}
+      </p>
     </aside>
   )
 }

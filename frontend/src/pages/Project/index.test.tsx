@@ -246,7 +246,7 @@ describe('ProjectPage canvas views', () => {
     expect(useCanvasStore.getState().rooms.length).toBeGreaterThan(0)
   })
 
-  it('gives the selected object inspector priority over the program panel', async () => {
+  it('keeps program information in the sidebar instead of floating over the plan', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/api/design/project/p1/latest') return { data: SAVED_DESIGN_FIXTURE }
       if (url.includes('/draft')) {
@@ -256,12 +256,15 @@ describe('ProjectPage canvas views', () => {
       }
       throw new Error('unexpected GET ' + url)
     })
+    useCanvasStore.setState({ viewMode: 'floor_plan', selectedId: null })
     renderProjectPage()
 
-    expect(await screen.findByText('Space program')).toBeInTheDocument()
+    expect(await screen.findByTestId('program-summary')).toBeInTheDocument()
+    expect(screen.queryByText('Space program')).not.toBeInTheDocument()
     act(() => useCanvasStore.getState().selectRoom(INITIAL_ROOMS[0].id))
 
-    expect(screen.queryByText('Space program')).not.toBeInTheDocument()
+    expect(screen.getByTestId('selected-room-card')).toBeInTheDocument()
+    expect(screen.getByTestId('program-summary')).toBeInTheDocument()
   })
 })
 

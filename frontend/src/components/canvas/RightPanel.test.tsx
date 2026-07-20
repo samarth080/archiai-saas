@@ -143,7 +143,7 @@ describe('RightPanel site & orientation', () => {
     render(<RightPanel />)
 
     const check = screen.getByTestId('program-check')
-    expect(check).toHaveTextContent('Program check')
+    expect(check).toHaveTextContent('Program Check')
     expect(check).toHaveTextContent('Requested')
     expect(check).toHaveTextContent('Generated')
     expect(check).toHaveTextContent('Kitchen / Laundry')
@@ -166,7 +166,7 @@ describe('RightPanel site & orientation', () => {
     render(<RightPanel />)
 
     const check = screen.getByTestId('program-check')
-    expect(check).toHaveTextContent('Constraint check')
+    expect(check).toHaveTextContent('Constraint Check')
     expect(check).toHaveTextContent('closed kitchen')
     expect(check).toHaveTextContent('Kitchen / Laundry')
   })

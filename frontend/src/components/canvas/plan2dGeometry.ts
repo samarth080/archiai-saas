@@ -76,12 +76,17 @@ export function derivePlanBounds(footprint: PlanBounds | undefined, rooms: Room[
     content = { x: 0, z: 0, w: 16, d: 12 }
   }
 
-  const padding = Math.max(1, Math.max(content.w, content.d) * 0.08)
+  // The editor chrome occupies the top and bottom of the viewport. Reserve
+  // asymmetric drawing space so dimensions, the entry marker, and the
+  // command bar never compete with the footprint.
+  const sidePadding = Math.max(1.8, Math.max(content.w, content.d) * 0.12)
+  const topPadding = sidePadding * 0.9
+  const bottomPadding = sidePadding * 1.65
   return {
-    x: content.x - padding,
-    z: content.z - padding,
-    w: content.w + padding * 2,
-    d: content.d + padding * 2,
+    x: content.x - sidePadding,
+    z: content.z - topPadding,
+    w: content.w + sidePadding * 2,
+    d: content.d + topPadding + bottomPadding,
   }
 }
 

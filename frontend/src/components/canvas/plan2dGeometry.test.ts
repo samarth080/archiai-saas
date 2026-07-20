@@ -23,10 +23,10 @@ const ROOM: Room = {
 describe('plan2d geometry', () => {
   it('derives padded bounds from the canonical floor footprint', () => {
     expect(derivePlanBounds({ x: 0, z: 0, w: 10, d: 8 }, [ROOM])).toEqual({
-      x: -1,
-      z: -1,
-      w: 12,
-      d: 10,
+      x: -1.8,
+      z: -1.62,
+      w: 13.6,
+      d: 12.59,
     })
   })
 

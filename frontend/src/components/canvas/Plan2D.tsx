@@ -558,7 +558,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
           />
         ))}
 
-        {orientation && footprint && (
+        {footprint && (
           <PlanDirectionLabels
             footprint={footprint}
             orientation={orientation}
@@ -605,10 +605,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-ink/10 bg-graphite-800/90 px-3 py-2 text-[11px] font-medium text-muted shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
-        Left click selects - drag selected object - right drag pans - wheel zooms
-      </div>
-      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-ink/10 bg-graphite-800/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
+      <div className="absolute bottom-28 right-4 flex items-center gap-1 rounded-lg border border-ink/10 bg-[#1d1e1f]/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.2)] backdrop-blur">
         <button
           type="button"
           aria-label="Zoom out"

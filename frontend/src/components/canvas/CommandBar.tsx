@@ -49,11 +49,11 @@ export function CommandBar({
       : 'Generate'
 
   const tablist = (
-    <div role="tablist" aria-label="Prompt mode" className="inline-flex w-fit rounded-lg border border-ink/15 text-xs overflow-hidden">
+    <div role="tablist" aria-label="Prompt mode" className="inline-flex w-fit overflow-hidden rounded-md border border-ink/10 bg-[#1b1c1d] text-[11px]">
       <button
         role="tab"
         aria-selected={mode === 'generate'}
-        className={`px-3 py-1 ${mode === 'generate' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'}`}
+        className={`px-3 py-1.5 ${mode === 'generate' ? 'bg-[#7663d7] text-white' : 'text-muted hover:text-ink'}`}
         onClick={() => onModeChange('generate')}
       >
         Generate
@@ -63,7 +63,7 @@ export function CommandBar({
         aria-selected={mode === 'refine'}
         disabled={!designId}
         title={designId ? '' : 'Generate a layout first'}
-        className={`px-3 py-1 ${mode === 'refine' ? 'bg-ink text-graphite-900' : 'bg-graphite-700 text-muted'} disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`px-3 py-1.5 ${mode === 'refine' ? 'bg-[#7663d7] text-white' : 'text-muted hover:text-ink'} disabled:opacity-50 disabled:cursor-not-allowed`}
         onClick={() => onModeChange('refine')}
       >
         Refine
@@ -71,7 +71,7 @@ export function CommandBar({
       {mode === 'generate' && (
         <button
           type="button"
-          className="border-l border-ink/15 bg-graphite-700 px-3 py-1 text-muted hover:text-ink"
+          className="border-l border-ink/10 px-3 py-1.5 text-muted hover:bg-ink/5 hover:text-ink"
           onClick={() => setShowParams(!showParams)}
           aria-expanded={showParams}
         >
@@ -209,13 +209,12 @@ export function CommandBar({
   }
 
   return (
-    <div className="absolute bottom-9 left-1/2 z-20 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-ink/10 bg-graphite-800/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur">
-      {tablist}
-      {paramsRow}
-      <div className="flex gap-2 items-end">
+    <div className="absolute bottom-14 left-1/2 z-20 flex w-[min(46rem,calc(100%-8rem))] -translate-x-1/2 flex-col gap-2 rounded-xl border border-ink/10 bg-[#1d1e1f]/96 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur">
+      <div className="flex items-center gap-2">
+        {tablist}
         <textarea
           aria-label="Layout prompt"
-          className="flex-1 resize-none rounded-lg border border-ink/15 bg-graphite-700 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+          className="min-w-0 flex-1 resize-none rounded-md border border-ink/10 bg-[#242526] px-3 py-2 text-xs text-ink placeholder:text-muted-light focus:outline-none focus:ring-1 focus:ring-[#8069df]"
           rows={1}
           placeholder={
             mode === 'refine'
@@ -228,13 +227,14 @@ export function CommandBar({
         />
         <button
           aria-busy={generating}
-          className="bg-ink hover:bg-graphite-100 disabled:bg-graphite-500 text-graphite-900 font-medium px-4 py-2 rounded-lg text-sm self-stretch"
+          className="self-stretch rounded-md bg-[#7663d7] px-5 py-2 text-xs font-semibold text-white shadow-[0_3px_12px_rgba(118,99,215,0.25)] hover:bg-[#806cdf] disabled:bg-graphite-500"
           onClick={onSubmit}
           disabled={generating || !prompt.trim()}
         >
           {submitLabel}
         </button>
       </div>
+      {paramsRow}
       {errorNotice}
     </div>
   )

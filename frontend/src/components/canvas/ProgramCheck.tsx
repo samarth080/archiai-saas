@@ -15,24 +15,27 @@ interface ProgramCheckProps {
   maxChecks?: number
 }
 
-const STATUS_DOT: Record<ConstraintStatus, string> = {
-  satisfied: 'bg-ok',
-  partial: 'bg-warn',
-  warning: 'bg-warn',
-  failed: 'bg-danger',
-  not_evaluated: 'bg-muted-light',
-  missing_dependency: 'bg-danger',
+const STATUS_MARKER: Record<ConstraintStatus, { label: string; tone: string }> = {
+  satisfied: { label: 'ok', tone: 'bg-ok' },
+  partial: { label: '!', tone: 'bg-warn' },
+  warning: { label: '!', tone: 'bg-warn' },
+  failed: { label: 'x', tone: 'bg-danger' },
+  not_evaluated: { label: '-', tone: 'bg-muted-light' },
+  missing_dependency: { label: 'x', tone: 'bg-danger' },
 }
 
 function CheckRow({ check }: { check: ProgramConstraintCheck }) {
+  const marker = STATUS_MARKER[check.status]
   return (
-    <li className="rounded-md bg-graphite-850/80 px-2 py-1.5">
+    <li className="border-b border-ink/10 py-2 last:border-b-0">
       <div className="flex items-start gap-2">
         <span
           aria-hidden="true"
-          className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[check.status]}`}
-        />
-        <span className="min-w-0 flex-1 text-[10px] leading-4 text-muted">
+          className={`mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[8px] font-bold text-[#1b1c1d] ${marker.tone}`}
+        >
+          {marker.label}
+        </span>
+        <span className="min-w-0 flex-1 text-[10px] leading-4 text-ink/80">
           {check.label}
         </span>
         <span className={`shrink-0 text-[10px] font-medium ${statusTone(check.status)}`}>
@@ -56,13 +59,9 @@ export function ProgramCheck({
   selectedRoom = null,
   maxChecks = 8,
 }: ProgramCheckProps) {
-  const selected = selectedRoom
-    ? checksForRoom(validation, selectedRoom)
-    : null
+  const selected = selectedRoom ? checksForRoom(validation, selectedRoom) : null
   const checks = (
-    selected
-      ? selected.constraints
-      : sortedConstraintChecks(validation.constraintChecks)
+    selected ? selected.constraints : sortedConstraintChecks(validation.constraintChecks)
   ).slice(0, maxChecks)
   const panelStatus = selected
     ? aggregateStatus([
@@ -72,10 +71,13 @@ export function ProgramCheck({
     : validation.overallStatus
 
   return (
-    <section data-testid="program-check">
+    <section
+      data-testid="program-check"
+      className="rounded-lg border border-ink/10 bg-[#232425]/80 p-3"
+    >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-light">
-          {selectedRoom ? 'Constraint check' : 'Program check'}
+        <p className="text-[11px] font-semibold text-ink">
+          {selectedRoom ? 'Constraint Check' : 'Program Check'}
         </p>
         <span
           data-testid="program-check-status"
@@ -86,7 +88,7 @@ export function ProgramCheck({
       </div>
 
       {!selectedRoom && (
-        <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg bg-graphite-850/80 p-2.5">
+        <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-md border border-ink/10 bg-[#1d1e1f]/65 p-2.5">
           <div>
             <p className="text-[9px] uppercase tracking-wide text-muted-light">Requested</p>
             <p className="font-mono text-xs tabular-nums text-ink">
@@ -103,7 +105,7 @@ export function ProgramCheck({
       )}
 
       {selected?.space && (
-        <div className="mt-2 flex items-center justify-between rounded-md bg-graphite-850/80 px-2 py-1.5 text-[10px]">
+        <div className="mt-2 flex items-center justify-between rounded-md border border-ink/10 bg-[#1d1e1f]/65 px-2 py-1.5 text-[10px]">
           <span className="truncate text-muted">
             {selected.space.originalLabel || selectedRoom?.label}
           </span>
@@ -125,7 +127,7 @@ export function ProgramCheck({
       )}
 
       {checks.length > 0 ? (
-        <ul className="mt-2 flex flex-col gap-1">
+        <ul className="mt-2 flex flex-col">
           {checks.map((check) => <CheckRow key={check.id} check={check} />)}
         </ul>
       ) : (
@@ -135,6 +137,14 @@ export function ProgramCheck({
             : 'No evaluable constraints were extracted.'}
         </p>
       )}
+
+      <div className="mt-2 flex items-center justify-center gap-2 rounded-md border border-ink/10 bg-[#1d1e1f]/65 px-2 py-1.5 font-mono text-[9px] tabular-nums">
+        <span className="text-ok">{validation.summary.satisfiedCount} satisfied</span>
+        <span className="text-muted-light">/</span>
+        <span className="text-warn">{validation.summary.warningCount} warnings</span>
+        <span className="text-muted-light">/</span>
+        <span className="text-danger">{validation.summary.failedCount} failed</span>
+      </div>
     </section>
   )
 }

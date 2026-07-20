@@ -14,17 +14,18 @@ beforeEach(() => {
 })
 
 describe('MeasurePanel', () => {
-  it('sits below the project header instead of overlapping its controls', () => {
+  it('opens below the editor header only during an intentional tape session', () => {
+    useCanvasStore.setState({ measureMode: true })
     render(<MeasurePanel />)
 
     const panel = screen.getByRole('complementary', { name: 'Measurements' })
-    expect(panel).toHaveClass('top-20')
-    expect(panel).not.toHaveClass('top-4')
-    expect(screen.getByRole('button', { name: 'Tape' })).toBeInTheDocument()
+    expect(panel).toHaveClass('top-16')
+    expect(panel).not.toHaveClass('bottom-16')
+    expect(screen.getByRole('button', { name: 'Tape: on' })).toBeInTheDocument()
   })
 
-  it('stays hidden when neither a component nor tape mode is active', () => {
-    useCanvasStore.setState({ selectedId: null, measureMode: false })
+  it('stays hidden for a normal selection when tape mode is inactive', () => {
+    useCanvasStore.setState({ selectedId: INITIAL_ROOMS[0].id, measureMode: false })
 
     render(<MeasurePanel />)
 

@@ -8,6 +8,7 @@ import {
 } from '../../store/componentRegistry'
 import { Plan2D } from './Plan2D'
 import { EDITOR_PALETTE } from './editorPalette'
+import { clientPointToPlan, planViewportMetrics, type PlanBounds } from './plan2dGeometry'
 
 const TEST_ROOM: Room = {
   id: 'room-1',
@@ -50,20 +51,37 @@ function cloneTestRoom(overrides: Partial<Room> = {}): Room {
   }
 }
 
+const PLAN_RECT = {
+  x: 0,
+  y: 0,
+  left: 0,
+  top: 0,
+  right: 600,
+  bottom: 600,
+  width: 600,
+  height: 600,
+  toJSON: () => ({}),
+} as DOMRect
+
+function planViewBox(svg: Element): PlanBounds {
+  const [x, z, w, d] = (svg.getAttribute('viewBox') ?? '').split(' ').map(Number)
+  return { x, z, w, d }
+}
+
+function pointAt(svg: Element, clientX: number, clientY: number) {
+  return clientPointToPlan(clientX, clientY, PLAN_RECT, planViewBox(svg))
+}
+
 function mockPlanRect() {
   const svg = screen.getByRole('application', { name: 'Editable floor plan' })
-  vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
-    x: 0,
-    y: 0,
-    left: 0,
-    top: 0,
-    right: 600,
-    bottom: 600,
-    width: 600,
-    height: 600,
-    toJSON: () => ({}),
-  } as DOMRect)
+  vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue(PLAN_RECT)
   return svg
+}
+
+function hasRenderedPlanText(container: HTMLElement, pattern: RegExp) {
+  return [...container.querySelectorAll('svg text')].some((node) =>
+    pattern.test(node.textContent ?? ''),
+  )
 }
 
 beforeEach(() => {
@@ -102,17 +120,20 @@ describe('Plan2D', () => {
     expect(Object.values(EDITOR_PALETTE)).not.toContain('#ffffff')
   })
 
-  it('gives generated spaces a layered architectural surface and area hierarchy', () => {
-    render(<Plan2D />)
+  it('gives spaces a layered surface and reveals dimensions only on selection', () => {
+    const { container } = render(<Plan2D />)
 
     expect(screen.getByTestId('plan-space-surface-room-1')).toBeInTheDocument()
     expect(screen.getByTestId('plan-space-inset-room-1')).toBeInTheDocument()
-    expect(screen.getByText('16.0 m²')).toBeInTheDocument()
+    expect(hasRenderedPlanText(container, /16\.0 m/)).toBe(false)
     expect(screen.queryByTestId('plan-selection-halo-room-1')).not.toBeInTheDocument()
 
     act(() => useCanvasStore.getState().selectRoom('room-1'))
 
     expect(screen.getByTestId('plan-selection-halo-room-1')).toBeInTheDocument()
+    expect(hasRenderedPlanText(container, /4\.0 .* 4\.0 m/)).toBe(true)
+    expect(screen.getByTestId('plan-footprint-dimensions')).toBeInTheDocument()
+    expect(screen.getByTestId('plan-north-compass')).toBeInTheDocument()
   })
 
   it('renders every registered component type with a safe SVG treatment', () => {
@@ -158,7 +179,7 @@ describe('Plan2D', () => {
   it('moves only after the drag threshold and records one undoable move', () => {
     useCanvasStore.setState({ selectedId: 'room-1' })
     render(<Plan2D />)
-    mockPlanRect()
+    const svg = mockPlanRect()
     const object = screen.getByTestId('plan-object-room-1')
 
     fireEvent.pointerDown(object, { button: 0, pointerId: 2, clientX: 300, clientY: 300 })
@@ -169,7 +190,8 @@ describe('Plan2D', () => {
     fireEvent.pointerUp(object, { button: 0, pointerId: 2, clientX: 400, clientY: 300 })
 
     let state = useCanvasStore.getState()
-    expect(state.rooms[0].position.x).toBeCloseTo(6)
+    const scale = planViewportMetrics(PLAN_RECT, planViewBox(svg)).scale
+    expect(state.rooms[0].position.x).toBeCloseTo(4 + 100 / scale)
     expect(state.activityLog.filter((entry) => entry.action === 'object.moved')).toHaveLength(1)
     expect(state.past).toHaveLength(1)
 
@@ -181,7 +203,7 @@ describe('Plan2D', () => {
   it('shows eight handles and records one footprint-safe resize', () => {
     useCanvasStore.setState({ selectedId: 'room-1' })
     render(<Plan2D />)
-    mockPlanRect()
+    const svg = mockPlanRect()
     expect(document.querySelectorAll('[data-testid^="plan-resize-room-1-"]')).toHaveLength(8)
     const handle = screen.getByTestId('plan-resize-room-1-se')
 
@@ -190,9 +212,12 @@ describe('Plan2D', () => {
     fireEvent.pointerUp(handle, { button: 0, pointerId: 3, clientX: 400, clientY: 400 })
 
     let state = useCanvasStore.getState()
-    expect(state.rooms[0].size.w).toBeCloseTo(5)
-    expect(state.rooms[0].size.d).toBeCloseTo(5)
-    expect(state.rooms[0].position.x).toBeCloseTo(4.5)
+    const pointer = pointAt(svg, 400, 400)
+    const expectedW = pointer.x - 2
+    const expectedD = pointer.z - 2
+    expect(state.rooms[0].size.w).toBeCloseTo(expectedW)
+    expect(state.rooms[0].size.d).toBeCloseTo(expectedD)
+    expect(state.rooms[0].position.x).toBeCloseTo(2 + expectedW / 2)
     expect(state.activityLog.filter((entry) => entry.action === 'object.resized')).toHaveLength(1)
 
     act(() => state.undo())
@@ -261,19 +286,24 @@ describe('Plan2D', () => {
     fireEvent.pointerDown(svg, { button: 0, pointerId: 5, clientX: 300, clientY: 300 })
 
     const placed = useCanvasStore.getState().rooms.find((room) => room.objectType === 'furniture')
-    expect(placed?.position.x).toBeCloseTo(5)
-    expect(placed?.position.z).toBeCloseTo(5)
+    const expected = pointAt(svg, 300, 300)
+    expect(placed?.position.x).toBeCloseTo(expected.x)
+    expect(placed?.position.z).toBeCloseTo(expected.z)
     expect(useCanvasStore.getState().placementMode).toBeNull()
   })
 })
 
 describe('Plan2D adaptive room labels', () => {
-  it('shows name and area in rooms large enough for both', () => {
+  it('shows a quiet name by default and dimensions after selection', () => {
     useCanvasStore.getState().loadLayout(layoutWithRooms([cloneTestRoom()]))
-    render(<Plan2D />)
+    const { container } = render(<Plan2D />)
 
     expect(screen.getByText('Living Room')).toBeInTheDocument()
-    expect(screen.getByText('16.0 m²')).toBeInTheDocument()
+    expect(hasRenderedPlanText(container, /4\.0 .* 4\.0 m/)).toBe(false)
+
+    act(() => useCanvasStore.getState().selectRoom('room-1'))
+
+    expect(hasRenderedPlanText(container, /4\.0 .* 4\.0 m/)).toBe(true)
   })
 
   it('drops the area line first in small rooms, keeping the name', () => {

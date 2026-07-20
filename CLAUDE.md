@@ -699,6 +699,17 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** `..\.venv311\Scripts\python.exe -m pytest -ra` -> **680 passed, 3 expected live-model skips, 1 unchanged Starlette warning**; `npm test` -> **244 passed across 46 files**; `npx tsc --noEmit` and `npm run build` passed. Authenticated browser QA confirmed persisted summary counts and all four Kitchen-scoped checks as satisfied; no application console errors were observed.
 - [ ] **Review gate:** stop after this vertical slice. Geometry collision/highlight work, richer editor feedback, openings/circulation, dashboard/telemetry, broader prompt expansion, and the remaining master brief stay deliberately deferred until owner acceptance.
 
+### Sprint 24 - 2D Plan Editor Visual Parity (reference-driven slice)
+
+- [x] **Unified architectural editor shell:** the 2D workspace now uses one dark graphite visual system across the top bar, centered view tabs, labeled left tool rail, right details panel, prompt command bar, and bottom status strip. The separate floating 2D program panel is removed; program and validation information live in the sidebar.
+- [x] **Plan drawing hierarchy:** room fills are muted and legible, unselected rooms show quiet names, selected rooms add inline dimensions, and purple selection/resize handles replace the former oversized high-contrast treatment. Overall footprint dimensions, a north compass, facing/road context, and main-entry annotation render around the plan.
+- [x] **Selection and geometry panel:** selecting a room keeps the plan readable while exposing width, depth, area, and perimeter in a compact sidebar card. Less-common type, floor, position, height, and rotation controls remain available under Advanced properties; duplicate and delete remain explicit.
+- [x] **Program Check parity:** the sidebar shows requested/generated counts, satisfied/warning/failed totals, explainable checks, current-floor metrics, and a building-program summary from the same typed validation state used by the other editor views.
+- [x] **Collision-free controls:** the drawing surface reserves header/footer space, the tape panel appears only in intentional measure mode below the header, and zoom controls sit outside the command bar. Live browser QA at 1280x720 drove these placement fixes.
+- [x] **Backward compatibility:** generation, refine, 3D, zoning, room graph, Zustand layout state, serialization, autosave, versions, export/share capture, and existing component interactions are unchanged. No backend schema, API, dependency, or layout-engine change is part of this slice.
+- [x] **Verification:** `npm test -- --run` -> **244 passed across 46 files**; `npm run build` passed (1,162 modules); TypeScript passed as part of the production build. Authenticated live browser QA covered room selection, selected-room geometry, measure-mode placement, 2D -> 3D -> 2D switching, and console inspection with zero application errors.
+- [ ] **Review gate:** stop here for owner visual acceptance before expanding editor behavior or starting another product phase.
+
 ---
 
 ## Development Rules

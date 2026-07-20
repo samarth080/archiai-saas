@@ -71,7 +71,7 @@ describe('ProgramCheck', () => {
     render(<ProgramCheck validation={validation} />)
 
     const panel = screen.getByTestId('program-check')
-    expect(panel).toHaveTextContent('Program check')
+    expect(panel).toHaveTextContent('Program Check')
     expect(panel).toHaveTextContent('Requested')
     expect(panel).toHaveTextContent('14')
     expect(panel).toHaveTextContent('Must be adjacent: Kitchen / Laundry')
@@ -83,7 +83,7 @@ describe('ProgramCheck', () => {
     render(<ProgramCheck validation={validation} selectedRoom={kitchen} />)
 
     const panel = screen.getByTestId('program-check')
-    expect(panel).toHaveTextContent('Constraint check')
+    expect(panel).toHaveTextContent('Constraint Check')
     expect(panel).toHaveTextContent('closed kitchen')
     expect(panel).toHaveTextContent('1 / 1')
     expect(panel).toHaveTextContent('Kitchen / Laundry')

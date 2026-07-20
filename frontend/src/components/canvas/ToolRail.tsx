@@ -107,10 +107,12 @@ function ToolButton({
   tool,
   hovered,
   setHovered,
+  labeled,
 }: {
   tool: ToolDef
   hovered: string | null
   setHovered: (key: string | null) => void
+  labeled: boolean
 }) {
   return (
     <div
@@ -123,9 +125,11 @@ function ToolButton({
         aria-label={tool.label}
         onClick={tool.onClick}
         disabled={tool.disabled}
-        className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+        className={`flex items-center justify-center rounded-md transition-colors ${
+          labeled ? 'h-10 w-12 flex-col gap-0.5' : 'h-9 w-9'
+        } ${
           tool.active
-            ? 'bg-ink/10 text-ink'
+            ? 'bg-[#7663d7]/20 text-[#a18ef0] ring-1 ring-[#8069df]/45'
             : tool.disabled
               ? 'text-graphite-500'
               : 'text-muted-light hover:bg-ink/10 hover:text-ink'
@@ -143,8 +147,13 @@ function ToolButton({
         >
           {ICONS[tool.key] ?? ICONS.generic}
         </svg>
+        {labeled && (
+          <span className="max-w-full truncate px-0.5 text-[8px] font-medium leading-none">
+            {tool.label}
+          </span>
+        )}
       </button>
-      {hovered === tool.key && (
+      {!labeled && hovered === tool.key && (
         <div className="absolute left-11 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-graphite-900 shadow-lg">
           <span className="text-xs font-semibold">{tool.label}</span>
           {tool.shortcut && (
@@ -178,6 +187,8 @@ export function ToolRail() {
   const setPlacementMode = useCanvasStore((s) => s.setPlacementMode)
   const showDimensions = useCanvasStore((s) => s.showDimensions)
   const setShowDimensions = useCanvasStore((s) => s.setShowDimensions)
+  const measureMode = useCanvasStore((s) => s.measureMode)
+  const toggleMeasureMode = useCanvasStore((s) => s.toggleMeasureMode)
   const viewMode = useCanvasStore((s) => s.viewMode)
   const setViewMode = useCanvasStore((s) => s.setViewMode)
   const undo = useCanvasStore((s) => s.undo)
@@ -189,6 +200,7 @@ export function ToolRail() {
     // Placement needs an editable canvas — zoning/graph are analysis lenses,
     // so arming a draw tool there jumps back to the 2D plan first.
     if (viewMode === 'zoning' || viewMode === 'graph') setViewMode('floor_plan')
+    if (measureMode) toggleMeasureMode()
     setShowDimensions(false)
     setPlacementMode(placementMode === type ? null : type)
     setMoreOpen(false)
@@ -198,8 +210,9 @@ export function ToolRail() {
     {
       key: 'select',
       label: 'Select',
-      active: placementMode === null && !showDimensions,
+      active: placementMode === null && !showDimensions && !measureMode,
       onClick: () => {
+        if (measureMode) toggleMeasureMode()
         setPlacementMode(null)
         setShowDimensions(false)
         setMoreOpen(false)
@@ -210,12 +223,13 @@ export function ToolRail() {
     ),
     {
       key: 'measure',
-      label: 'Dimensions',
+      label: 'Measure',
       shortcut: 'Alt',
-      active: showDimensions,
+      active: measureMode,
       onClick: () => {
         setPlacementMode(null)
-        setShowDimensions(!showDimensions)
+        setShowDimensions(false)
+        toggleMeasureMode()
         setMoreOpen(false)
       },
     },
@@ -241,14 +255,44 @@ export function ToolRail() {
     },
   ]
 
+  const labeled = viewMode === 'floor_plan'
+  const primaryTools = tools.slice(0, -2)
+  const historyTools = tools.slice(-2)
+
   return (
-    <div className="absolute left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5">
-      {tools.map((tool) => (
-        <ToolButton key={tool.key} tool={tool} hovered={hovered} setHovered={setHovered} />
-      ))}
+    <div
+      aria-label="Editor tools"
+      className={
+        labeled
+          ? 'absolute bottom-12 left-2 top-14 z-20 flex w-14 flex-col items-center rounded-lg border border-ink/10 bg-[#1b1c1d]/95 px-1 py-1.5 shadow-xl backdrop-blur'
+          : 'absolute left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5'
+      }
+    >
+      <div className={`flex flex-col items-center ${labeled ? 'gap-0.5 overflow-y-auto' : 'gap-0.5'}`}>
+        {primaryTools.map((tool) => (
+          <ToolButton
+            key={tool.key}
+            tool={tool}
+            hovered={hovered}
+            setHovered={setHovered}
+            labeled={labeled}
+          />
+        ))}
+      </div>
+      <div className={`flex flex-col items-center gap-0.5 ${labeled ? 'mt-auto border-t border-ink/10 pt-1' : ''}`}>
+        {historyTools.map((tool) => (
+          <ToolButton
+            key={tool.key}
+            tool={tool}
+            hovered={hovered}
+            setHovered={setHovered}
+            labeled={labeled}
+          />
+        ))}
+      </div>
 
       {moreOpen && (
-        <div className="absolute left-11 bottom-0 z-30 w-44 rounded-xl border border-ink/10 bg-graphite-800 p-1.5 shadow-2xl">
+        <div className="absolute bottom-0 left-16 z-30 w-44 rounded-xl border border-ink/10 bg-graphite-800 p-1.5 shadow-2xl">
           {PROFESSIONAL_COMPONENTS.map((definition) => (
             <button
               key={definition.type}
