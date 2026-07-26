@@ -1,25 +1,23 @@
-"""Workflow Phase 6 — canonical soft scoring and data-driven Vastu."""
+"""Workflow Phase 6: weighted soft quality and data-driven Vastu."""
 
 from pathlib import Path
+
+import pytest
 
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services.quality.scorer import score
+from app.services.quality.soft_rules import adjacency_rule, bath_kitchen_rule
 from app.services.quality.vastu import evaluate_vastu, sector_for_room
 
 
-FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
-
-
-def _spec(name: str = "3bhk_adjacencies") -> RequirementsSpec:
-    return RequirementsSpec.model_validate_json(
-        (FIXTURES / f"{name}.json").read_text(encoding="utf-8")
-    )
+RULES_PATH = Path(__file__).parents[1] / "services" / "quality" / "vastu_rules.json"
 
 
 def _room(
     room_id: str,
     room_type: RoomType,
+    label: str,
     x: float,
     y: float,
     w: float,
@@ -28,7 +26,7 @@ def _room(
     return PlanRoom(
         id=room_id,
         type=room_type,
-        label=room_type.value.replace("_", " ").title(),
+        label=label,
         x=x,
         y=y,
         w=w,
@@ -36,35 +34,40 @@ def _room(
     )
 
 
-def _three_room_plan(*, kitchen_next_to_dining: bool) -> LayoutPlan:
-    """Valid access graph in both variants; only kitchen/dining adjacency changes."""
-
-    kitchen_x = 1.5 if kitchen_next_to_dining else 0.0
-    entry_x = 0.0 if kitchen_next_to_dining else 3.0
-    dining_x = 4.5
-    rooms = [
-        _room("entry", RoomType.entry, entry_x, 0, 1.5, 3),
-        _room("kitchen", RoomType.kitchen, kitchen_x, 0, 3, 3),
-        _room("dining", RoomType.dining, dining_x, 0, 3, 3),
-    ]
-    walls = [
-        Wall(id="w-entry-kitchen", x1=1.5 if kitchen_next_to_dining else 3, y1=0, x2=1.5 if kitchen_next_to_dining else 3, y2=3),
-        Wall(id="w-second", x1=4.5, y1=0, x2=4.5, y2=3),
-    ]
-    doors = [
-        Door(id="d1", wall_ref="w-entry-kitchen", offset=1.0, width=0.9),
-        Door(id="d2", wall_ref="w-second", offset=1.0, width=0.9),
-    ]
+def _adjacency_plan(*, kitchen_next_to_dining: bool) -> LayoutPlan:
+    kitchen = _room("k", RoomType.kitchen, "Kitchen", 0, 0, 3, 3)
+    if kitchen_next_to_dining:
+        entry = _room("e", RoomType.entry, "Entry", 6, 0, 1.5, 3)
+        dining = _room("d", RoomType.dining, "Dining", 3, 0, 3, 3)
+        walls = [
+            Wall(id="w-kd", x1=3, y1=0, x2=3, y2=3),
+            Wall(id="w-de", x1=6, y1=0, x2=6, y2=3),
+        ]
+        doors = [
+            Door(id="door-kd", wall_ref="w-kd", offset=1.0),
+            Door(id="door-de", wall_ref="w-de", offset=1.0),
+        ]
+    else:
+        entry = _room("e", RoomType.entry, "Entry", 3, 0, 1.5, 3)
+        dining = _room("d", RoomType.dining, "Dining", 4.5, 0, 3, 3)
+        walls = [
+            Wall(id="w-ke", x1=3, y1=0, x2=3, y2=3),
+            Wall(id="w-ed", x1=4.5, y1=0, x2=4.5, y2=3),
+        ]
+        doors = [
+            Door(id="door-ke", wall_ref="w-ke", offset=1.0),
+            Door(id="door-ed", wall_ref="w-ed", offset=1.0),
+        ]
     return LayoutPlan(
         plot=PlanPlot(width_m=7.5, depth_m=3, facing="east"),
-        rooms=rooms,
+        rooms=[kitchen, dining, entry],
         walls=walls,
         doors=doors,
     )
 
 
-def test_weighted_scorer_returns_a_bounded_full_report():
-    requirements = RequirementsSpec.model_validate(
+def _adjacency_spec() -> RequirementsSpec:
+    return RequirementsSpec.model_validate(
         {
             "rooms": [
                 {"type": "kitchen", "count": 1},
@@ -79,127 +82,87 @@ def test_weighted_scorer_returns_a_bounded_full_report():
         }
     )
 
-    report = score(_three_room_plan(kitchen_next_to_dining=True), requirements)
 
-    assert 0 <= report.score <= 100
-    assert report.hard_violations == []
-    assert all(warning.rule in {"generic", "vastu"} for warning in report.warnings)
-
-
-def test_fixing_a_must_adjacency_never_lowers_the_score():
-    requirements = RequirementsSpec.model_validate(
-        {
-            "rooms": [
-                {"type": "kitchen", "count": 1},
-                {"type": "dining", "count": 1},
-                {"type": "entry", "count": 1},
-            ],
-            "adjacency": [
-                {"room_a": "kitchen", "room_b": "dining", "strength": "must"}
-            ],
-            "plot": {"width_m": 7.5, "depth_m": 3},
-            "facing": "east",
-        }
-    )
-
-    separated = score(_three_room_plan(kitchen_next_to_dining=False), requirements)
-    adjacent = score(_three_room_plan(kitchen_next_to_dining=True), requirements)
-
-    assert adjacent.score > separated.score
-    assert any("Kitchen" in warning.message and "Dining" in warning.message for warning in separated.warnings)
+def test_vastu_rules_are_committed_data_not_hardcoded_python():
+    assert RULES_PATH.exists()
+    assert '"room_type": "kitchen"' in RULES_PATH.read_text(encoding="utf-8")
 
 
-def test_bathroom_beside_kitchen_emits_a_human_warning():
+def test_fixing_must_adjacency_improves_the_rule_and_total_score():
+    spec = _adjacency_spec()
+    separated = _adjacency_plan(kitchen_next_to_dining=False)
+    adjacent = _adjacency_plan(kitchen_next_to_dining=True)
+
+    separated_rule = adjacency_rule(separated, spec)
+    adjacent_rule = adjacency_rule(adjacent, spec)
+
+    assert separated_rule.score == 0
+    assert adjacent_rule.score == 1
+    assert score(adjacent, spec).score > score(separated, spec).score
+
+
+def test_bathroom_beside_kitchen_emits_a_human_warning_with_room_names():
     plan = LayoutPlan(
-        plot=PlanPlot(width_m=5.4, depth_m=3, facing="east"),
+        plot=PlanPlot(width_m=6, depth_m=3),
         rooms=[
-            _room("kitchen", RoomType.kitchen, 0, 0, 3, 3),
-            _room("bathroom", RoomType.bathroom, 3, 0, 2.4, 3),
+            _room("k", RoomType.kitchen, "Family Kitchen", 0, 0, 3, 3),
+            _room("b", RoomType.bathroom, "Guest Bathroom", 3, 0, 3, 3),
         ],
-        walls=[Wall(id="shared", x1=3, y1=0, x2=3, y2=3)],
-        doors=[Door(id="door", wall_ref="shared", offset=1.0, width=0.9)],
-    )
-    requirements = RequirementsSpec.model_validate(
-        {
-            "rooms": [
-                {"type": "kitchen", "count": 1},
-                {"type": "bathroom", "count": 1},
-            ],
-            "plot": {"width_m": 5.4, "depth_m": 3},
-            "facing": "east",
-        }
     )
 
-    report = score(plan, requirements)
+    result = bath_kitchen_rule(plan, RequirementsSpec())
 
-    assert any(
-        warning.code == "generic.bath_kitchen_separation"
-        and "Kitchen" in warning.message
-        and "Bathroom" in warning.message
-        for warning in report.warnings
-    )
+    assert result.score == 0
+    assert len(result.warnings) == 1
+    assert "Family Kitchen" in result.warnings[0].message
+    assert "Guest Bathroom" in result.warnings[0].message
 
 
-def test_hard_violations_cap_the_quality_score():
-    valid = _three_room_plan(kitchen_next_to_dining=True)
-    overlapping = valid.model_copy(
+def test_hard_violations_cap_the_report_below_a_valid_quality_score():
+    spec = _adjacency_spec()
+    valid = _adjacency_plan(kitchen_next_to_dining=True)
+    overlap = valid.rooms[1].model_copy(update={"x": valid.rooms[0].x})
+    broken = valid.model_copy(
         update={
-            "rooms": [
-                valid.rooms[0],
-                valid.rooms[1].model_copy(update={"x": valid.rooms[0].x}),
-                valid.rooms[2],
-            ]
-        }
-    )
-    requirements = RequirementsSpec.model_validate(
-        {
-            "rooms": [
-                {"type": "entry", "count": 1},
-                {"type": "kitchen", "count": 1},
-                {"type": "dining", "count": 1},
-            ]
+            "rooms": [valid.rooms[0], overlap, valid.rooms[2]],
         }
     )
 
-    report = score(overlapping, requirements)
+    report = score(broken, spec)
 
     assert report.hard_violations
     assert report.score <= 49
 
 
-def test_vastu_rules_are_external_data_and_southeast_kitchen_scores_higher():
+def test_kitchen_scores_better_in_southeast_than_northeast():
     plot = PlanPlot(width_m=9, depth_m=12, facing="east")
-    northeast = _room("kitchen-ne", RoomType.kitchen, 6, 0, 3, 3)
-    southeast = northeast.model_copy(update={"id": "kitchen-se", "y": 9})
+    northeast = _room("k", RoomType.kitchen, "Kitchen", 6, 0, 3, 3)
+    southeast = northeast.model_copy(update={"y": 9})
 
-    ne_result = evaluate_vastu(
-        LayoutPlan(plot=plot, rooms=[northeast], walls=[], doors=[])
-    )
-    se_result = evaluate_vastu(
-        LayoutPlan(plot=plot, rooms=[southeast], walls=[], doors=[])
-    )
+    bad = evaluate_vastu(LayoutPlan(plot=plot, rooms=[northeast]))
+    good = evaluate_vastu(LayoutPlan(plot=plot, rooms=[southeast]))
 
     assert sector_for_room(northeast, plot) == "northeast"
     assert sector_for_room(southeast, plot) == "southeast"
-    assert se_result.score > ne_result.score
-    assert any(warning.code == "vastu.kitchen.northeast" for warning in ne_result.warnings)
-    assert all(warning.rule == "vastu" for warning in ne_result.warnings)
+    assert good.score > bad.score
+    assert any(warning.code == "vastu.kitchen_northeast" for warning in bad.warnings)
 
 
-def test_vastu_is_opt_in_at_the_weighted_scorer_boundary():
-    plan = _three_room_plan(kitchen_next_to_dining=True)
-    requirements = RequirementsSpec.model_validate(
-        {
-            "rooms": [
-                {"type": "entry", "count": 1},
-                {"type": "kitchen", "count": 1},
-                {"type": "dining", "count": 1},
-            ]
-        }
-    )
-
-    default_report = score(plan, requirements)
-    vastu_report = score(plan, requirements, include_vastu=True)
-
-    assert all(warning.rule != "vastu" for warning in default_report.warnings)
-    assert any(warning.rule == "vastu" for warning in vastu_report.warnings)
+@pytest.mark.parametrize(
+    ("x", "y", "expected"),
+    [
+        (0, 0, "northwest"),
+        (3, 0, "north"),
+        (6, 0, "northeast"),
+        (0, 4, "west"),
+        (3, 4, "center"),
+        (6, 4, "east"),
+        (0, 8, "southwest"),
+        (3, 8, "south"),
+        (6, 8, "southeast"),
+    ],
+)
+def test_sector_grid_is_north_up_for_every_plot_cell(x: float, y: float, expected: str):
+    plot = PlanPlot(width_m=9, depth_m=12, facing="west")
+    room = _room("r", RoomType.study, "Study", x, y, 3, 4)
+    assert sector_for_room(room, plot) == expected

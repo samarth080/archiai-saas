@@ -100,7 +100,7 @@ def evaluate_vastu(plan: LayoutPlan) -> VastuEvaluation:
         earned += rule.weight * credit
         warnings.append(
             QualityWarning(
-                code=f"vastu.{room.type.value}.{sector}",
+                code=f"vastu.{room.type.value}_{sector}",
                 message=rule.message_violation.format(
                     label=room.label,
                     sector=sector.replace("_", " "),
