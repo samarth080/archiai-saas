@@ -209,6 +209,8 @@ def _place_doors(
     wall_rooms: dict[str, tuple[str, str | None]],
     spec: RequirementsSpec,
     facing: Facing,
+    *,
+    allow_disconnected: bool = False,
 ) -> list[Door]:
     doors: list[Door] = []
     doored_walls: set[str] = set()
@@ -270,7 +272,7 @@ def _place_doors(
             changed = True
 
     unreachable = [n.label for n, _ in placed if n.key not in connected]
-    if unreachable:
+    if unreachable and not allow_disconnected:
         raise DoesNotFitError(
             f"no door-sized wall reaches: {', '.join(unreachable)} — increase plot size"
         )
@@ -299,6 +301,55 @@ def _place_doors(
 
 
 # ── Public entrypoint ─────────────────────────────────────────────────────────
+
+
+def rebuild_derived_geometry(
+    plan: LayoutPlan,
+    spec: RequirementsSpec,
+) -> LayoutPlan:
+    """Recreate walls and doors from the plan's current room rectangles.
+
+    Walls and doors are derived artifacts in the canonical ``LayoutPlan``
+    contract. Editor geometry changes therefore invalidate any supplied copies.
+    This helper deliberately permits disconnected edited states: it emits every
+    valid hosted door it can, then lets the quality validator explain any rooms
+    that remain unreachable. Initial generation remains strict.
+    """
+
+    if not plan.rooms:
+        return plan.model_copy(update={"walls": [], "doors": []})
+
+    placed: list[tuple[RoomNeed, Rect]] = []
+    for room in plan.rooms:
+        sizing = ROOM_SIZING[room.type]
+        placed.append(
+            (
+                RoomNeed(
+                    key=room.id,
+                    type=room.type.value,
+                    label=room.label,
+                    preferred_area=room.w * room.h,
+                    min_w=sizing.min_w,
+                    min_d=sizing.min_d,
+                ),
+                Rect(room.x, room.y, room.w, room.h),
+            )
+        )
+
+    walls, wall_rooms = _build_walls(
+        placed,
+        plan.plot.width_m,
+        plan.plot.depth_m,
+    )
+    doors = _place_doors(
+        placed,
+        walls,
+        wall_rooms,
+        spec,
+        plan.plot.facing,
+        allow_disconnected=True,
+    )
+    return plan.model_copy(update={"walls": walls, "doors": doors})
 
 
 def generate_plan(spec: RequirementsSpec) -> LayoutPlan:

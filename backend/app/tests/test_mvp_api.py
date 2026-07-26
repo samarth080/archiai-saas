@@ -319,6 +319,36 @@ async def test_validate_full_returns_weighted_quality_without_changing_fast_defa
     assert isinstance(full.json()["warnings"], list)
 
 
+async def test_full_validation_rebuilds_derived_geometry_but_fast_path_does_not(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-derived-quality@example.com")
+    spec = _spec("3bhk_adjacencies")
+    plan = generate_plan(RequirementsSpec.model_validate(spec)).model_dump(mode="json")
+    plan["walls"] = []
+    plan["doors"] = []
+
+    fast = await client.post(
+        "/api/validate",
+        json={"layout": plan},
+        headers=_auth(token),
+    )
+    full = await client.post(
+        "/api/validate?full=true",
+        json={"layout": plan, "requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert fast.status_code == 200
+    assert fast.json()["valid"] is False
+    assert "unreachable" in {
+        violation["code"] for violation in fast.json()["hard_violations"]
+    }
+    assert full.status_code == 200
+    assert full.json()["valid"] is True
+    assert full.json()["hard_violations"] == []
+
+
 async def test_validate_full_requires_requirements(client: AsyncClient):
     token = await _register(client, "mvp-full-quality-missing@example.com")
     plan = generate_plan(RequirementsSpec.model_validate(_spec())).model_dump(mode="json")
@@ -353,6 +383,8 @@ async def test_version_save_recomputes_quality_and_enforces_project_access(
     )
     assert generated.status_code == 200
     plan = generated.json()["layout"]
+    plan["walls"] = []
+    plan["doors"] = []
     forged_quality = {
         "valid": False,
         "hard_violations": [
@@ -380,6 +412,8 @@ async def test_version_save_recomputes_quality_and_enforces_project_access(
     )
     assert saved.status_code == 201
     assert saved.json()["versionNumber"] == 2
+    assert saved.json()["layout"]["walls"]
+    assert saved.json()["layout"]["doors"]
     assert saved.json()["quality"]["valid"] is True
     assert saved.json()["quality"]["hard_violations"] == []
     assert 0 <= saved.json()["quality"]["score"] <= 100

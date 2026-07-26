@@ -17,6 +17,7 @@ from app.schemas.mvp import (
 from app.schemas.requirements import RequirementsSpec
 from app.services.design_service import AUTO_DRAFT_VERSION_TYPE
 from app.services.layout_adapter import layout_plan_to_canvas
+from app.services.layout_engine import rebuild_derived_geometry
 from app.services.quality.hard_constraints import validate
 from app.services.quality.scorer import score as score_quality
 from app.services.workspace_service import (
@@ -80,7 +81,8 @@ def quality_snapshot(
     *,
     include_vastu: bool = False,
 ) -> MvpQualitySnapshot:
-    report = score_quality(plan, requirements, include_vastu=include_vastu)
+    scored_plan = rebuild_derived_geometry(plan, requirements)
+    report = score_quality(scored_plan, requirements, include_vastu=include_vastu)
     return MvpQualitySnapshot(
         valid=not report.hard_violations,
         **report.model_dump(mode="python"),

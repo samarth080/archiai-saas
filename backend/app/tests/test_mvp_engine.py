@@ -11,7 +11,11 @@ from hypothesis import strategies as st
 
 from app.schemas.layout_plan import LayoutPlan
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
-from app.services.layout_engine import DoesNotFitError, generate_plan
+from app.services.layout_engine import (
+    DoesNotFitError,
+    generate_plan,
+    rebuild_derived_geometry,
+)
 from app.services.layout_engine.geometry import Rect
 from app.services.quality import validate
 
@@ -87,6 +91,42 @@ def test_engine_is_deterministic():
     a = generate_plan(_load("3bhk_adjacencies"))
     b = generate_plan(_load("3bhk_adjacencies"))
     assert a == b
+
+
+def test_rebuild_derived_geometry_restores_generated_plan_artifacts():
+    spec = _load("2bhk")
+    plan = generate_plan(spec)
+    stale = plan.model_copy(update={"walls": [], "doors": []})
+
+    rebuilt = rebuild_derived_geometry(stale, spec)
+
+    assert rebuilt == plan
+    assert validate(rebuilt) == []
+
+
+def test_rebuild_derived_geometry_reports_disconnected_edits_without_raising():
+    spec = _load("2bhk")
+    plan = generate_plan(spec)
+    bedroom = next(room for room in plan.rooms if room.type == RoomType.bedroom)
+    moved = bedroom.model_copy(
+        update={
+            "x": bedroom.x + 0.2,
+            "y": bedroom.y + 0.2,
+            "w": bedroom.w - 0.4,
+            "h": bedroom.h - 0.4,
+        }
+    )
+    edited = plan.model_copy(
+        update={
+            "rooms": [
+                moved if room.id == bedroom.id else room for room in plan.rooms
+            ],
+        }
+    )
+
+    rebuilt = rebuild_derived_geometry(edited, spec)
+
+    assert "unreachable" in _codes(rebuilt)
 
 
 def test_too_many_rooms_for_plot_raises_structured_does_not_fit():

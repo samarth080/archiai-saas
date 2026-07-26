@@ -24,7 +24,11 @@ from app.services.entitlement_service import (
     enforce_and_increment_usage,
 )
 from app.services.extraction import ExtractionFailed, extract_requirements
-from app.services.layout_engine.engine import DoesNotFitError, generate_plan
+from app.services.layout_engine import (
+    DoesNotFitError,
+    generate_plan,
+    rebuild_derived_geometry,
+)
 from app.services.llm_client import (
     LLMError,
     LLMInvalidOutput,
@@ -235,8 +239,9 @@ async def save_mvp_version(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> MvpVersionResponse:
+    layout = rebuild_derived_geometry(request.layout, request.requirements)
     quality = quality_snapshot(
-        request.layout,
+        layout,
         request.requirements,
         include_vastu=is_vastu_requested(request.prompt or ""),
     )
@@ -246,7 +251,7 @@ async def save_mvp_version(
         project_id=project_id,
         prompt=request.prompt,
         requirements=request.requirements,
-        layout=request.layout,
+        layout=layout,
         quality=quality,
         version_type="manual",
     )
