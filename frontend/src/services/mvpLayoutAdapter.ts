@@ -3,6 +3,7 @@ import type {
   GenerateMvpResponse,
   HardQualitySnapshot,
   LayoutPlan,
+  MvpQualitySnapshot,
   RequirementsSpec,
   RoomType,
 } from '../types/contracts'
@@ -27,7 +28,7 @@ const ROOM_COLORS: Partial<Record<RoomType, string>> = {
 interface AdapterOptions {
   prompt?: string
   requirements?: RequirementsSpec
-  quality?: HardQualitySnapshot
+  quality?: MvpQualitySnapshot | HardQualitySnapshot
   designId?: string | null
   designVersionId?: string | null
 }

@@ -3,6 +3,7 @@ import { useCanvasStore } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { formatDims } from '../../utils/format'
 import { parseProgramValidation } from './programValidationModel'
+import { parseMvpQuality } from './qualityModel'
 
 function saveStatusLabel(status: string, lastSavedAt: string | null) {
   if (status === 'saving') return 'Saving...'
@@ -42,6 +43,10 @@ export function BottomStatusBar() {
   const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
   const validation = useMemo(
     () => parseProgramValidation(layoutMetadata),
+    [layoutMetadata],
+  )
+  const mvpQuality = useMemo(
+    () => parseMvpQuality(layoutMetadata),
     [layoutMetadata],
   )
 
@@ -100,6 +105,16 @@ export function BottomStatusBar() {
             <span className="text-warn">{validation.summary.warningCount} warnings</span>
             <span className="mx-1.5 text-muted-light">/</span>
             <span className="text-danger">{validation.summary.failedCount} failed</span>
+          </Segment>
+        ) : mvpQuality ? (
+          <Segment className="hidden xl:flex">
+            {mvpQuality.valid ? (
+              <>
+                Quality <span className="ml-1 text-ink">{mvpQuality.score}/100</span>
+              </>
+            ) : (
+              <span className="text-danger">Invalid layout</span>
+            )}
           </Segment>
         ) : insights ? (
           <Segment className="hidden xl:flex">

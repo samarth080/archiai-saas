@@ -87,7 +87,7 @@ describe('canonical MVP layout adapter', () => {
     const response: GenerateMvpResponse = {
       requirements,
       layout,
-      quality: { valid: true, hard_violations: [] },
+      quality: { valid: true, score: 92, hard_violations: [], warnings: [] },
       defaults_applied: ['plot', 'facing'],
       designId: 'design-1',
       designVersionId: 'version-1',

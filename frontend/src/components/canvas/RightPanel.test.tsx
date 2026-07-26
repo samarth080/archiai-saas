@@ -170,4 +170,24 @@ describe('RightPanel site & orientation', () => {
     expect(check).toHaveTextContent('closed kitchen')
     expect(check).toHaveTextContent('Kitchen / Laundry')
   })
+
+  it('shows canonical MVP quality without replacing Program Check', () => {
+    useCanvasStore.setState({
+      layoutMetadata: {
+        ...PROGRAM_VALIDATION,
+        pipeline: 'mvp',
+        mvpQuality: {
+          valid: true,
+          score: 88,
+          hard_violations: [],
+          warnings: [],
+        },
+      },
+    })
+    render(<RightPanel />)
+
+    expect(screen.getByTestId('quality-panel')).toHaveTextContent('88')
+    expect(screen.getByTestId('quality-panel')).toHaveTextContent('Concept quality')
+    expect(screen.getByTestId('program-check')).toHaveTextContent('Program Check')
+  })
 })

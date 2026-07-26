@@ -470,7 +470,7 @@ describe('ProjectPage refine flow', () => {
               walls: [],
               doors: [],
             },
-            quality: { valid: true, hard_violations: [] },
+            quality: { valid: true, score: 92, hard_violations: [], warnings: [] },
             defaults_applied: ['9x12 m plot', 'east facing', '1 bathroom'],
             designId: 'mvp-design-1',
             designVersionId: 'mvp-version-1',

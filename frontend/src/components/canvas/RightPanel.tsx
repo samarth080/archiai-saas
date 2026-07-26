@@ -9,6 +9,8 @@ import { formatArea, formatDims, roomArea } from '../../utils/format'
 import { cardinalName, parseOrientation } from './orientationModel'
 import { ProgramCheck } from './ProgramCheck'
 import { parseProgramValidation } from './programValidationModel'
+import { QualityPanel } from './QualityPanel'
+import { parseMvpQuality } from './qualityModel'
 
 const ACTION_LABELS: Record<string, string> = {
   'object.added': 'Added',
@@ -117,6 +119,10 @@ export function RightPanel() {
   }
   const programValidation = useMemo(
     () => parseProgramValidation(layoutMetadata),
+    [layoutMetadata],
+  )
+  const mvpQuality = useMemo(
+    () => parseMvpQuality(layoutMetadata),
     [layoutMetadata],
   )
 
@@ -656,7 +662,14 @@ export function RightPanel() {
           </span>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-3">{body}</div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {mvpQuality && (
+          <div className="mb-3">
+            <QualityPanel quality={mvpQuality} />
+          </div>
+        )}
+        {body}
+      </div>
     </aside>
   )
 }

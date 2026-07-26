@@ -1,0 +1,84 @@
+import type { MvpQualitySnapshot, QualityWarning } from '../../types/contracts'
+
+function GuidanceList({
+  title,
+  warnings,
+}: {
+  title: string
+  warnings: QualityWarning[]
+}) {
+  if (warnings.length === 0) return null
+  return (
+    <div className="border-t border-ink/10 pt-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-light">
+        {title}
+      </p>
+      <ul className="mt-1.5 flex flex-col gap-1.5">
+        {warnings.map((warning, index) => (
+          <li
+            key={`${warning.code}-${index}`}
+            className="flex gap-2 text-[10px] leading-relaxed text-muted"
+          >
+            <span
+              aria-hidden="true"
+              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                warning.severity === 'warn' ? 'bg-warn' : 'bg-[#8069df]'
+              }`}
+            />
+            <span>{warning.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function QualityPanel({ quality }: { quality: MvpQualitySnapshot }) {
+  const genericWarnings = quality.warnings.filter((warning) => warning.rule === 'generic')
+  const vastuWarnings = quality.warnings.filter((warning) => warning.rule === 'vastu')
+
+  return (
+    <section
+      data-testid="quality-panel"
+      aria-label="Concept quality"
+      className="rounded-lg border border-ink/10 bg-[#232425]/80 p-3"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[11px] font-semibold text-ink">Concept quality</h3>
+          <p className="mt-0.5 text-[9px] text-muted-light">Advisory early-design checks</p>
+        </div>
+        {quality.valid ? (
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#8069df]/45 bg-[#8069df]/10 font-mono text-xs font-semibold tabular-nums text-ink"
+            aria-label={`Quality score ${quality.score} out of 100`}
+          >
+            {quality.score}
+          </div>
+        ) : (
+          <span className="rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[10px] font-semibold text-danger">
+            Invalid layout
+          </span>
+        )}
+      </div>
+
+      {!quality.valid && quality.hard_violations.length > 0 && (
+        <ul className="mt-2.5 flex flex-col gap-1.5 border-t border-danger/20 pt-2.5">
+          {quality.hard_violations.map((violation, index) => (
+            <li key={`${violation.code}-${index}`} className="text-[10px] leading-relaxed text-danger">
+              {violation.message}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {quality.valid && quality.warnings.length === 0 && (
+        <p className="mt-2.5 border-t border-ink/10 pt-2.5 text-[10px] text-ok">
+          No soft issues detected in this concept.
+        </p>
+      )}
+      <GuidanceList title="Layout guidance" warnings={genericWarnings} />
+      <GuidanceList title="Vastu guidance" warnings={vastuWarnings} />
+    </section>
+  )
+}
