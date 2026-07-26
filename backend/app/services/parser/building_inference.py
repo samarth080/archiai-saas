@@ -55,19 +55,22 @@ def extract_bhk(text: str) -> dict[str, int] | None:
 
 def infer_building_type(prompt: str) -> str:
     text = normalise(prompt)
-    if extract_bhk(text):
-        return "apartment"
-
     matches: list[tuple[int, int, int, str]] = []
     for building_type, config in BUILDING_TYPES.items():
         for keyword in config["keywords"]:
             if re.search(rf"\b{re.escape(keyword)}\b", text):
                 priority = BUILDING_TYPE_PRIORITY.get(building_type, 0)
                 matches.append((priority, len(keyword), -text.index(keyword), building_type))
-    if not matches:
+    if matches:
+        return sorted(matches, reverse=True)[0][3]
+
+    # BHK describes a residential programme, not necessarily an apartment.
+    # Keep apartment as the safe fallback only when the prompt does not name a
+    # more specific building type (for example, "3BHK house").
+    if extract_bhk(text):
         return "apartment"
 
-    return sorted(matches, reverse=True)[0][3]
+    return "apartment"
 
 
 def detect_style_hints(prompt: str) -> dict:

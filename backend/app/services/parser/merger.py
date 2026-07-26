@@ -71,6 +71,12 @@ def _subtract_master_from_bedrooms(rooms: dict[str, MergedRoom], explicit_master
     bedroom = rooms.get("bedroom")
     if bedroom is None or explicit_master_count <= 0:
         return
+    # A template/BHK bedroom count ("3BHK" = 3 bedrooms) INCLUDES the master,
+    # so an explicit master mention is subtracted from it. An explicit count
+    # ("two regular bedrooms") already excludes the master — subtracting from
+    # it silently dropped requested bedrooms.
+    if bedroom.source not in ("bhk", "template", "inferred", "style"):
+        return
     remaining_count = bedroom.count - explicit_master_count
     if remaining_count <= 0:
         rooms.pop("bedroom")

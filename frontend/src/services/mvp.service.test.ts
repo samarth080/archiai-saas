@@ -67,7 +67,7 @@ describe('MVP pipeline service', () => {
     const response: GenerateMvpResponse = {
       requirements,
       layout,
-      quality: { valid: true, hard_violations: [] },
+      quality: { valid: true, score: 92, hard_violations: [], warnings: [] },
       defaults_applied: [],
       designId: 'design-1',
       designVersionId: 'version-1',
@@ -92,16 +92,27 @@ describe('MVP pipeline service', () => {
 
   it('validates and saves canonical geometry without canvas JSON', async () => {
     const quality = { valid: true, hard_violations: [] }
+    const fullQuality = { valid: true, score: 86, hard_violations: [], warnings: [] }
     vi.mocked(api.post)
       .mockResolvedValueOnce({ data: quality })
+      .mockResolvedValueOnce({ data: fullQuality })
       .mockResolvedValueOnce({ data: { id: 'version-2' } })
 
     await expect(validateMvpLayout(layout)).resolves.toBe(quality)
     expect(api.post).toHaveBeenNthCalledWith(1, '/api/validate', { layout })
 
-    await saveMvpVersion('project-1', { requirements, layout, quality })
+    await expect(
+      validateMvpLayout(layout, { requirements, includeVastu: true }),
+    ).resolves.toBe(fullQuality)
     expect(api.post).toHaveBeenNthCalledWith(
       2,
+      '/api/validate?full=true&vastu=true',
+      { layout, requirements },
+    )
+
+    await saveMvpVersion('project-1', { requirements, layout, quality })
+    expect(api.post).toHaveBeenNthCalledWith(
+      3,
       '/api/projects/project-1/versions',
       { requirements, layout, quality },
     )

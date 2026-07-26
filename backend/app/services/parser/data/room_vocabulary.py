@@ -9,6 +9,8 @@ ROOM_TERMS: dict[str, tuple[str, ...]] = {
     "bathroom": ("bathroom", "bathrooms"),
     "ensuite": ("ensuite",),
     "office": ("office",),
+    "study": ("study",),
+    "pooja_room": ("pooja_room",),
     "workspace": ("workspace", "work_area"),
     "meeting_room": ("meeting_room", "conference_room"),
     "reception": ("reception", "front_desk"),

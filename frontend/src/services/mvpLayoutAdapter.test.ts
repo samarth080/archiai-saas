@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { generateResponseToCanvas, layoutPlanToCanvas } from './mvpLayoutAdapter'
+import {
+  canvasObjectsToLayoutPlan,
+  generateResponseToCanvas,
+  layoutPlanToCanvas,
+} from './mvpLayoutAdapter'
 import type { GenerateMvpResponse, LayoutPlan, RequirementsSpec } from '../types/contracts'
 
 const requirements: RequirementsSpec = {
@@ -83,11 +87,22 @@ describe('canonical MVP layout adapter', () => {
     })
   })
 
+  it('round-trips edited canvas geometry back to the canonical contract', () => {
+    const canvas = layoutPlanToCanvas(layout)
+    const restored = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 9, d: 12 },
+      'east',
+    )
+
+    expect(restored).toEqual(layout)
+  })
+
   it('carries generation identity and produces deterministic canvas JSON', () => {
     const response: GenerateMvpResponse = {
       requirements,
       layout,
-      quality: { valid: true, hard_violations: [] },
+      quality: { valid: true, score: 92, hard_violations: [], warnings: [] },
       defaults_applied: ['plot', 'facing'],
       designId: 'design-1',
       designVersionId: 'version-1',
@@ -104,6 +119,7 @@ describe('canonical MVP layout adapter', () => {
       prompt: 'two bedroom house',
       mvpRequirements: requirements,
       mvpQuality: response.quality,
+      mvpVastuEnabled: false,
     })
   })
 })

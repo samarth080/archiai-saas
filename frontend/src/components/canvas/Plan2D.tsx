@@ -32,6 +32,8 @@ import {
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 import { EDITOR_PALETTE } from './editorPalette'
+import { PlanDirectionLabels } from './PlanDirectionLabels'
+import { parseOrientation } from './orientationModel'
 
 interface Plan2DProps {
   className?: string
@@ -111,6 +113,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   const showDimensions = useCanvasStore((state) => state.showDimensions)
   const measurePoints = useCanvasStore((state) => state.measurePoints)
   const clipboardMessage = useCanvasStore((state) => state.clipboardMessage)
+  const layoutMetadata = useCanvasStore((state) => state.layoutMetadata)
   const selectRoom = useCanvasStore((state) => state.selectRoom)
   const updateRoom = useCanvasStore((state) => state.updateRoom)
   const setInteractionMode = useCanvasStore((state) => state.setInteractionMode)
@@ -138,6 +141,13 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
       ]
     : visibleRooms
   const footprint = activeFloor?.footprint
+  const orientation = parseOrientation(layoutMetadata)
+  const entryDoor = rooms.find(
+    (room) =>
+      room.objectType === 'door' &&
+      room.label === 'Entry Door' &&
+      (room.floorLevel ?? 0) === activeLevel,
+  )
   const baseBounds = useMemo(
     () => derivePlanBounds(footprint, visibleRooms),
     [footprint, visibleRooms],
@@ -548,6 +558,15 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
           />
         ))}
 
+        {footprint && (
+          <PlanDirectionLabels
+            footprint={footprint}
+            orientation={orientation}
+            fontSize={fontSize}
+            entryPoint={entryDoor ? { x: entryDoor.position.x, z: entryDoor.position.z } : null}
+          />
+        )}
+
         {measurePoints.map((point, index) => (
           <circle
             key={`${point.x}-${point.z}-${index}`}
@@ -586,10 +605,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         )}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-36 left-4 rounded-lg border border-ink/10 bg-graphite-800/90 px-3 py-2 text-[11px] font-medium text-muted shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
-        Left click selects - drag selected object - right drag pans - wheel zooms
-      </div>
-      <div className="absolute bottom-36 right-4 flex items-center gap-1 rounded-lg border border-ink/10 bg-graphite-800/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.14)] backdrop-blur">
+      <div className="absolute bottom-28 right-4 flex items-center gap-1 rounded-lg border border-ink/10 bg-[#1d1e1f]/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.2)] backdrop-blur">
         <button
           type="button"
           aria-label="Zoom out"

@@ -30,7 +30,12 @@ from app.services.design_service import (
 )
 from app.services.layout_service import generate_layout
 from app.services.layout_pattern_service import get_layout_pattern_rules
-from app.services.planning import from_parser_output, score_graph_satisfaction
+from app.services.planning import (
+    build_program_metadata,
+    from_parser_output,
+    score_graph_satisfaction,
+    validate_program,
+)
 from app.services.prompt_service import extract_total_area_sqm, parse_prompt, parsed_to_room_specs
 from app.services.refinement_service import apply_refinement_with_changes, parse_refinement
 from app.services.workspace_service import require_project_read_access
@@ -87,6 +92,11 @@ async def generate(
         {room.room_type for room in room_specs},
     )
     design_params = request.design_params
+    # Explicit DesignParams always win; otherwise site facts extracted from
+    # the prompt itself ("east-facing ... on a 14 m x 18 m plot") apply.
+    plot_width = (design_params.plot_width_m if design_params else None) or parsed.plot_width_m
+    plot_depth = (design_params.plot_depth_m if design_params else None) or parsed.plot_depth_m
+    orientation = (design_params.orientation if design_params else None) or parsed.facing_direction
     layout, candidates = generate_layout(
         room_specs,
         prompt=request.prompt,
@@ -97,17 +107,32 @@ async def generate(
         adjacency_constraints=parsed.adjacency_constraints,
         zone_assignments=parsed.zone_assignments,
         vastu_requested=bool(design_params and design_params.vastu) or parsed.vastu_requested,
-        plot_width_m=design_params.plot_width_m if design_params else None,
-        orientation=design_params.orientation if design_params else None,
+        plot_width_m=plot_width,
+        orientation=orientation,
         return_all_candidates=True,
+        plot_depth_m=plot_depth,
+        road_side=parsed.road_side,
+        entry_side=parsed.entry_side,
+        daylight_rooms=parsed.daylight_rooms,
+        separation_constraints=parsed.separation_constraints,
     )
     # Score how well the winning layout honours the parsed adjacency graph
     # (Sprint 18 Phase 4). Additive, explainable, deterministic — recorded in
     # metadata so it is persisted with the design and shown to the user.
     graph = from_parser_output(parsed, room_specs)
-    layout.setdefault("metadata", {})["graphSatisfaction"] = score_graph_satisfaction(
-        graph, layout
-    ).as_dict()
+    program = build_program_metadata(parsed, graph)
+    for candidate in candidates:
+        satisfaction = score_graph_satisfaction(graph, candidate)
+        metadata = candidate.setdefault("metadata", {})
+        metadata["graphSatisfaction"] = satisfaction.as_dict()
+        metadata["program"] = program
+        metadata["programValidation"] = validate_program(
+            parsed,
+            graph,
+            candidate,
+            program=program,
+            graph_satisfaction=satisfaction,
+        )
 
     if request.project_id:
         design, version = await save_generated_design(

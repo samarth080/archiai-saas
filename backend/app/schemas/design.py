@@ -22,9 +22,9 @@ class DesignParams(BaseModel):
     Explicit parametric overrides for layout generation, alongside the prompt.
     All fields are optional; when omitted the engine falls back to its existing
     prompt-inferred behaviour. plot_width_m, floors, orientation, and vastu all
-    affect generated geometry; plot_depth_m is recorded but not yet applied — it
-    needs the BSP partitioner (Phase 2) to constrain depth without distorting
-    room proportions the way a naive clamp would.
+    affect generated geometry; plot_depth_m scales the plan's depth as one
+    affine transform (clamped to sane proportions), so an explicit plot is
+    respected without creating gaps or overlaps.
     """
 
     plot_width_m: float | None = Field(default=None, alias="plotWidthM", gt=0)
@@ -102,6 +102,7 @@ class RoomResponse(BaseModel):
 
 
 class GenerateMetadata(BaseModel):
+    pipeline: str | None = None
     prompt: str | None = None
     building_type: str | None = None
     buildingType: str | None = None
@@ -109,6 +110,7 @@ class GenerateMetadata(BaseModel):
     room_count: int | None = None
     totalFloors: int | None = None
     totalRooms: int | None = None
+    totalObjects: int | None = None
     totalAreaSqm: float | None = None
     requestedAreaSqm: float | None = None
     patternDataUsed: bool | None = None
@@ -120,6 +122,13 @@ class GenerateMetadata(BaseModel):
     placementEngine: str | None = None
     candidateCount: int | None = None
     graphSatisfaction: dict[str, Any] | None = None
+    orientation: dict[str, Any] | None = None
+    programConstraints: dict[str, Any] | None = None
+    program: dict[str, Any] | None = None
+    programValidation: dict[str, Any] | None = None
+    mvpRequirements: dict[str, Any] | None = None
+    mvpQuality: dict[str, Any] | None = None
+    mvpVastuEnabled: bool | None = None
 
 
 class BuildingResponse(BaseModel):

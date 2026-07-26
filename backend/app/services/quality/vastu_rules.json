@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "room_type": "kitchen",
+      "preferred_zones": ["southeast"],
+      "avoid_zones": ["northeast", "center"],
+      "weight": 1.0,
+      "message_preferred": "{label} is in the preferred {sector} Vastu sector.",
+      "message_violation": "{label} is in the {sector} sector; Vastu guidance prefers {preferred}."
+    },
+    {
+      "room_type": "master_bedroom",
+      "preferred_zones": ["southwest"],
+      "avoid_zones": ["southeast", "center"],
+      "weight": 1.0,
+      "message_preferred": "{label} is in the preferred {sector} Vastu sector.",
+      "message_violation": "{label} is in the {sector} sector; Vastu guidance prefers {preferred}."
+    },
+    {
+      "room_type": "pooja_room",
+      "preferred_zones": ["northeast"],
+      "avoid_zones": ["southwest", "center"],
+      "weight": 0.8,
+      "message_preferred": "{label} is in the preferred {sector} Vastu sector.",
+      "message_violation": "{label} is in the {sector} sector; Vastu guidance prefers {preferred}."
+    },
+    {
+      "room_type": "bathroom",
+      "preferred_zones": ["northwest", "west", "south"],
+      "avoid_zones": ["northeast", "center"],
+      "weight": 0.8,
+      "message_preferred": "{label} is in an accepted {sector} Vastu sector.",
+      "message_violation": "{label} is in the {sector} sector, which Vastu guidance advises avoiding."
+    },
+    {
+      "room_type": "entry",
+      "preferred_zones": ["north", "northeast", "east"],
+      "avoid_zones": ["southwest"],
+      "weight": 0.5,
+      "message_preferred": "{label} is in a preferred {sector} entry sector.",
+      "message_violation": "{label} is in the {sector} sector; Vastu guidance prefers north or east."
+    }
+  ]
+}

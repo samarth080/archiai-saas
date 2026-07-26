@@ -11,15 +11,18 @@
  * rewriting any persisted layout data.
  */
 export const EDITOR_PALETTE = {
-  workspaceHighlight: '#303031',
-  workspaceStart: '#262627',
-  workspaceEnd: '#1D1D1E',
-  planSheetStart: '#2A2A2B',
-  planSheetEnd: '#242425',
-  planGrid: '#404042',
-  planFrame: '#DFDFE1',
-  selection: '#FFFFFF',
-  dimension: '#909094',
+  workspaceHighlight: '#242526',
+  workspaceStart: '#1D1E1F',
+  workspaceEnd: '#171819',
+  planSheetStart: '#242526',
+  planSheetEnd: '#202122',
+  planGrid: '#353739',
+  planFrame: '#D7D7D5',
+  selection: '#8069DF',
+  selectionSoft: '#A18EF0',
+  dimension: '#A9AAAC',
+  chrome: '#1C1D1E',
+  card: '#232425',
   measure: '#C9A96E',
 } as const
 

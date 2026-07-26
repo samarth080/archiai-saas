@@ -20,7 +20,7 @@ export function ViewModeSwitcher() {
     <div
       role="tablist"
       aria-label="Editor view"
-      className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-ink/10 bg-graphite-800/90 p-1 shadow-lg backdrop-blur"
+      className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-ink/10 bg-[#1c1d1e]/95 p-0.5 shadow-lg backdrop-blur"
     >
       {VIEW_MODE_OPTIONS.map((mode) => (
         <button
@@ -29,9 +29,9 @@ export function ViewModeSwitcher() {
           role="tab"
           aria-selected={viewMode === mode.value}
           onClick={() => setViewMode(mode.value)}
-          className={`rounded-md px-2.5 py-1 font-mono text-xs font-semibold transition-colors ${
+          className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
             viewMode === mode.value
-              ? 'bg-ink text-graphite-900'
+              ? 'bg-[#7663d7] text-white shadow-[0_2px_10px_rgba(118,99,215,0.28)]'
               : 'text-muted hover:bg-ink/10 hover:text-ink'
           }`}
         >

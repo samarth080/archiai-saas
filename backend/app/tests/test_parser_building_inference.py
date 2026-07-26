@@ -15,6 +15,10 @@ def test_infer_building_type_detects_family_home():
     assert infer_building_type("modern family home") == "family_home"
 
 
+def test_explicit_house_wins_over_generic_bhk_programme():
+    assert infer_building_type("east-facing single-storey 3BHK house") == "family_home"
+
+
 def test_infer_building_type_detects_restaurant_from_coffee_shop():
     assert infer_building_type("coffee shop with seating for 20") == "restaurant"
 

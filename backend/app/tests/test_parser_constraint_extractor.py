@@ -74,6 +74,19 @@ def test_with_ensuite_produces_must_adjacency():
     assert _strength(c, "master_bedroom", "ensuite") == "MUST"
 
 
+def test_with_an_attached_bathroom_survives_number_normalisation():
+    c = extract_constraints("master bedroom with an attached bathroom")
+    assert _strength(c, "master_bedroom", "ensuite") == "MUST"
+
+
+def test_coordinated_adjacency_preserves_each_requested_pair():
+    c = extract_constraints(
+        "keep the kitchen next to the dining room and utility room"
+    )
+    assert _strength(c, "kitchen", "dining_room") == "MUST"
+    assert _strength(c, "kitchen", "laundry") == "MUST"
+
+
 def test_near_produces_should_constraint():
     c = extract_constraints("kitchen near the laundry")
     assert frozenset({"kitchen", "laundry"}) in _adj_pair(c)

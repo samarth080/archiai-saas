@@ -28,7 +28,7 @@ _generate_partition_walls: corridors open onto everything, public rooms
 flow into each other, every other room gets exactly one access door — see Sprint 17 Phase 2).
 """
 import uuid
-from math import sqrt
+from math import sqrt, ceil
 
 from app.services.building_template_service import BuildingTemplate, apply_template_defaults, get_building_template
 from app.services.layout_pattern_service import LayoutPatternRules, fallback_layout_rules
@@ -597,6 +597,10 @@ _ORIENTATION_ENTRY_WALL: dict[str, str] = {
     "S": "front", "N": "rear", "E": "right", "W": "left",
 }
 
+_DIRECTION_NAMES: dict[str, str] = {
+    "N": "north", "S": "south", "E": "east", "W": "west",
+}
+
 
 def _architectural_markers(
     rooms: list[dict],
@@ -915,6 +919,31 @@ def _generate_partition_walls(
 
         add_door(min(candidates, key=neighbour_rank))
 
+    # 3. Connectivity completion — on corridor-less floors with several rows,
+    # single access doors can form isolated door-islands (two bedrooms joined
+    # to each other but not to the rest of the floor). Join components with
+    # doors on the longest shared boundaries until the floor's door graph is
+    # one walkable component, exactly like a spanning tree.
+    parent: dict[str, str] = {room["id"]: room["id"] for room in room_only}
+
+    def find(node: str) -> str:
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    def union(a: str, b: str) -> None:
+        parent[find(a)] = find(b)
+
+    for pair in doored_pairs:
+        first, second = tuple(pair)
+        union(first, second)
+    for boundary in sorted(doorable, key=lambda b: -b["span"]):
+        a_id, b_id = boundary["a"]["id"], boundary["b"]["id"]
+        if find(a_id) != find(b_id):
+            add_door(boundary)
+            union(a_id, b_id)
+
     return markers
 
 
@@ -928,7 +957,7 @@ def _generate_partition_walls(
 _TILED_FRONT_TYPES: frozenset[str] = frozenset({
     "entry", "living_room", "open_plan_living", "dining_room", "kitchen",
     "foyer", "reception", "waiting_room", "retail_display", "checkout",
-    "dining_area", "bar", "classroom",
+    "dining_area", "bar", "classroom", "balcony", "terrace",
 })
 _TILED_CORRIDOR_TYPES: frozenset[str] = frozenset({"hallway", "corridor"})
 _TILED_PRIVATE_TYPES: frozenset[str] = frozenset({
@@ -936,7 +965,7 @@ _TILED_PRIVATE_TYPES: frozenset[str] = frozenset({
     "meeting_room", "consultation_room", "pooja_room", "meditation_room",
 })
 _TILED_SERVICE_TYPES: frozenset[str] = frozenset({
-    "bathroom", "storage", "utility", "laundry", "garage", "staircase",
+    "bathroom", "ensuite", "storage", "utility", "laundry", "garage", "staircase",
 })
 
 # Building types that use the tiled floor-plan algorithm.  As of Sprint 16 this
@@ -955,6 +984,7 @@ _TILED_BUILDING_TYPES: frozenset[str] = frozenset({
 })
 
 _MIN_BUILDING_WIDTH = 7.0   # metres
+_MIN_TILED_ROOM_WIDTH = 2.4  # metres — wrap a zone row before rooms get narrower
 _MAX_BUILDING_WIDTH = 22.0  # metres
 _CORRIDOR_DEPTH = 1.5       # metres — corridor/hallway row height
 
@@ -1277,7 +1307,10 @@ def _tile_rooms(
                 (
                     j
                     for j, s in enumerate(svc_remaining)
-                    if frozenset({room.room_type, s.room_type}) in linked_pairs
+                    if frozenset({
+                        room.room_type,
+                        _PAIR_TYPE_ALIASES.get(s.room_type, s.room_type),
+                    }) in linked_pairs
                 ),
                 None,
             )
@@ -1290,13 +1323,27 @@ def _tile_rooms(
 
     back_row = interleave_service(private, service)
 
+    # Wrap over-full rows: a 14 m row cannot hold 8 rooms without squeezing
+    # each below a usable width, so long room lists split into several rows
+    # (order preserved, adjacency-linked neighbours stay side by side).
+    def wrap_row(row_specs: list[RoomSpec]) -> list[list[RoomSpec]]:
+        if not row_specs:
+            return []
+        max_per_row = max(1, int(fill_width // _MIN_TILED_ROOM_WIDTH))
+        if len(row_specs) <= max_per_row:
+            return [row_specs]
+        n_rows = ceil(len(row_specs) / max_per_row)
+        per_row = ceil(len(row_specs) / n_rows)
+        return [row_specs[i : i + per_row] for i in range(0, len(row_specs), per_row)]
+
     # Build rows: front → corridor → back → other
     placed: list[dict] = []
     current_z = 0.0
 
-    if front:
-        placed.extend(_fill_row(front, current_z, front_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
-        current_z += front_depth
+    for chunk in wrap_row(front):
+        chunk_depth = zone_depth(chunk, min_d=3.0, max_d=6.5)
+        placed.extend(_fill_row(chunk, current_z, chunk_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += chunk_depth
 
     if has_implicit_corridor or corridor:
         # Implicit corridor: render as a hallway-coloured strip
@@ -1304,16 +1351,18 @@ def _tile_rooms(
         placed.extend(_fill_row([hallway_spec], current_z, corridor_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
         current_z += corridor_depth
 
-    if back_row:
+    for chunk in wrap_row(back_row):
+        chunk_depth = zone_depth(chunk, min_d=2.5, max_d=6.5)
         if use_bsp_back:
-            placed.extend(_bsp_partition_rect(back_row, 0.0, current_z, fill_width, private_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+            placed.extend(_bsp_partition_rect(chunk, 0.0, current_z, fill_width, chunk_depth, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
         else:
-            placed.extend(_fill_row(back_row, current_z, private_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
-        current_z += private_depth
+            placed.extend(_fill_row(chunk, current_z, chunk_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += chunk_depth
 
-    if other:
-        placed.extend(_fill_row(other, current_z, other_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
-        current_z += other_depth
+    for chunk in wrap_row(other):
+        chunk_depth = zone_depth(chunk)
+        placed.extend(_fill_row(chunk, current_z, chunk_depth, fill_width, floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules))
+        current_z += chunk_depth
 
     building_depth = current_z
     footprint = {"x": 0.0, "z": 0.0, "w": round(building_width, 2), "d": round(building_depth, 2)}
@@ -1331,6 +1380,7 @@ def _graph_pack_rooms(
     stair_reserve: float = 0.0,
     must_pairs: set[frozenset] | None = None,
     should_pairs: set[frozenset] | None = None,
+    forbidden_pairs: set[frozenset] | None = None,
 ) -> tuple[list[dict], dict]:
     """Graph-driven flow pack (Sprint 18 Phase 4 — real graph-driven candidate).
 
@@ -1345,8 +1395,15 @@ def _graph_pack_rooms(
     exist, and the selection key keeps quality primary, so it only wins when it
     scores at least as well as the tiler while satisfying more adjacencies.
     """
-    must_pairs = {_normalise_pair_types(pair) for pair in (must_pairs or set())}
-    should_pairs = {_normalise_pair_types(pair) for pair in (should_pairs or set())}
+    must_pairs = set(must_pairs or set())
+    should_pairs = set(should_pairs or set())
+    ordering_must_pairs = {_normalise_pair_types(pair) for pair in must_pairs}
+    ordering_should_pairs = {_normalise_pair_types(pair) for pair in should_pairs}
+    forbidden_pairs = set(forbidden_pairs or set())
+    for pair in list(forbidden_pairs):
+        if "bathroom" in pair and len(pair) == 2:
+            other = next(room_type for room_type in pair if room_type != "bathroom")
+            forbidden_pairs.add(frozenset({"ensuite", other}))
 
     total_area = sum(s.w * s.d for s in specs)
     if not total_area:
@@ -1359,7 +1416,12 @@ def _graph_pack_rooms(
         building_width = max(_MIN_BUILDING_WIDTH, min(building_width, _MAX_BUILDING_WIDTH))
     fill_width = max(building_width - stair_reserve, 5.0)
 
-    ordered = _order_zone_rooms(list(specs), building_type, must_pairs, should_pairs)
+    ordered = _order_zone_rooms(
+        list(specs),
+        building_type,
+        ordering_must_pairs,
+        ordering_should_pairs,
+    )
 
     # Flow the adjacency-ordered sequence into rows that fill the width, never
     # splitting a MUST pair across a row boundary (bounded overflow keeps it whole).
@@ -1368,7 +1430,11 @@ def _graph_pack_rooms(
     current_w = 0.0
     for spec in ordered:
         if current and current_w + spec.w > fill_width:
-            must_linked = frozenset({spec.room_type, current[-1].room_type}) in must_pairs
+            pair = frozenset({spec.room_type, current[-1].room_type})
+            must_linked = (
+                pair in must_pairs
+                or _normalise_pair_types(pair) in ordering_must_pairs
+            )
             if not (must_linked and current_w + spec.w <= fill_width * 1.5):
                 rows.append(current)
                 current, current_w = [], 0.0
@@ -1381,17 +1447,169 @@ def _graph_pack_rooms(
         avg = sum(s.d for s in row) / len(row)
         return round(max(2.5, min(avg, 6.5)), 2)
 
+    def _realised_pair_count(
+        candidate_rooms: list[dict],
+        pairs: set[frozenset],
+    ) -> int:
+        by_type: dict[str, list[dict]] = {}
+        for room in candidate_rooms:
+            by_type.setdefault(room.get("roomType"), []).append(room)
+
+        count = 0
+        for pair in pairs:
+            types = sorted(pair)
+            if len(types) == 1:
+                types = [types[0], types[0]]
+            if len(types) != 2:
+                continue
+            if any(
+                left is not right and _rooms_share_wall(left, right)
+                for left in by_type.get(types[0], [])
+                for right in by_type.get(types[1], [])
+            ):
+                count += 1
+        return count
+
+    def _place_rows(candidate_rows: list[list[RoomSpec]]) -> tuple[list[dict], float]:
+        placed: list[dict] = []
+        current_z = 0.0
+        for row in candidate_rows:
+            depth = _row_depth(row)
+            row_orders: list[tuple[int, list[RoomSpec]]] = [(0, row)]
+            if len(row) > 1 and (must_pairs or should_pairs or forbidden_pairs):
+                ordinal = 1
+                for left_index in range(len(row) - 1):
+                    for right_index in range(left_index + 1, len(row)):
+                        swapped = list(row)
+                        swapped[left_index], swapped[right_index] = (
+                            swapped[right_index],
+                            swapped[left_index],
+                        )
+                        row_orders.append((ordinal, swapped))
+                        ordinal += 1
+
+            best_boxes: list[dict] | None = None
+            best_key: tuple[int, int, int, int, int] | None = None
+            for ordinal, row_order in row_orders:
+                boxes = _fill_row(
+                    row_order,
+                    current_z,
+                    depth,
+                    fill_width,
+                    floor_id=floor_id,
+                    floor_level=floor_level,
+                    elevation=elevation,
+                    rules=rules,
+                )
+                candidate_rooms = [*placed, *boxes]
+                must_satisfied = _realised_pair_count(candidate_rooms, must_pairs)
+                should_satisfied = _realised_pair_count(
+                    candidate_rooms,
+                    should_pairs,
+                )
+                forbidden_violations = _realised_pair_count(
+                    candidate_rooms,
+                    forbidden_pairs,
+                )
+                hard_satisfied = (
+                    must_satisfied
+                    + len(forbidden_pairs)
+                    - forbidden_violations
+                )
+                key = (
+                    hard_satisfied,
+                    -forbidden_violations,
+                    must_satisfied,
+                    should_satisfied,
+                    -ordinal,
+                )
+                if best_key is None or key > best_key:
+                    best_key = key
+                    best_boxes = boxes
+
+            placed.extend(best_boxes or [])
+            current_z += depth
+        return placed, current_z
+
+    # A MUST pair separated by an entire intervening row cannot share a wall,
+    # no matter how that row is ordered. Try only the bounded, relevant
+    # membership swaps that move one endpoint into the row next to its partner.
+    # This is deterministic local repair, not an unbounded permutation search.
+    row_variants: list[tuple[int, list[list[RoomSpec]]]] = [(0, rows)]
+    seen_variants = {
+        tuple(tuple(spec.label for spec in row) for row in rows)
+    }
+    variant_ordinal = 1
+    for pair in sorted(must_pairs, key=lambda item: tuple(sorted(item))):
+        types = sorted(pair)
+        if len(types) != 2:
+            continue
+        left_locations = [
+            (row_index, spec_index)
+            for row_index, row in enumerate(rows)
+            for spec_index, spec in enumerate(row)
+            if spec.room_type == types[0]
+        ]
+        right_locations = [
+            (row_index, spec_index)
+            for row_index, row in enumerate(rows)
+            for spec_index, spec in enumerate(row)
+            if spec.room_type == types[1]
+        ]
+        for left_location in left_locations:
+            for right_location in right_locations:
+                if abs(left_location[0] - right_location[0]) <= 1:
+                    continue
+                for source, anchor in (
+                    (left_location, right_location),
+                    (right_location, left_location),
+                ):
+                    target_row_index = source[0] + (
+                        1 if anchor[0] > source[0] else -1
+                    )
+                    for target_spec_index in range(len(rows[target_row_index])):
+                        variant = [list(row) for row in rows]
+                        variant[source[0]][source[1]], variant[target_row_index][target_spec_index] = (
+                            variant[target_row_index][target_spec_index],
+                            variant[source[0]][source[1]],
+                        )
+                        signature = tuple(
+                            tuple(spec.label for spec in row)
+                            for row in variant
+                        )
+                        if signature in seen_variants:
+                            continue
+                        seen_variants.add(signature)
+                        row_variants.append((variant_ordinal, variant))
+                        variant_ordinal += 1
+
     placed: list[dict] = []
     current_z = 0.0
-    for row in rows:
-        depth = _row_depth(row)
-        placed.extend(
-            _fill_row(
-                row, current_z, depth, fill_width,
-                floor_id=floor_id, floor_level=floor_level, elevation=elevation, rules=rules,
-            )
+    best_variant_key: tuple[int, int, int, int, int] | None = None
+    for ordinal, row_variant in row_variants:
+        candidate_rooms, candidate_depth = _place_rows(row_variant)
+        must_satisfied = _realised_pair_count(candidate_rooms, must_pairs)
+        should_satisfied = _realised_pair_count(candidate_rooms, should_pairs)
+        forbidden_violations = _realised_pair_count(
+            candidate_rooms,
+            forbidden_pairs,
         )
-        current_z += depth
+        hard_satisfied = (
+            must_satisfied
+            + len(forbidden_pairs)
+            - forbidden_violations
+        )
+        key = (
+            hard_satisfied,
+            -forbidden_violations,
+            must_satisfied,
+            should_satisfied,
+            -ordinal,
+        )
+        if best_variant_key is None or key > best_variant_key:
+            best_variant_key = key
+            placed = candidate_rooms
+            current_z = candidate_depth
 
     footprint = {"x": 0.0, "z": 0.0, "w": round(building_width, 2), "d": round(current_z, 2)}
     return placed, footprint
@@ -1644,9 +1862,11 @@ def _build_layout_candidate(
     zone_assignments: dict[str, str] | None = None,
     must_adjacency_pairs: set[frozenset] | None = None,
     should_adjacency_pairs: set[frozenset] | None = None,
+    forbidden_pairs: set[frozenset] | None = None,
     plot_width_m: float | None = None,
     orientation: str | None = None,
     placement_style: str = "tile",
+    plot_depth_m: float | None = None,
 ) -> dict:
     use_tiler = building_type in _TILED_BUILDING_TYPES
     floor_specs = _assign_rooms_to_floors(room_specs, total_floors, zone_assignments, building_type)
@@ -1688,6 +1908,7 @@ def _build_layout_candidate(
                 stair_reserve=tiled_stair_reserve,
                 must_pairs=must_adjacency_pairs,
                 should_pairs=should_adjacency_pairs,
+                forbidden_pairs=forbidden_pairs,
             )
         elif use_tiler:
             rooms, tiled_footprint = _tile_rooms(
@@ -1745,6 +1966,31 @@ def _build_layout_candidate(
     building_footprint = _shared_footprint(floor_footprints) if total_floors > 1 else (
         floor_footprints[0] if floor_footprints else {"x": 0.0, "z": 0.0, "w": 0.0, "d": 0.0}
     )
+
+    # An explicit plot depth stretches or compresses the whole plan along Z as
+    # one affine transform — every room's depth and centre scale by the same
+    # factor about the footprint origin, so shared walls stay shared, zero
+    # gaps stay zero, and no overlap can appear. Clamped so a wildly wrong
+    # depth can't produce unusable proportions (the clamp is honest: the
+    # metadata still records the requested plot).
+    if plot_depth_m and use_tiler and building_footprint.get("d"):
+        scale = max(0.6, min(1.8, plot_depth_m / building_footprint["d"]))
+        if abs(scale - 1.0) > 0.02:
+            z_origin = building_footprint["z"]
+            for pending_floor in pending_floors:
+                for room in pending_floor["rooms"]:
+                    room["position"]["z"] = round(
+                        z_origin + (room["position"]["z"] - z_origin) * scale, 3
+                    )
+                    room["size"]["d"] = round(room["size"]["d"] * scale, 3)
+                pending_floor["footprint"] = {
+                    **pending_floor["footprint"],
+                    "d": round(pending_floor["footprint"]["d"] * scale, 3),
+                }
+            building_footprint = {
+                **building_footprint,
+                "d": round(building_footprint["d"] * scale, 3),
+            }
 
     for pending_floor in pending_floors:
         footprint = building_footprint if total_floors > 1 else pending_floor["footprint"]
@@ -1885,6 +2131,127 @@ def _candidate_must_satisfied(candidate: dict, must_pairs: set[frozenset] | None
     return sum(1 for pair in must_pairs if _pair_realised(pair))
 
 
+def _rooms_of_type(candidate: dict, room_type: str) -> list[dict]:
+    return [
+        room
+        for floor in candidate.get("floors", [])
+        for room in floor.get("rooms", [])
+        if room.get("objectType") == "room" and room.get("roomType") == room_type
+    ]
+
+
+def _room_touches_exterior(room: dict, footprint: dict, tolerance: float = 0.12) -> bool:
+    x1, x2, z1, z2 = _room_bounds(room)
+    fx1, fz1 = footprint["x"], footprint["z"]
+    fx2, fz2 = fx1 + footprint["w"], fz1 + footprint["d"]
+    return (
+        abs(x1 - fx1) <= tolerance
+        or abs(x2 - fx2) <= tolerance
+        or abs(z1 - fz1) <= tolerance
+        or abs(z2 - fz2) <= tolerance
+    )
+
+
+def _pairs_share_wall(candidate: dict, type_a: str, type_b: str) -> bool:
+    for a in _rooms_of_type(candidate, type_a):
+        for b in _rooms_of_type(candidate, type_b):
+            if a.get("floorLevel") == b.get("floorLevel") and _rooms_share_wall(a, b):
+                return True
+    return False
+
+
+_SEPARATION_ALIASES: dict[str, str] = {"entry": "foyer", "entrance": "foyer"}
+
+
+def _apply_program_findings(
+    candidate: dict,
+    *,
+    avoid_pairs: set[frozenset],
+    separations: list[tuple[str, str]],
+    daylight_rooms: list[str],
+) -> None:
+    """
+    Score prompt-level program constraints against a candidate and fold the
+    result into its insights BEFORE selection: avoid-adjacency violations,
+    'keep X away from Y' separations, and daylight-priority rooms with no
+    exterior wall. Violations become explicit warnings - never silently
+    dropped - and lower the candidate's score so cleaner candidates win.
+    """
+    penalty = 0
+    warnings: list[str] = []
+
+    for pair in avoid_pairs:
+        a, b = sorted(pair)
+        if _pairs_share_wall(candidate, a, b):
+            penalty += 8
+            warnings.append(
+                f"{a.replace('_', ' ').title()} is adjacent to the "
+                f"{b.replace('_', ' ')} despite the avoid-adjacency request."
+            )
+
+    for a, b in separations:
+        b = _SEPARATION_ALIASES.get(b, b)
+        if _pairs_share_wall(candidate, a, b):
+            penalty += 6
+            warnings.append(
+                f"{a.replace('_', ' ').title()} sits beside the "
+                f"{b.replace('_', ' ')} despite the away-from request."
+            )
+
+    floor_footprints = {
+        floor.get("level", 0): floor.get("footprint") or {}
+        for floor in candidate.get("floors", [])
+    }
+    for room_type in daylight_rooms:
+        for room in _rooms_of_type(candidate, room_type):
+            footprint = floor_footprints.get(room.get("floorLevel", 0)) or {}
+            if not footprint.get("w"):
+                continue
+            if not _room_touches_exterior(room, footprint):
+                penalty += 3
+                warnings.append(
+                    f"{room.get('label', room_type)} has no exterior wall "
+                    "despite daylight priority."
+                )
+
+    if penalty or warnings:
+        insights = candidate.setdefault("insights", {"score": 0, "reasons": [], "warnings": []})
+        insights["score"] = max(0, insights.get("score", 0) - penalty)
+        insights.setdefault("warnings", []).extend(warnings)
+
+
+def _hard_violations(candidate: dict) -> list[str]:
+    """
+    Hard geometric validity: room overlap, out-of-footprint rooms, and
+    non-positive dimensions. Candidates failing these are rejected before
+    selection rather than merely scored down.
+    """
+    violations: list[str] = []
+    for floor in candidate.get("floors", []):
+        footprint = floor.get("footprint") or {}
+        rooms = [r for r in floor.get("rooms", []) if r.get("objectType") == "room"]
+        for room in rooms:
+            if room["size"]["w"] <= 0 or room["size"]["d"] <= 0:
+                violations.append(f"non-positive size: {room.get('label')}")
+            if footprint.get("w"):
+                x1, x2, z1, z2 = _room_bounds(room)
+                eps = 0.05
+                if (
+                    x1 < footprint["x"] - eps
+                    or x2 > footprint["x"] + footprint["w"] + eps
+                    or z1 < footprint["z"] - eps
+                    or z2 > footprint["z"] + footprint["d"] + eps
+                ):
+                    violations.append(f"outside footprint: {room.get('label')}")
+        for i, a in enumerate(rooms):
+            for b in rooms[i + 1:]:
+                if _rooms_overlap(a, b):
+                    violations.append(
+                        f"overlap: {a.get('label')} / {b.get('label')}"
+                    )
+    return violations
+
+
 def generate_layout(
     room_specs: list[RoomSpec],
     prompt: str = "",
@@ -1898,6 +2265,11 @@ def generate_layout(
     plot_width_m: float | None = None,
     orientation: str | None = None,
     return_all_candidates: bool = False,
+    plot_depth_m: float | None = None,
+    road_side: str | None = None,
+    entry_side: str | None = None,
+    daylight_rooms: list[str] | None = None,
+    separation_constraints: list[tuple[str, str]] | None = None,
 ) -> dict | tuple[dict, list[dict]]:
     total_floors = max(1, total_floors)
     template = get_building_template(building_type)
@@ -1918,6 +2290,21 @@ def generate_layout(
         for c in (adjacency_constraints or [])
         if c.strength == "SHOULD"
     }
+    avoid_pairs: set[frozenset] = {
+        frozenset({c.room_a, c.room_b})
+        for c in (adjacency_constraints or [])
+        if c.strength == "AVOID"
+    }
+    graph_forbidden_pairs = set(avoid_pairs)
+    for left, right in separation_constraints or []:
+        graph_forbidden_pairs.add(
+            frozenset(
+                {
+                    _SEPARATION_ALIASES.get(left, left),
+                    _SEPARATION_ALIASES.get(right, right),
+                }
+            )
+        )
 
     base_offset = _STAIRS_SIZE["w"] + _GAP if total_floors > 1 else 0.0
     # Tiled building types compete two placement engines for the back/private
@@ -1949,12 +2336,36 @@ def generate_layout(
             zone_assignments=zone_assignments,
             must_adjacency_pairs=must_pairs or None,
             should_adjacency_pairs=should_pairs or None,
+            forbidden_pairs=graph_forbidden_pairs or None,
             plot_width_m=plot_width_m,
             orientation=orientation,
             placement_style=style,
+            plot_depth_m=plot_depth_m,
         )
         for offset, style in variants
     ]
+
+    # Program-level findings (avoid-adjacency, separations, daylight) adjust
+    # every candidate's score and warnings BEFORE selection, so a layout that
+    # violates 'do not place any bathroom beside the kitchen' loses to one
+    # that doesn't. Hard geometric validity is a gate, not a score: overlap
+    # or out-of-footprint candidates are rejected outright while any valid
+    # candidate exists.
+    for candidate in candidates:
+        _apply_program_findings(
+            candidate,
+            avoid_pairs=avoid_pairs,
+            separations=separation_constraints or [],
+            daylight_rooms=daylight_rooms or [],
+        )
+    valid = [c for c in candidates if not _hard_violations(c)]
+    if valid:
+        candidates = valid
+    else:
+        for candidate in candidates:
+            candidate["insights"]["warnings"].append(
+                "No fully valid layout candidate — best-effort layout shown."
+            )
     # Baseline winner among the tiler/BSP (row-fallback) candidates: quality
     # primary, adjacency realised as a tiebreak (Sprint 18 Phase 4 slice 2).
     graph_candidates = [c for c in candidates if c["metadata"].get("placementEngine") == "graph"]
@@ -1982,10 +2393,48 @@ def generate_layout(
     design_params_echo: dict = {}
     if plot_width_m is not None:
         design_params_echo["plotWidthM"] = plot_width_m
+    if plot_depth_m is not None:
+        design_params_echo["plotDepthM"] = plot_depth_m
     if orientation is not None:
         design_params_echo["orientation"] = orientation.upper()
     if design_params_echo:
         best["metadata"]["designParams"] = design_params_echo
+
+    # Orientation metadata for the canvases: which cardinal the entry wall
+    # faces, where the road is, and which rooms carry daylight priority. The
+    # front (low-Z) edge is the entry wall for "S"/default; the compass in
+    # the UI derives its rotation from entryWall + facingDirection.
+    facing = (orientation or "").upper() if orientation else None
+    if facing or road_side or entry_side or daylight_rooms:
+        best["metadata"]["orientation"] = {
+            "facingDirection": facing,
+            "roadSide": (road_side or facing or None),
+            "entrySide": ((entry_side or facing) or None),
+            "entryWall": _ORIENTATION_ENTRY_WALL.get(facing or "S", "front"),
+            "daylightRooms": list(daylight_rooms or []),
+        }
+    program_constraints: dict = {}
+    if avoid_pairs:
+        program_constraints["avoidPairs"] = [sorted(pair) for pair in avoid_pairs]
+    if separation_constraints:
+        program_constraints["separations"] = [list(pair) for pair in separation_constraints]
+    if daylight_rooms:
+        program_constraints["daylightRooms"] = list(daylight_rooms)
+    if program_constraints:
+        best["metadata"]["programConstraints"] = program_constraints
+
+    # Orientation validation: the entry door must actually sit on the wall the
+    # requested facing implies — surfaced as a warning, never silently wrong.
+    if facing:
+        entry_doors = [
+            room for room in best.get("rooms", [])
+            if room.get("objectType") == "door" and room.get("label") == "Entry Door"
+        ]
+        if not entry_doors:
+            best.setdefault("insights", {}).setdefault("warnings", []).append(
+                f"The entry is not currently placed on the requested "
+                f"{_DIRECTION_NAMES.get(facing, facing)}/front side."
+            )
 
     if vastu_requested:
         from app.services.parser.vastu import check_vastu_compliance

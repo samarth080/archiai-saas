@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.design import MAX_PROMPT_LENGTH
 from app.schemas.layout_plan import LayoutPlan
-from app.schemas.quality_report import Violation
+from app.schemas.quality_report import QualityReport, Violation
 from app.schemas.requirements import RequirementsSpec
 
 
@@ -36,6 +36,12 @@ class HardQualitySnapshot(BaseModel):
     hard_violations: list[Violation] = Field(default_factory=list)
 
 
+class MvpQualitySnapshot(QualityReport):
+    """Full Phase 6 report plus the Phase 4 ``valid`` compatibility flag."""
+
+    valid: bool
+
+
 class GenerateMvpRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -50,7 +56,7 @@ class GenerateMvpResponse(BaseModel):
 
     requirements: RequirementsSpec
     layout: LayoutPlan
-    quality: HardQualitySnapshot
+    quality: MvpQualitySnapshot
     defaults_applied: list[str] = Field(default_factory=list)
     design_id: str | None = Field(default=None, alias="designId")
     design_version_id: str | None = Field(default=None, alias="designVersionId")
@@ -60,6 +66,7 @@ class ValidateMvpRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     layout: LayoutPlan
+    requirements: RequirementsSpec | None = None
 
 
 class MvpVersionCreateRequest(BaseModel):
@@ -69,7 +76,7 @@ class MvpVersionCreateRequest(BaseModel):
     requirements: RequirementsSpec
     layout: LayoutPlan
     # Accepted for wire compatibility, but the backend always recomputes it.
-    quality: HardQualitySnapshot | None = None
+    quality: MvpQualitySnapshot | HardQualitySnapshot | None = None
 
 
 class MvpVersionResponse(BaseModel):
@@ -82,5 +89,5 @@ class MvpVersionResponse(BaseModel):
     prompt: str | None = None
     requirements: RequirementsSpec
     layout: LayoutPlan
-    quality: HardQualitySnapshot
+    quality: MvpQualitySnapshot | HardQualitySnapshot
     created_at: datetime = Field(alias="createdAt")

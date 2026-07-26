@@ -35,3 +35,20 @@ def test_canvas_footprint_uses_min_corner_and_contains_converted_rooms():
         assert room["position"]["x"] + half_w <= footprint["x"] + footprint["w"]
         assert room["position"]["z"] - half_d >= footprint["z"]
         assert room["position"]["z"] + half_d <= footprint["z"] + footprint["d"]
+
+
+def test_canvas_metadata_preserves_explicit_vastu_opt_in_only():
+    spec = RequirementsSpec.model_validate(
+        {
+            "rooms": [{"type": "bedroom", "count": 1}],
+            "plot": {"width_m": 9.0, "depth_m": 12.0},
+            "facing": "east",
+        }
+    )
+    plan = generate_plan(spec)
+
+    default_canvas = layout_plan_to_canvas(plan, prompt="One bedroom house")
+    vastu_canvas = layout_plan_to_canvas(plan, prompt="One bedroom Vastu house")
+
+    assert default_canvas["metadata"]["mvpVastuEnabled"] is False
+    assert vastu_canvas["metadata"]["mvpVastuEnabled"] is True

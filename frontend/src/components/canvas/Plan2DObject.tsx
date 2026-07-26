@@ -72,18 +72,33 @@ export function Plan2DObject({
   const labelLength = Math.max(room.label.length, 4)
   const nameFontSize = Math.min(fontSize, (room.size.w * 0.85) / (labelLength * 0.58))
   const showName = nameFontSize >= fontSize * 0.55 && room.size.d >= nameFontSize * 1.9
-  const showArea =
+  const showDetails =
     isSpace &&
+    selected &&
     showName &&
     room.size.w * room.size.d >= 4 &&
     room.size.w >= fontSize * 4.5 &&
     room.size.d >= fontSize * 3.4
-  const showObjectDimensions = definition.canResize && (selected || showDimensions)
+  const showObjectDimensions = definition.canResize && showDimensions
   const dimensionOffset = Math.max(fontSize * 1.5, handleSize * 1.4)
   const rotation = Number.isFinite(room.rotation.y) ? room.rotation.y : 0
-  const stroke = selected ? '#FFFFFF' : isOpening ? '#909094' : '#BDBDC0'
-  const strokeWidth = selected ? Math.max(0.06, fontSize * 0.16) : Math.max(0.025, fontSize * 0.07)
-  const fillOpacity = isOpenSpace ? 0.2 : isSpace ? 0.68 : isOpening ? 0.82 : isThin ? 0.72 : 0.64
+  const stroke = selected
+    ? EDITOR_PALETTE.selectionSoft
+    : isOpening
+      ? '#A9AAAC'
+      : '#D1D1CF'
+  const strokeWidth = selected
+    ? Math.max(0.06, fontSize * 0.15)
+    : Math.max(0.022, fontSize * 0.06)
+  const fillOpacity = isOpenSpace
+    ? 0.18
+    : isSpace
+      ? 0.72
+      : isOpening
+        ? 0.78
+        : isThin
+          ? 0.46
+          : 0.58
   const objectTransform = `translate(${room.position.x} ${room.position.z}) rotate(${rotation})`
   const surfaceRadius = isSpace
     ? Math.min(0.1, room.size.w * 0.025, room.size.d * 0.025)
@@ -133,9 +148,9 @@ export function Plan2DObject({
           height={room.size.d + handleSize * 0.56}
           rx={surfaceRadius + handleSize * 0.2}
           fill="none"
-          stroke="#FFFFFF"
-          strokeOpacity="0.55"
-          strokeWidth={Math.max(0.1, fontSize * 0.3)}
+          stroke={EDITOR_PALETTE.selection}
+          strokeOpacity="0.82"
+          strokeWidth={Math.max(0.08, fontSize * 0.22)}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />
@@ -167,7 +182,7 @@ export function Plan2DObject({
           fill="#ffffff"
           fillOpacity={isOpenSpace ? 0.04 : 0.07}
           stroke="#ffffff"
-          strokeOpacity={selected ? 0.55 : 0.28}
+          strokeOpacity={selected ? 0.44 : 0.2}
           strokeWidth={Math.max(0.018, fontSize * 0.045)}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
@@ -230,16 +245,16 @@ export function Plan2DObject({
         <g pointerEvents="none">
           <text
             x={0}
-            y={showArea ? -fontSize * 0.12 : 0}
+            y={showDetails ? -fontSize * 0.14 : 0}
             textAnchor="middle"
             dominantBaseline="middle"
             fontSize={nameFontSize}
-            fontWeight={selected ? 700 : 600}
-            fill={selected ? '#FFFFFF' : '#EAEAEC'}
+            fontWeight={selected ? 650 : 500}
+            fill={selected ? '#F3F1FF' : '#E6E6E4'}
           >
             {room.label}
           </text>
-          {showArea && (
+          {showDetails && (
             <text
               x={0}
               y={fontSize * 1.05}
@@ -247,9 +262,9 @@ export function Plan2DObject({
               dominantBaseline="middle"
               fontSize={fontSize * 0.72}
               fontWeight="600"
-              fill={selected ? '#DFDFE1' : '#A2A2A6'}
+              fill="#C9C2EE"
             >
-              {formatArea(room.size.w * room.size.d)}
+              {formatDims(room.size.w, room.size.d)}
             </text>
           )}
         </g>
@@ -321,8 +336,8 @@ export function Plan2DObject({
               width={handleSize}
               height={handleSize}
               rx={handleSize * 0.18}
-              fill="#ffffff"
-              stroke="#1B1B1C"
+              fill={EDITOR_PALETTE.selection}
+              stroke="#F5F5F6"
               strokeWidth={Math.max(0.04, fontSize * 0.11)}
               vectorEffect="non-scaling-stroke"
               style={{ cursor: cursorForHandle(handle) }}

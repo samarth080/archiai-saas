@@ -5,6 +5,10 @@ dependency — testable end-to-end from the hand-written fixtures. Kept fully
 separate from the legacy `layout_service` engines (tiler/BSP/gtree), which
 continue to serve the legacy /api/design path unchanged.
 """
-from app.services.layout_engine.engine import DoesNotFitError, generate_plan
+from app.services.layout_engine.engine import (
+    DoesNotFitError,
+    generate_plan,
+    rebuild_derived_geometry,
+)
 
-__all__ = ["generate_plan", "DoesNotFitError"]
+__all__ = ["generate_plan", "rebuild_derived_geometry", "DoesNotFitError"]

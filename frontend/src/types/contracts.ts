@@ -87,10 +87,15 @@ export interface HardQualitySnapshot {
   hard_violations: Violation[]
 }
 
+/** Full Phase 6 report. `valid` preserves the Phase 4 reject-tier flag. */
+export interface MvpQualitySnapshot extends QualityReport {
+  valid: boolean
+}
+
 export interface GenerateMvpResponse {
   requirements: RequirementsSpec
   layout: LayoutPlan
-  quality: HardQualitySnapshot
+  quality: MvpQualitySnapshot
   defaults_applied: string[]
   designId: string | null
   designVersionId: string | null
@@ -104,7 +109,8 @@ export interface MvpVersionResponse {
   prompt: string | null
   requirements: RequirementsSpec
   layout: LayoutPlan
-  quality: HardQualitySnapshot
+  /** Older saved versions may still carry the Phase 4 hard-only snapshot. */
+  quality: MvpQualitySnapshot | HardQualitySnapshot
   createdAt: string
 }
 

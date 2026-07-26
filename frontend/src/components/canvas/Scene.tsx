@@ -3,6 +3,7 @@ import { OrbitControls, Grid, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { CanvasViewMode, useCanvasStore } from '../../store/canvasStore'
 import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
+import { edgeCardinals, parseOrientation, type ScreenEdge } from './orientationModel'
 
 interface OrbitHandle {
   enabled: boolean
@@ -18,6 +19,8 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
   const floors = useCanvasStore((s) => s.floors)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const measurePoints = useCanvasStore((s) => s.measurePoints)
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
+  const orientation = parseOrientation(layoutMetadata)
   const visibleFloors =
     selectedFloor === 'all'
       ? floors
@@ -98,6 +101,55 @@ export function Scene({ orbitRef, readOnly = false, viewMode = '3d' }: SceneProp
           </group>
         )
       })}
+
+      {/* Orientation markers: cardinal letters at the footprint edges, the
+          facing edge labelled as Front — same mapping as the 2D plan. */}
+      {orientation &&
+        (() => {
+          const ground =
+            visibleFloors.find((floor) => floor.footprint?.w) ??
+            floors.find((floor) => floor.footprint?.w)
+          const footprint = ground?.footprint
+          if (!footprint) return null
+          const cardinals = edgeCardinals(orientation)
+          const facing = orientation.facingDirection ?? orientation.entrySide
+          const midX = footprint.x + footprint.w / 2
+          const midZ = footprint.z + footprint.d / 2
+          const pad = 1.6
+          const positions: Record<ScreenEdge, [number, number, number]> = {
+            top: [midX, 0.05, footprint.z - pad],
+            bottom: [midX, 0.05, footprint.z + footprint.d + pad],
+            left: [footprint.x - pad, 0.05, midZ],
+            right: [footprint.x + footprint.w + pad, 0.05, midZ],
+          }
+          return (
+            <>
+              {(Object.keys(positions) as ScreenEdge[]).map((edge) => {
+                const isFacing = cardinals[edge] === facing
+                return (
+                  <Html
+                    key={edge}
+                    position={positions[edge]}
+                    center
+                    zIndexRange={[1, 0]}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <span
+                      className={`whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                        isFacing
+                          ? 'bg-ink text-graphite-900'
+                          : 'bg-graphite-800/80 text-muted'
+                      }`}
+                    >
+                      {cardinals[edge]}
+                      {isFacing ? ' · FRONT' : ''}
+                    </span>
+                  </Html>
+                )
+              })}
+            </>
+          )
+        })()}
 
       <Grid
         args={[40, 40]}

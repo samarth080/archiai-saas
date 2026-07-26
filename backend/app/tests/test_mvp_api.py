@@ -165,7 +165,10 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
 
     assert response.status_code == 200
     body = response.json()
-    assert body["quality"] == {"valid": True, "hard_violations": []}
+    assert body["quality"]["valid"] is True
+    assert body["quality"]["hard_violations"] == []
+    assert 0 <= body["quality"]["score"] <= 100
+    assert isinstance(body["quality"]["warnings"], list)
     assert body["layout"]["plot"] == {
         "width_m": 9.0,
         "depth_m": 12.0,
@@ -184,6 +187,10 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
         assert design.layout_json["metadata"]["pipeline"] == "mvp"
+        assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
+        assert design.layout_json["metadata"]["mvpRequirements"] == spec
+        assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
+        assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
         object_types = {item["objectType"] for item in design.layout_json["rooms"]}
         assert {"room", "wall", "door"} <= object_types
 
@@ -193,6 +200,9 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     )
     assert latest.status_code == 200
     assert latest.json()["designId"] == body["designId"]
+    assert latest.json()["metadata"]["mvpRequirements"] == spec
+    assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
+    assert latest.json()["metadata"]["mvpVastuEnabled"] is False
 
     fetched = await client.get(
         f"/api/versions/{body['designVersionId']}",
@@ -241,6 +251,29 @@ async def test_generate_with_defaults_returns_explicit_assumptions(client: Async
     assert body["requirements"]["missing_info"] == []
 
 
+async def test_generate_only_applies_vastu_when_the_prompt_requests_it(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-vastu-opt-in@example.com")
+    spec = _spec()
+
+    ordinary = await client.post(
+        "/api/generate",
+        json={"requirements": spec, "prompt": "Two bedroom apartment"},
+        headers=_auth(token),
+    )
+    requested = await client.post(
+        "/api/generate",
+        json={"requirements": spec, "prompt": "Vastu two bedroom apartment"},
+        headers=_auth(token),
+    )
+
+    assert ordinary.status_code == 200
+    assert requested.status_code == 200
+    assert all(warning["rule"] != "vastu" for warning in ordinary.json()["quality"]["warnings"])
+    assert any(warning["rule"] == "vastu" for warning in requested.json()["quality"]["warnings"])
+
+
 async def test_validate_recomputes_hard_violations(client: AsyncClient):
     token = await _register(client, "mvp-validate@example.com")
     plan = generate_plan(RequirementsSpec.model_validate(_spec())).model_dump(mode="json")
@@ -258,6 +291,76 @@ async def test_validate_recomputes_hard_violations(client: AsyncClient):
     assert "overlap" in {
         violation["code"] for violation in response.json()["hard_violations"]
     }
+
+
+async def test_validate_full_returns_weighted_quality_without_changing_fast_default(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-full-quality@example.com")
+    spec = _spec("3bhk_adjacencies")
+    plan = generate_plan(RequirementsSpec.model_validate(spec)).model_dump(mode="json")
+
+    fast = await client.post(
+        "/api/validate",
+        json={"layout": plan},
+        headers=_auth(token),
+    )
+    full = await client.post(
+        "/api/validate?full=true",
+        json={"layout": plan, "requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert fast.status_code == 200
+    assert fast.json() == {"valid": True, "hard_violations": []}
+    assert full.status_code == 200
+    assert full.json()["valid"] is True
+    assert 0 <= full.json()["score"] <= 100
+    assert isinstance(full.json()["warnings"], list)
+
+
+async def test_full_validation_rebuilds_derived_geometry_but_fast_path_does_not(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-derived-quality@example.com")
+    spec = _spec("3bhk_adjacencies")
+    plan = generate_plan(RequirementsSpec.model_validate(spec)).model_dump(mode="json")
+    plan["walls"] = []
+    plan["doors"] = []
+
+    fast = await client.post(
+        "/api/validate",
+        json={"layout": plan},
+        headers=_auth(token),
+    )
+    full = await client.post(
+        "/api/validate?full=true",
+        json={"layout": plan, "requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert fast.status_code == 200
+    assert fast.json()["valid"] is False
+    assert "unreachable" in {
+        violation["code"] for violation in fast.json()["hard_violations"]
+    }
+    assert full.status_code == 200
+    assert full.json()["valid"] is True
+    assert full.json()["hard_violations"] == []
+
+
+async def test_validate_full_requires_requirements(client: AsyncClient):
+    token = await _register(client, "mvp-full-quality-missing@example.com")
+    plan = generate_plan(RequirementsSpec.model_validate(_spec())).model_dump(mode="json")
+
+    response = await client.post(
+        "/api/validate?full=true",
+        json={"layout": plan},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 422
+    assert "requirements" in response.json()["error"].lower()
 
 
 async def test_version_save_recomputes_quality_and_enforces_project_access(
@@ -280,6 +383,8 @@ async def test_version_save_recomputes_quality_and_enforces_project_access(
     )
     assert generated.status_code == 200
     plan = generated.json()["layout"]
+    plan["walls"] = []
+    plan["doors"] = []
     forged_quality = {
         "valid": False,
         "hard_violations": [
@@ -307,7 +412,15 @@ async def test_version_save_recomputes_quality_and_enforces_project_access(
     )
     assert saved.status_code == 201
     assert saved.json()["versionNumber"] == 2
-    assert saved.json()["quality"] == {"valid": True, "hard_violations": []}
+    assert saved.json()["layout"]["walls"]
+    assert saved.json()["layout"]["doors"]
+    assert saved.json()["quality"]["valid"] is True
+    assert saved.json()["quality"]["hard_violations"] == []
+    assert 0 <= saved.json()["quality"]["score"] <= 100
+    assert "forged" not in {
+        violation["code"]
+        for violation in saved.json()["quality"]["hard_violations"]
+    }
 
     hidden = await client.get(
         f"/api/versions/{saved.json()['id']}",

@@ -43,6 +43,7 @@ import { useCanvasStore, type CanvasViewMode } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import { useMvpQualityValidation } from '../../hooks/useMvpQualityValidation'
 import { getApiErrorMessage } from '../../services/apiError'
 import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
 import type { CanvasLayout } from '../../store/canvasStore'
@@ -232,6 +233,7 @@ function clarificationFromError(
 }
 
 export default function ProjectPage() {
+  useMvpQualityValidation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -851,7 +853,10 @@ export default function ProjectPage() {
                   <Canvas3D className="h-full" readOnly />
                 </div>
                 {viewMode === 'floor_plan' && (
-                  <Plan2D className="h-full" readOnly={Boolean(refinementPlayback)} />
+                  <Plan2D
+                    className="h-full pb-10 pt-16"
+                    readOnly={Boolean(refinementPlayback)}
+                  />
                 )}
                 {viewMode === 'zoning' && <ZoningView className="h-full" />}
                 {viewMode === 'graph' && <RoomGraphView className="h-full" />}
@@ -920,26 +925,26 @@ export default function ProjectPage() {
               />
             )}
 
-            <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2">
+            <div className="absolute left-1/2 top-2 z-30 -translate-x-1/2">
               <ViewModeSwitcher />
             </div>
 
             <ToolRail />
             {(viewMode === 'floor_plan' || viewMode === '3d') && <MeasurePanel />}
             {(viewMode === 'floor_plan' || viewMode === '3d') && <SelectionGizmo />}
-            {viewMode !== 'graph' && (
+            {viewMode === '3d' && (
               <div className="absolute right-4 top-16 z-10">
                 <ThreeDContextCard />
               </div>
             )}
-            {!selectedId && (viewMode === 'floor_plan' || viewMode === '3d') && (
+            {!selectedId && viewMode === '3d' && (
               <ProgramPanel
                 alternatives={alternatives}
                 onPickAlternative={handlePickOption}
                 positionClass="top-[15.5rem] bottom-9"
               />
             )}
-            {(viewMode === 'floor_plan' || viewMode === '3d') && (
+            {viewMode === '3d' && (
               <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
             )}
 
