@@ -11,6 +11,7 @@ from math import hypot, radians
 from app.config.mvp_defaults import WALL_HEIGHT_M
 from app.schemas.layout_plan import Door, LayoutPlan, Wall
 from app.services.layout_service import ROOM_COLORS
+from app.services.parser.vastu import is_vastu_requested
 
 _FALLBACK_COLOR = "#94a3b8"
 _ROOM_COLOR_ALIASES = {
@@ -98,6 +99,8 @@ def layout_plan_to_canvas(
     *,
     prompt: str | None = None,
     building_type: str = "house",
+    requirements: dict | None = None,
+    quality: dict | None = None,
 ) -> dict:
     """Convert a canonical plan to byte-stable legacy canvas JSON."""
 
@@ -140,23 +143,31 @@ def layout_plan_to_canvas(
         "d": plan.plot.depth_m,
     }
     total_area = round(sum(room.w * room.h for room in plan.rooms), 3)
+    metadata = {
+        "pipeline": "mvp",
+        "prompt": prompt,
+        "building_type": building_type,
+        "buildingType": building_type,
+        "style": "concept",
+        "room_count": len(room_objects),
+        "totalFloors": 1,
+        "totalRooms": len(room_objects),
+        "totalObjects": len(objects),
+        "totalAreaSqm": total_area,
+        "placementEngine": "mvp_subdivision",
+        "candidateCount": 1,
+        # The frontend needs the original opt-in intent when it re-scores an
+        # edited plan after save/reload. Never infer Vastu from room content.
+        "mvpVastuEnabled": is_vastu_requested(prompt or ""),
+    }
+    if requirements is not None:
+        metadata["mvpRequirements"] = requirements
+    if quality is not None:
+        metadata["mvpQuality"] = quality
 
     return {
         "version": "1.0",
-        "metadata": {
-            "pipeline": "mvp",
-            "prompt": prompt,
-            "building_type": building_type,
-            "buildingType": building_type,
-            "style": "concept",
-            "room_count": len(room_objects),
-            "totalFloors": 1,
-            "totalRooms": len(room_objects),
-            "totalObjects": len(objects),
-            "totalAreaSqm": total_area,
-            "placementEngine": "mvp_subdivision",
-            "candidateCount": 1,
-        },
+        "metadata": metadata,
         "building": {
             "floorHeight": WALL_HEIGHT_M,
             "footprint": footprint,

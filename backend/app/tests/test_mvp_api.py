@@ -187,6 +187,10 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
         assert design.layout_json["metadata"]["pipeline"] == "mvp"
+        assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
+        assert design.layout_json["metadata"]["mvpRequirements"] == spec
+        assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
+        assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
         object_types = {item["objectType"] for item in design.layout_json["rooms"]}
         assert {"room", "wall", "door"} <= object_types
 
@@ -196,6 +200,8 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     )
     assert latest.status_code == 200
     assert latest.json()["designId"] == body["designId"]
+    assert latest.json()["metadata"]["mvpRequirements"] == spec
+    assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
 
     fetched = await client.get(
         f"/api/versions/{body['designVersionId']}",
