@@ -43,6 +43,7 @@ import { useCanvasStore, type CanvasViewMode } from '../../store/canvasStore'
 import { VersionHistoryDrawer } from '../../components/canvas/VersionHistoryDrawer'
 import { ActivityDrawer } from '../../components/canvas/ActivityDrawer'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import { useMvpQualityValidation } from '../../hooks/useMvpQualityValidation'
 import { getApiErrorMessage } from '../../services/apiError'
 import { ShareProjectDialog } from '../../components/projects/ShareProjectDialog'
 import type { CanvasLayout } from '../../store/canvasStore'
@@ -232,6 +233,7 @@ function clarificationFromError(
 }
 
 export default function ProjectPage() {
+  useMvpQualityValidation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()

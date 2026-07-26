@@ -1,15 +1,32 @@
 import type { CanvasLayout, Room } from '../store/canvasStore'
 import type {
+  Facing,
   GenerateMvpResponse,
   HardQualitySnapshot,
   LayoutPlan,
   MvpQualitySnapshot,
   RequirementsSpec,
+  Rotation,
   RoomType,
 } from '../types/contracts'
 
 const WALL_HEIGHT_M = 3
 const FALLBACK_COLOR = '#94a3b8'
+
+const CANONICAL_ROOM_TYPES = new Set<RoomType>([
+  'bedroom',
+  'master_bedroom',
+  'bathroom',
+  'kitchen',
+  'living_room',
+  'dining',
+  'balcony',
+  'entry',
+  'pooja_room',
+  'study',
+  'utility',
+  'parking',
+])
 
 const ROOM_COLORS: Partial<Record<RoomType, string>> = {
   living_room: '#b3b8e9',
@@ -41,6 +58,15 @@ function boundedCenter(origin: number, span: number, plotSpan: number) {
   const half = span / 2
   const rounded = round3(origin + half)
   return Math.min(plotSpan - half, Math.max(half, rounded))
+}
+
+function isCanonicalRoomType(value: unknown): value is RoomType {
+  return typeof value === 'string' && CANONICAL_ROOM_TYPES.has(value as RoomType)
+}
+
+function canonicalRotation(value: number): Rotation {
+  const normalized = ((Math.round(value / 90) * 90) % 360 + 360) % 360
+  return normalized as Rotation
 }
 
 function wallObject(layout: LayoutPlan, index: number): Room {
@@ -157,6 +183,7 @@ export function layoutPlanToCanvas(
       placementEngine: 'mvp_subdivision',
       mvpRequirements: options.requirements,
       mvpQuality: options.quality,
+      mvpVastuEnabled: /va?astu/i.test(options.prompt ?? ''),
     },
     building: {
       floorHeight: WALL_HEIGHT_M,
@@ -173,6 +200,87 @@ export function layoutPlanToCanvas(
       },
     ],
     rooms: objects,
+  }
+}
+
+/**
+ * Convert the editor's center-based objects back to the locked NW-origin MVP
+ * contract for post-edit validation. This bridge is deliberately limited to
+ * canonical rooms plus the wall/hosted-door objects emitted by this adapter.
+ */
+export function canvasObjectsToLayoutPlan(
+  objects: Room[],
+  footprint: { x: number; z: number; w: number; d: number },
+  facing: Facing,
+): LayoutPlan {
+  const rooms = objects
+    .filter(
+      (object) => object.objectType === 'room' && isCanonicalRoomType(object.roomType),
+    )
+    .map((room) => ({
+      id: room.id,
+      type: room.roomType as RoomType,
+      label: room.label,
+      x: round3(room.position.x - room.size.w / 2 - footprint.x),
+      y: round3(room.position.z - room.size.d / 2 - footprint.z),
+      w: round3(room.size.w),
+      h: round3(room.size.d),
+      rotation: canonicalRotation(room.rotation.y),
+    }))
+
+  const wallObjects = objects.filter((object) => object.objectType === 'wall')
+  const walls = wallObjects.map((wall) => {
+    const horizontal = wall.size.w >= wall.size.d
+    const length = horizontal ? wall.size.w : wall.size.d
+    return {
+      id: wall.id,
+      x1: round3(
+        horizontal
+          ? wall.position.x - length / 2 - footprint.x
+          : wall.position.x - footprint.x,
+      ),
+      y1: round3(
+        horizontal
+          ? wall.position.z - footprint.z
+          : wall.position.z - length / 2 - footprint.z,
+      ),
+      x2: round3(
+        horizontal
+          ? wall.position.x + length / 2 - footprint.x
+          : wall.position.x - footprint.x,
+      ),
+      y2: round3(
+        horizontal
+          ? wall.position.z - footprint.z
+          : wall.position.z + length / 2 - footprint.z,
+      ),
+      thickness: round3(horizontal ? wall.size.d : wall.size.w),
+    }
+  })
+  const wallById = new Map(walls.map((wall) => [wall.id, wall]))
+
+  const doors = objects.flatMap((door) => {
+    if (door.objectType !== 'door' || typeof door.hostWallId !== 'string') return []
+    const wall = wallById.get(door.hostWallId)
+    if (!wall) return []
+    const horizontal = Math.abs(wall.x2 - wall.x1) >= Math.abs(wall.y2 - wall.y1)
+    const width = horizontal ? door.size.w : door.size.d
+    const centerAlong = horizontal
+      ? door.position.x - footprint.x - wall.x1
+      : door.position.z - footprint.z - wall.y1
+    return [{
+      id: door.id,
+      wall_ref: wall.id,
+      offset: round3(Math.max(0, centerAlong - width / 2)),
+      width: round3(width),
+    }]
+  })
+
+  return {
+    plot: { width_m: footprint.w, depth_m: footprint.d, facing },
+    rooms,
+    walls,
+    doors,
   }
 }
 
