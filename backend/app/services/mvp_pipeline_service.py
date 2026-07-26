@@ -105,6 +105,8 @@ async def save_mvp_snapshot(
         layout,
         prompt=prompt,
         building_type=requirements.building_type.value,
+        requirements=requirements.model_dump(mode="json"),
+        quality=quality.model_dump(mode="json"),
     )
     design = await db.scalar(
         select(Design)

@@ -102,6 +102,7 @@ class RoomResponse(BaseModel):
 
 
 class GenerateMetadata(BaseModel):
+    pipeline: str | None = None
     prompt: str | None = None
     building_type: str | None = None
     buildingType: str | None = None
@@ -109,6 +110,7 @@ class GenerateMetadata(BaseModel):
     room_count: int | None = None
     totalFloors: int | None = None
     totalRooms: int | None = None
+    totalObjects: int | None = None
     totalAreaSqm: float | None = None
     requestedAreaSqm: float | None = None
     patternDataUsed: bool | None = None
@@ -124,6 +126,9 @@ class GenerateMetadata(BaseModel):
     programConstraints: dict[str, Any] | None = None
     program: dict[str, Any] | None = None
     programValidation: dict[str, Any] | None = None
+    mvpRequirements: dict[str, Any] | None = None
+    mvpQuality: dict[str, Any] | None = None
+    mvpVastuEnabled: bool | None = None
 
 
 class BuildingResponse(BaseModel):

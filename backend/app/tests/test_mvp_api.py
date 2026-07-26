@@ -202,6 +202,7 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert latest.json()["designId"] == body["designId"]
     assert latest.json()["metadata"]["mvpRequirements"] == spec
     assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
+    assert latest.json()["metadata"]["mvpVastuEnabled"] is False
 
     fetched = await client.get(
         f"/api/versions/{body['designVersionId']}",
