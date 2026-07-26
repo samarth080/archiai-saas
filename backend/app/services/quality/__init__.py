@@ -6,5 +6,6 @@ Separate from the legacy `layout_quality_service`, which keeps scoring the
 legacy engine path.
 """
 from app.services.quality.hard_constraints import validate
+from app.services.quality.scorer import score
 
-__all__ = ["validate"]
+__all__ = ["score", "validate"]
