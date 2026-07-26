@@ -9,11 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.design import Design
 from app.models.design_version import DesignVersion
 from app.schemas.layout_plan import LayoutPlan
-from app.schemas.mvp import HardQualitySnapshot, MvpVersionResponse
+from app.schemas.mvp import (
+    HardQualitySnapshot,
+    MvpQualitySnapshot,
+    MvpVersionResponse,
+)
 from app.schemas.requirements import RequirementsSpec
 from app.services.design_service import AUTO_DRAFT_VERSION_TYPE
 from app.services.layout_adapter import layout_plan_to_canvas
 from app.services.quality.hard_constraints import validate
+from app.services.quality.scorer import score as score_quality
 from app.services.workspace_service import (
     require_project_edit_access,
     require_project_read_access,
@@ -69,6 +74,19 @@ def hard_quality_snapshot(plan: LayoutPlan) -> HardQualitySnapshot:
     return HardQualitySnapshot(valid=not violations, hard_violations=violations)
 
 
+def quality_snapshot(
+    plan: LayoutPlan,
+    requirements: RequirementsSpec,
+    *,
+    include_vastu: bool = False,
+) -> MvpQualitySnapshot:
+    report = score_quality(plan, requirements, include_vastu=include_vastu)
+    return MvpQualitySnapshot(
+        valid=not report.hard_violations,
+        **report.model_dump(mode="python"),
+    )
+
+
 async def save_mvp_snapshot(
     db: AsyncSession,
     *,
@@ -77,7 +95,7 @@ async def save_mvp_snapshot(
     prompt: str | None,
     requirements: RequirementsSpec,
     layout: LayoutPlan,
-    quality: HardQualitySnapshot,
+    quality: MvpQualitySnapshot,
     version_type: str,
 ) -> tuple[Design, DesignVersion]:
     """Persist canonical artifacts and a legacy editor-compatible snapshot."""
@@ -153,6 +171,12 @@ def version_response(version: DesignVersion) -> MvpVersionResponse:
         or version.quality_json is None
     ):
         raise HTTPException(status_code=404, detail="MVP version artifacts not found")
+    raw_quality = version.quality_json
+    quality = (
+        MvpQualitySnapshot.model_validate(raw_quality)
+        if "score" in raw_quality
+        else HardQualitySnapshot.model_validate(raw_quality)
+    )
     return MvpVersionResponse(
         id=version.id,
         designId=version.design_id,
@@ -161,7 +185,7 @@ def version_response(version: DesignVersion) -> MvpVersionResponse:
         prompt=version.prompt_used,
         requirements=RequirementsSpec.model_validate(version.requirements_json),
         layout=LayoutPlan.model_validate(version.canonical_layout_json),
-        quality=HardQualitySnapshot.model_validate(version.quality_json),
+        quality=quality,
         createdAt=version.created_at,
     )
 

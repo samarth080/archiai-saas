@@ -12,6 +12,7 @@ from app.schemas.mvp import (
     GenerateMvpRequest,
     GenerateMvpResponse,
     HardQualitySnapshot,
+    MvpQualitySnapshot,
     MvpVersionCreateRequest,
     MvpVersionResponse,
     ValidateMvpRequest,
@@ -33,11 +34,13 @@ from app.services.llm_client import (
 from app.services.mvp_pipeline_service import (
     get_mvp_version,
     hard_quality_snapshot,
+    quality_snapshot,
     save_mvp_snapshot,
     understood_summary,
     version_response,
 )
 from app.services.workspace_service import require_project_edit_access
+from app.services.parser.vastu import is_vastu_requested
 from app.utils.activity import log_activity
 from app.utils.rate_limit import rate_limit
 
@@ -159,7 +162,11 @@ async def generate_mvp_layout(
     except DoesNotFitError as exc:
         raise _clarification_error(assess(requirements, fit_error=exc)) from exc
 
-    quality = hard_quality_snapshot(layout)
+    quality = quality_snapshot(
+        layout,
+        requirements,
+        include_vastu=is_vastu_requested(request.prompt or ""),
+    )
     design_id = None
     version_id = None
     if request.project_id is not None:
@@ -193,11 +200,27 @@ async def generate_mvp_layout(
     )
 
 
-@router.post("/validate", response_model=HardQualitySnapshot)
+@router.post(
+    "/validate",
+    response_model=MvpQualitySnapshot | HardQualitySnapshot,
+)
 async def validate_mvp_layout(
     request: ValidateMvpRequest,
+    full: bool = False,
+    vastu: bool = False,
     _user_id: str = Depends(_current_user_id),
-) -> HardQualitySnapshot:
+) -> MvpQualitySnapshot | HardQualitySnapshot:
+    if full:
+        if request.requirements is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Requirements are required for full quality scoring",
+            )
+        return quality_snapshot(
+            request.layout,
+            request.requirements,
+            include_vastu=vastu,
+        )
     return hard_quality_snapshot(request.layout)
 
 
@@ -212,7 +235,11 @@ async def save_mvp_version(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> MvpVersionResponse:
-    quality = hard_quality_snapshot(request.layout)
+    quality = quality_snapshot(
+        request.layout,
+        request.requirements,
+        include_vastu=is_vastu_requested(request.prompt or ""),
+    )
     _, version = await save_mvp_snapshot(
         db,
         user_id=user_id,
