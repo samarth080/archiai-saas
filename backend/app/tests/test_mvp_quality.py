@@ -148,6 +148,17 @@ def test_kitchen_scores_better_in_southeast_than_northeast():
     assert any(warning.code == "vastu.kitchen_northeast" for warning in bad.warnings)
 
 
+def test_vastu_stays_opt_in_at_the_weighted_scorer_boundary():
+    spec = _adjacency_spec()
+    plan = _adjacency_plan(kitchen_next_to_dining=True)
+
+    default_report = score(plan, spec)
+    vastu_report = score(plan, spec, include_vastu=True)
+
+    assert all(warning.rule != "vastu" for warning in default_report.warnings)
+    assert any(warning.rule == "vastu" for warning in vastu_report.warnings)
+
+
 @pytest.mark.parametrize(
     ("x", "y", "expected"),
     [
