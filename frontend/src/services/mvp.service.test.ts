@@ -6,6 +6,7 @@ import {
   fetchMvpVersion,
   generateMvpLayout,
   saveMvpVersion,
+  validateAndSyncMvpLayout,
   validateMvpLayout,
 } from './mvp.service'
 import type {
@@ -115,6 +116,22 @@ describe('MVP pipeline service', () => {
       3,
       '/api/projects/project-1/versions',
       { requirements, layout, quality },
+    )
+  })
+
+  it('requests the server-rebuilt layout for live editor synchronization', async () => {
+    const response = {
+      layout,
+      quality: { valid: true, score: 86, hard_violations: [], warnings: [] },
+    }
+    vi.mocked(api.post).mockResolvedValue({ data: response })
+
+    await expect(
+      validateAndSyncMvpLayout(layout, { requirements, includeVastu: true }),
+    ).resolves.toBe(response)
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/validate?full=true&includeLayout=true&vastu=true',
+      { layout, requirements },
     )
   })
 

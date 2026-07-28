@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 
-import { validateMvpLayout } from '../services/mvp.service'
-import { canvasObjectsToLayoutPlan } from '../services/mvpLayoutAdapter'
+import { validateAndSyncMvpLayout } from '../services/mvp.service'
+import {
+  canvasObjectsToLayoutPlan,
+  replaceDerivedCanvasObjects,
+} from '../services/mvpLayoutAdapter'
 import { useCanvasStore } from '../store/canvasStore'
 import type { Facing, RequirementsSpec } from '../types/contracts'
 
@@ -92,17 +95,34 @@ export function useMvpQualityValidation({
         footprint,
         (facing ?? 'east') as Facing,
       )
-      void validateMvpLayout(plan, { requirements, includeVastu })
-        .then((quality) => {
+      void validateAndSyncMvpLayout(plan, { requirements, includeVastu })
+        .then(({ layout, quality }) => {
           if (cancelled || requestId !== requestSequence.current) return
-          // Scoring is derived state: update metadata without creating an edit,
-          // history snapshot, or extra dirty transition.
-          useCanvasStore.setState((state) => ({
-            layoutMetadata: {
-              ...state.layoutMetadata,
-              mvpQuality: quality,
-            },
-          }))
+          useCanvasStore.setState((state) => {
+            // A newer edit may land before React runs this effect's cleanup.
+            // Never paint derived geometry from an older room snapshot.
+            if (geometryFingerprint(state.rooms) !== fingerprint) return state
+
+            const rooms = replaceDerivedCanvasObjects(state.rooms, layout)
+            // The wall/door replacement changes the fingerprint. Advance the
+            // baseline now so derived-state repaint does not enqueue a second
+            // validation request.
+            previousFingerprint.current = geometryFingerprint(rooms)
+            return {
+              rooms,
+              selectedId:
+                state.selectedId &&
+                !rooms.some((object) => object.id === state.selectedId)
+                  ? null
+                  : state.selectedId,
+              // Quality and rebuilt walls/doors are derived state: preserve
+              // edit history, activity, and the current dirty/save status.
+              layoutMetadata: {
+                ...state.layoutMetadata,
+                mvpQuality: quality,
+              },
+            }
+          })
         })
         .catch(() => {
           // Preserve the last known report on a transient validation failure.

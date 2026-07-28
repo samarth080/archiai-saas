@@ -131,6 +131,29 @@ function doorObject(layout: LayoutPlan, index: number): Room | null {
   }
 }
 
+export function layoutPlanDerivedObjects(layout: LayoutPlan): Room[] {
+  const wallObjects = layout.walls.map((_, index) => wallObject(layout, index))
+  const doorObjects = layout.doors
+    .map((_, index) => doorObject(layout, index))
+    .filter((door): door is Room => door !== null)
+  return [...wallObjects, ...doorObjects]
+}
+
+/**
+ * Canonical MVP walls and hosted doors are regenerated from room rectangles.
+ * Preserve every editable room and non-canonical component while replacing
+ * only those derived objects with the server's scored geometry.
+ */
+export function replaceDerivedCanvasObjects(
+  objects: Room[],
+  layout: LayoutPlan,
+): Room[] {
+  const preserved = objects.filter(
+    (object) => object.objectType !== 'wall' && object.objectType !== 'door',
+  )
+  return [...preserved, ...layoutPlanDerivedObjects(layout)]
+}
+
 export function layoutPlanToCanvas(
   layout: LayoutPlan,
   options: AdapterOptions = {},
@@ -151,11 +174,7 @@ export function layoutPlanToCanvas(
     rotation: { x: 0, y: room.rotation, z: 0 },
     color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
   }))
-  const wallObjects = layout.walls.map((_, index) => wallObject(layout, index))
-  const doorObjects = layout.doors
-    .map((_, index) => doorObject(layout, index))
-    .filter((door): door is Room => door !== null)
-  const objects = [...roomObjects, ...wallObjects, ...doorObjects]
+  const objects = [...roomObjects, ...layoutPlanDerivedObjects(layout)]
   const footprint = {
     x: 0,
     z: 0,

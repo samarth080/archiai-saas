@@ -92,6 +92,11 @@ export interface MvpQualitySnapshot extends QualityReport {
   valid: boolean
 }
 
+export interface MvpValidationSyncResponse {
+  layout: LayoutPlan
+  quality: MvpQualitySnapshot
+}
+
 export interface GenerateMvpResponse {
   requirements: RequirementsSpec
   layout: LayoutPlan

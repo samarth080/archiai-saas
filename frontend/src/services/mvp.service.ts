@@ -5,6 +5,7 @@ import type {
   HardQualitySnapshot,
   LayoutPlan,
   MvpQualitySnapshot,
+  MvpValidationSyncResponse,
   MvpVersionResponse,
   RequirementsSpec,
 } from '../types/contracts'
@@ -57,6 +58,23 @@ export async function validateMvpLayout(
   }
 
   const { data } = await api.post<HardQualitySnapshot>('/api/validate', { layout })
+  return data
+}
+
+export async function validateAndSyncMvpLayout(
+  layout: LayoutPlan,
+  options: FullQualityOptions,
+): Promise<MvpValidationSyncResponse> {
+  const query = options.includeVastu
+    ? '?full=true&includeLayout=true&vastu=true'
+    : '?full=true&includeLayout=true'
+  const { data } = await api.post<MvpValidationSyncResponse>(
+    `/api/validate${query}`,
+    {
+      layout,
+      requirements: options.requirements,
+    },
+  )
   return data
 }
 

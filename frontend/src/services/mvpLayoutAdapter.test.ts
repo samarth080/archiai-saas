@@ -4,6 +4,7 @@ import {
   canvasObjectsToLayoutPlan,
   generateResponseToCanvas,
   layoutPlanToCanvas,
+  replaceDerivedCanvasObjects,
 } from './mvpLayoutAdapter'
 import type { GenerateMvpResponse, LayoutPlan, RequirementsSpec } from '../types/contracts'
 
@@ -96,6 +97,42 @@ describe('canonical MVP layout adapter', () => {
     )
 
     expect(restored).toEqual(layout)
+  })
+
+  it('replaces only derived walls and doors during live synchronization', () => {
+    const generated = layoutPlanToCanvas(layout).rooms
+    const room = generated.find((object) => object.objectType === 'room')!
+    const customWindow = {
+      ...room,
+      id: 'window-custom',
+      label: 'Custom Window',
+      objectType: 'window' as const,
+      roomType: 'window',
+    }
+    const staleObjects = [
+      room,
+      customWindow,
+      {
+        ...generated.find((object) => object.objectType === 'wall')!,
+        id: 'stale-wall',
+      },
+      {
+        ...generated.find((object) => object.objectType === 'door')!,
+        id: 'stale-door',
+        hostWallId: 'stale-wall',
+      },
+    ]
+
+    const result = replaceDerivedCanvasObjects(staleObjects, layout)
+
+    expect(result.find((object) => object.id === room.id)).toBe(room)
+    expect(result.find((object) => object.id === customWindow.id)).toBe(customWindow)
+    expect(result.some((object) => object.id === 'stale-wall')).toBe(false)
+    expect(result.some((object) => object.id === 'stale-door')).toBe(false)
+    expect(result.some((object) => object.id === 'wall-1')).toBe(true)
+    expect(result.find((object) => object.id === 'door-1')).toMatchObject({
+      hostWallId: 'wall-1',
+    })
   })
 
   it('carries generation identity and produces deterministic canvas JSON', () => {
