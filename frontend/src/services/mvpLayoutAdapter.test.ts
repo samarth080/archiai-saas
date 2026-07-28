@@ -62,12 +62,16 @@ describe('canonical MVP layout adapter', () => {
     expect(rooms[0].position).toEqual({ x: 2.25, y: 1.5, z: 6 })
     expect(rooms[1].position).toEqual({ x: 6.75, y: 1.5, z: 6 })
     expect(rooms[1].rotation.y).toBe(90)
+    expect(rooms[1].size).toEqual({ w: 12, h: 3, d: 4.5 })
 
     for (const room of rooms) {
-      expect(room.position.x - room.size.w / 2).toBeGreaterThanOrEqual(0)
-      expect(room.position.x + room.size.w / 2).toBeLessThanOrEqual(9)
-      expect(room.position.z - room.size.d / 2).toBeGreaterThanOrEqual(0)
-      expect(room.position.z + room.size.d / 2).toBeLessThanOrEqual(12)
+      const swapsAxes = room.rotation.y === 90 || room.rotation.y === 270
+      const worldWidth = swapsAxes ? room.size.d : room.size.w
+      const worldDepth = swapsAxes ? room.size.w : room.size.d
+      expect(room.position.x - worldWidth / 2).toBeGreaterThanOrEqual(0)
+      expect(room.position.x + worldWidth / 2).toBeLessThanOrEqual(9)
+      expect(room.position.z - worldDepth / 2).toBeGreaterThanOrEqual(0)
+      expect(room.position.z + worldDepth / 2).toBeLessThanOrEqual(12)
     }
   })
 
@@ -97,6 +101,48 @@ describe('canonical MVP layout adapter', () => {
     )
 
     expect(restored).toEqual(layout)
+  })
+
+  it('serializes a rotated canvas room from its visible world bounds', () => {
+    const source: LayoutPlan = {
+      plot: layout.plot,
+      rooms: [{
+        id: 'turning-room',
+        type: 'bedroom',
+        label: 'Turning Room',
+        x: 3,
+        y: 3.5,
+        w: 3,
+        h: 5,
+        rotation: 0,
+      }],
+      walls: [],
+      doors: [],
+    }
+    const canvas = layoutPlanToCanvas(source)
+    const room = canvas.rooms.find((object) => object.id === 'turning-room')!
+    room.rotation.y = 90
+
+    const rotated = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 9, d: 12 },
+      'east',
+    )
+
+    expect(rotated.rooms[0]).toMatchObject({
+      x: 2,
+      y: 4.5,
+      w: 5,
+      h: 3,
+      rotation: 90,
+    })
+
+    const reloaded = layoutPlanToCanvas(rotated).rooms.find(
+      (object) => object.id === 'turning-room',
+    )!
+    expect(reloaded.position).toEqual(room.position)
+    expect(reloaded.size).toEqual(room.size)
+    expect(reloaded.rotation.y).toBe(90)
   })
 
   it('replaces only derived walls and doors during live synchronization', () => {

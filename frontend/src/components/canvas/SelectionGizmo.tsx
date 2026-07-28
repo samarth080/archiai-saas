@@ -1,6 +1,7 @@
 import { useCanvasStore } from '../../store/canvasStore'
 import { displayRoomColor } from './editorPalette'
 import { formatArea, formatDims } from '../../utils/format'
+import { canonicalQuarterTurn } from '../../utils/quarterTurn'
 
 /**
  * A floating top-center pill shown when a room is selected — type, color
@@ -23,10 +24,10 @@ export function SelectionGizmo() {
   const area = room.size.w * room.size.d
 
   const rotate90 = () => {
-    const nextY = ((room.rotation.y + 90) % 360 + 360) % 360
+    const nextY = canonicalQuarterTurn(room.rotation.y + 90)
     updateRoom(
       room.id,
-      { rotation: { ...room.rotation, y: nextY } },
+      { rotation: { x: 0, y: nextY, z: 0 } },
       { action: 'object.rotated', previousValue: room.rotation }
     )
   }

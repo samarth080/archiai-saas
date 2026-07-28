@@ -5,6 +5,7 @@ import {
   componentTypeToRoomType,
 } from '../../store/componentRegistry'
 import { formatArea, formatMeters, roomArea, roomPerimeter } from '../../utils/format'
+import { canonicalQuarterTurn } from '../../utils/quarterTurn'
 
 interface InspectorPropertiesProps {
   room: Room
@@ -27,13 +28,20 @@ export function InspectorProperties({ room }: InspectorPropertiesProps) {
   const duplicateRoom = useCanvasStore((s) => s.duplicateRoom)
 
   const definition = COMPONENT_REGISTRY[room.objectType]
+  const roomQuarterTurnOnly = room.objectType === 'room'
 
   const rotateY = (degrees: number) => {
     if (!definition.canRotate) return
-    const nextY = ((room.rotation.y + degrees) % 360 + 360) % 360
+    const nextY = roomQuarterTurnOnly
+      ? canonicalQuarterTurn(room.rotation.y + degrees)
+      : ((room.rotation.y + degrees) % 360 + 360) % 360
     updateRoom(
       room.id,
-      { rotation: { ...room.rotation, y: nextY } },
+      {
+        rotation: roomQuarterTurnOnly
+          ? { x: 0, y: nextY, z: 0 }
+          : { ...room.rotation, y: nextY },
+      },
       { action: 'object.rotated', previousValue: room.rotation },
     )
   }
@@ -212,16 +220,31 @@ export function InspectorProperties({ room }: InspectorPropertiesProps) {
                   <span className="text-[10px] uppercase text-muted">{axis}</span>
                   <input
                     type="number"
+                    min={roomQuarterTurnOnly && axis === 'y' ? 0 : undefined}
+                    max={roomQuarterTurnOnly && axis === 'y' ? 270 : undefined}
+                    step={roomQuarterTurnOnly && axis === 'y' ? 90 : undefined}
                     aria-label={`Rotation ${axis.toUpperCase()}`}
                     className={FIELD_CLASS}
-                    value={room.rotation[axis]}
-                    disabled={!definition.canRotate}
+                    value={
+                      roomQuarterTurnOnly
+                        ? axis === 'y'
+                          ? canonicalQuarterTurn(room.rotation.y)
+                          : 0
+                        : room.rotation[axis]
+                    }
+                    disabled={
+                      !definition.canRotate || (roomQuarterTurnOnly && axis !== 'y')
+                    }
                     onChange={(event) => {
                       const next = Number(event.target.value)
                       if (!Number.isFinite(next)) return
                       updateRoom(
                         room.id,
-                        { rotation: { ...room.rotation, [axis]: next } },
+                        {
+                          rotation: roomQuarterTurnOnly
+                            ? { x: 0, y: canonicalQuarterTurn(next), z: 0 }
+                            : { ...room.rotation, [axis]: next },
+                        },
                         { action: 'object.rotated', previousValue: room.rotation },
                       )
                     }}
@@ -229,8 +252,13 @@ export function InspectorProperties({ room }: InspectorPropertiesProps) {
                 </label>
               ))}
             </div>
+            {roomQuarterTurnOnly && (
+              <p className="mt-1.5 text-[9px] leading-4 text-muted-light">
+                Rooms stay axis-aligned and rotate in 90-degree steps.
+              </p>
+            )}
             <div className="mt-2 grid grid-cols-3 gap-1" aria-label="Quick rotate Y controls">
-              {[-15, 15, 90].map((degrees) => (
+              {(roomQuarterTurnOnly ? [-90, 90, 180] : [-15, 15, 90]).map((degrees) => (
                 <button
                   key={degrees}
                   type="button"
