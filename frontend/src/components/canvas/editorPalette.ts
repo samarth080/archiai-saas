@@ -20,6 +20,7 @@ export const EDITOR_PALETTE = {
   planFrame: '#D7D7D5',
   selection: '#8069DF',
   selectionSoft: '#A18EF0',
+  invalid: '#C97B70',
   dimension: '#A9AAAC',
   chrome: '#1C1D1E',
   card: '#232425',

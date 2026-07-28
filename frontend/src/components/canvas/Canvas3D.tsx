@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Scene } from './Scene'
 import { RoomMesh } from './RoomMesh'
@@ -7,6 +7,7 @@ import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 import { EDITOR_PALETTE } from './editorPalette'
+import { hardViolationRoomIds, parseMvpQuality } from './qualityModel'
 
 interface Canvas3DProps {
   className?: string
@@ -18,6 +19,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const rooms = useCanvasStore((s) => s.rooms)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const viewMode = useCanvasStore((s) => s.viewMode)
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
   const clipboardMessage = useCanvasStore((s) => s.clipboardMessage)
   const clearClipboardMessage = useCanvasStore((s) => s.clearClipboardMessage)
   const visibleRooms =
@@ -28,6 +30,10 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
             (room.floorLevel ?? 0) === selectedFloor &&
             shouldRenderCanvasObject(room, viewMode),
         )
+  const invalidRoomIds = useMemo(
+    () => hardViolationRoomIds(parseMvpQuality(layoutMetadata)),
+    [layoutMetadata],
+  )
   const camera =
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
@@ -77,7 +83,14 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       >
         <Scene orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         {visibleRooms.map((r) => (
-          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
+          <RoomMesh
+            key={r.id}
+            room={r}
+            orbitRef={orbitRef}
+            readOnly={readOnly}
+            viewMode={viewMode}
+            invalid={invalidRoomIds.has(r.id)}
+          />
         ))}
       </Canvas>
       {viewMode === '3d' && !readOnly && (

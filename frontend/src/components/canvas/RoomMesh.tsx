@@ -26,6 +26,7 @@ interface RoomMeshProps {
   orbitRef: RefObject<OrbitHandle>
   readOnly?: boolean
   viewMode?: CanvasViewMode
+  invalid?: boolean
 }
 
 interface PendingMove {
@@ -47,7 +48,13 @@ function cloneRoomForInteraction(room: Room): Room {
   }
 }
 
-export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: RoomMeshProps) {
+export function RoomMesh({
+  room,
+  orbitRef,
+  readOnly = false,
+  viewMode = '3d',
+  invalid = false,
+}: RoomMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null)
   const pendingMoveRef = useRef<PendingMove | null>(null)
   const selectedId = useCanvasStore((s) => s.selectedId)
@@ -71,6 +78,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     room.objectType,
     isSelected,
     isPlanView,
+    invalid,
   )
 
   const resetMoveState = () => {
@@ -314,7 +322,9 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
     >
       <div
         className={`min-w-max rounded-lg border bg-graphite-800/90 px-2.5 py-1.5 shadow-md backdrop-blur ${
-          isSelected
+          invalid
+            ? 'border-danger/70 text-danger ring-2 ring-danger/20'
+            : isSelected
             ? 'border-ink text-ink ring-2 ring-ink/25'
             : 'border-ink/10 text-muted'
         }`}
@@ -322,7 +332,7 @@ export function RoomMesh({ room, orbitRef, readOnly = false, viewMode = '3d' }: 
         <div className="flex items-center gap-1.5 text-[11px] font-semibold">
           <span
             className={`h-1.5 w-1.5 rounded-full ${
-              isSelected ? 'bg-ink' : 'bg-graphite-400'
+              invalid ? 'bg-danger' : isSelected ? 'bg-ink' : 'bg-graphite-400'
             }`}
           />
           {room.label}

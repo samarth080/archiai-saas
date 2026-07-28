@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseMvpQuality } from './qualityModel'
+import { hardViolationRoomIds, parseMvpQuality } from './qualityModel'
 
 describe('parseMvpQuality', () => {
   it('accepts the canonical full report and rejects the old hard-only snapshot', () => {
@@ -16,5 +16,17 @@ describe('parseMvpQuality', () => {
     expect(parseMvpQuality({
       mvpQuality: { valid: true, hard_violations: [] },
     })).toBeNull()
+  })
+
+  it('collects unique room ids implicated by hard violations', () => {
+    const roomIds = hardViolationRoomIds({
+      hard_violations: [
+        { code: 'overlap', room_ids: ['room-1', 'room-2'], message: 'Rooms overlap.' },
+        { code: 'minimum_size', room_ids: ['room-1'], message: 'Room is too small.' },
+        { code: 'global', room_ids: [], message: 'Global issue.' },
+      ],
+    })
+
+    expect([...roomIds]).toEqual(['room-1', 'room-2'])
   })
 })

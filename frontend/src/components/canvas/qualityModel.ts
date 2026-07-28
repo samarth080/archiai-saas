@@ -60,3 +60,14 @@ export function parseMvpQuality(
     warnings: warnings as QualityWarning[],
   }
 }
+
+/** Room ids implicated by hard validation failures, deduplicated for renderers. */
+export function hardViolationRoomIds(
+  quality: Pick<MvpQualitySnapshot, 'hard_violations'> | null,
+): Set<string> {
+  const roomIds = new Set<string>()
+  for (const violation of quality?.hard_violations ?? []) {
+    for (const roomId of violation.room_ids) roomIds.add(roomId)
+  }
+  return roomIds
+}

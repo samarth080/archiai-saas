@@ -34,6 +34,7 @@ import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 import { EDITOR_PALETTE } from './editorPalette'
 import { PlanDirectionLabels } from './PlanDirectionLabels'
 import { parseOrientation } from './orientationModel'
+import { hardViolationRoomIds, parseMvpQuality } from './qualityModel'
 
 interface Plan2DProps {
   className?: string
@@ -140,6 +141,10 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
         ...visibleRooms.filter((room) => room.id === selectedId),
       ]
     : visibleRooms
+  const invalidRoomIds = useMemo(
+    () => hardViolationRoomIds(parseMvpQuality(layoutMetadata)),
+    [layoutMetadata],
+  )
   const footprint = activeFloor?.footprint
   const orientation = parseOrientation(layoutMetadata)
   const entryDoor = rooms.find(
@@ -544,6 +549,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
             key={room.id}
             room={room}
             selected={selectedId === room.id}
+            invalid={invalidRoomIds.has(room.id)}
             showDimensions={showDimensions}
             fontSize={fontSize}
             handleSize={handleSize}

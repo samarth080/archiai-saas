@@ -136,6 +136,44 @@ describe('Plan2D', () => {
     expect(screen.getByTestId('plan-north-compass')).toBeInTheDocument()
   })
 
+  it('marks only rooms implicated by hard validation failures', () => {
+    const secondRoom = cloneTestRoom({
+      id: 'room-2',
+      label: 'Bedroom',
+      roomType: 'bedroom',
+      position: { x: 8, y: 1.5, z: 4 },
+    })
+    useCanvasStore.getState().loadLayout(layoutWithRooms([cloneTestRoom(), secondRoom]))
+    useCanvasStore.setState({
+      layoutMetadata: {
+        mvpQuality: {
+          valid: false,
+          score: 0,
+          hard_violations: [
+            {
+              code: 'overlap',
+              room_ids: ['room-1'],
+              message: 'Living Room overlaps Bedroom.',
+            },
+          ],
+          warnings: [],
+        },
+      },
+    })
+
+    render(<Plan2D />)
+
+    expect(screen.getByTestId('plan-object-room-1')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByTestId('plan-object-room-1')).toHaveAttribute('data-invalid', 'true')
+    expect(screen.getByTestId('plan-invalid-halo-room-1')).toBeInTheDocument()
+    expect(screen.getByTestId('plan-space-surface-room-1')).toHaveAttribute(
+      'stroke',
+      EDITOR_PALETTE.invalid,
+    )
+    expect(screen.getByTestId('plan-object-room-2')).not.toHaveAttribute('aria-invalid')
+    expect(screen.queryByTestId('plan-invalid-halo-room-2')).not.toBeInTheDocument()
+  })
+
   it('renders every registered component type with a safe SVG treatment', () => {
     const rooms = CANVAS_OBJECT_TYPES.map((type, index) => {
       const definition = COMPONENT_REGISTRY[type]

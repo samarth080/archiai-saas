@@ -2,6 +2,7 @@ import type {
   CanvasObjectType,
   ComponentDefinition,
 } from '../../store/componentRegistry'
+import { EDITOR_PALETTE } from './editorPalette'
 
 export interface RoomVisualTreatment {
   opacity: number
@@ -18,8 +19,9 @@ export function roomVisualTreatment(
   objectType: CanvasObjectType,
   selected: boolean,
   planView: boolean,
+  invalid = false,
 ): RoomVisualTreatment {
-  const opacity =
+  const baseOpacity =
     objectType === 'window'
       ? 0.48
       : objectType === 'door'
@@ -35,14 +37,15 @@ export function roomVisualTreatment(
                 : definition.category === 'space'
                   ? 0.84
                   : 0.78
+  const opacity = invalid ? Math.max(baseOpacity, 0.9) : baseOpacity
 
   return {
     opacity,
     depthWrite: opacity > 0.75,
     roughness: definition.category === 'opening' ? 0.48 : 0.72,
     metalness: definition.category === 'structure' ? 0.07 : 0.02,
-    emissive: selected ? '#ffffff' : '#000000',
-    emissiveIntensity: selected ? 0.12 : 0,
-    edgeColor: selected ? '#ffffff' : '#1E1E1F',
+    emissive: invalid ? EDITOR_PALETTE.invalid : selected ? '#ffffff' : '#000000',
+    emissiveIntensity: invalid ? 0.28 : selected ? 0.12 : 0,
+    edgeColor: invalid ? EDITOR_PALETTE.invalid : selected ? '#ffffff' : '#1E1E1F',
   }
 }
