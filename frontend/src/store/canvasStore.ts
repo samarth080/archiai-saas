@@ -8,6 +8,7 @@ import {
   type ComponentSize,
 } from './componentRegistry'
 import type { InteractionMode, PointerIntent } from './interactionModel'
+import { quarterTurnPlanSize } from '../utils/quarterTurn'
 
 export type { CanvasObjectType } from './componentRegistry'
 export type { InteractionMode, PointerIntent } from './interactionModel'
@@ -342,8 +343,10 @@ function clampToFootprint(
   position: { x: number; y: number; z: number },
   size: Pick<ComponentSize, 'w' | 'd'>,
   footprint?: { x: number; z: number; w: number; d: number },
+  rotationY = 0,
 ) {
   if (!footprint) return position
+  const worldSize = quarterTurnPlanSize(size, rotationY)
   const clampAxis = (center: number, half: number, min: number, span: number) => {
     const lo = min + half
     const hi = min + span - half
@@ -352,20 +355,27 @@ function clampToFootprint(
   }
   return {
     ...position,
-    x: clampAxis(position.x, size.w / 2, footprint.x, footprint.w),
-    z: clampAxis(position.z, size.d / 2, footprint.z, footprint.d),
+    x: clampAxis(position.x, worldSize.w / 2, footprint.x, footprint.w),
+    z: clampAxis(position.z, worldSize.d / 2, footprint.z, footprint.d),
   }
 }
 
 function clampSizeToFootprint(
   size: ComponentSize,
   footprint?: { x: number; z: number; w: number; d: number },
+  rotationY = 0,
 ) {
   if (!footprint || footprint.w <= 0 || footprint.d <= 0) return size
+  const worldSize = quarterTurnPlanSize(size, rotationY)
+  const clampedWorldSize = {
+    w: Math.min(worldSize.w, footprint.w),
+    d: Math.min(worldSize.d, footprint.d),
+  }
+  const localSize = quarterTurnPlanSize(clampedWorldSize, rotationY)
   return {
     ...size,
-    w: Math.min(size.w, footprint.w),
-    d: Math.min(size.d, footprint.d),
+    w: localSize.w,
+    d: localSize.d,
   }
 }
 
@@ -601,6 +611,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           room.size,
         ),
         updatedFootprint,
+        objectType === 'room' ? updated.rotation.y : 0,
       )
 
       const patchPosition = nextPatch.position as Room['position'] | undefined
@@ -617,6 +628,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           nextPosition,
           updated.size,
           updatedFootprint,
+          objectType === 'room' ? updated.rotation.y : 0,
         )
       } else if (nextPatch.size || nextPatch.floorLevel !== undefined || nextPatch.floorId !== undefined) {
         updated = withFloorElevation(updated, state.floors)
@@ -624,6 +636,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           updated.position,
           updated.size,
           updatedFootprint,
+          objectType === 'room' ? updated.rotation.y : 0,
         )
       }
 
@@ -657,6 +670,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const clampedSize = clampSizeToFootprint(
         clampComponentSize(room.objectType, size, room.size),
         footprint,
+        room.objectType === 'room' ? room.rotation.y : 0,
       )
       let nextPosition = position ?? room.position
       nextPosition = applyGridToPosition(nextPosition, state)
@@ -665,6 +679,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         { ...nextPosition, y: elevation + clampedSize.h / 2 },
         clampedSize,
         footprint,
+        room.objectType === 'room' ? room.rotation.y : 0,
       )
       const updated: Room = { ...room, size: clampedSize, position: clampedPosition }
 
@@ -728,6 +743,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         applyGridToPosition(copy.position, state),
         copy.size,
         footprintForLevel(state.floors, copy.floorLevel),
+        copy.objectType === 'room' ? copy.rotation.y : 0,
       )
       return {
         rooms: [...state.rooms, copy],
@@ -808,6 +824,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           applyGridToPosition(pasteCandidate.position, state),
           pasteCandidate.size,
           floor.footprint,
+          pasteCandidate.objectType === 'room' ? pasteCandidate.rotation.y : 0,
         )
         pasted.push(pasteCandidate)
       }
@@ -843,7 +860,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const floor = activeFloorForState(state)
       const newObject = defaultRoomForType(objectType, floor, x, z)
-      newObject.position = clampToFootprint(newObject.position, newObject.size, floor.footprint)
+      newObject.position = clampToFootprint(
+        newObject.position,
+        newObject.size,
+        floor.footprint,
+        newObject.objectType === 'room' ? newObject.rotation.y : 0,
+      )
       return {
         rooms: [...state.rooms, newObject],
         selectedId: newObject.id,

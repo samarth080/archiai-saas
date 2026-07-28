@@ -354,8 +354,13 @@ export function RoomMesh({
   return (
     <>
       {mesh}
-      {isSelected && isPlanView && (
-        <ResizeHandles room={room} orbitRef={orbitRef} readOnly={readOnly} />
+      {isSelected && (isPlanView || room.objectType === 'room') && (
+        <ResizeHandles
+          room={room}
+          orbitRef={orbitRef}
+          readOnly={readOnly}
+          viewMode={viewMode}
+        />
       )}
       {label}
       {dimensions}
