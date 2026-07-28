@@ -87,6 +87,7 @@ export interface CanvasActivityLogEntry {
 export interface CanvasHistorySnapshot {
   rooms: Room[]
   floors: CanvasFloor[]
+  layoutMetadata: Record<string, unknown>
   selectedId: string | null
   selectedFloor: number | 'all'
   floorHeight: number
@@ -277,10 +278,21 @@ function cloneFloors(floors: CanvasFloor[]) {
   return JSON.parse(JSON.stringify(floors)) as CanvasFloor[]
 }
 
-function snapshotOf(state: Pick<CanvasState, 'rooms' | 'floors' | 'selectedId' | 'selectedFloor' | 'floorHeight'>): CanvasHistorySnapshot {
+function snapshotOf(
+  state: Pick<
+    CanvasState,
+    | 'rooms'
+    | 'floors'
+    | 'layoutMetadata'
+    | 'selectedId'
+    | 'selectedFloor'
+    | 'floorHeight'
+  >,
+): CanvasHistorySnapshot {
   return {
     rooms: cloneRooms(state.rooms),
     floors: cloneFloors(state.floors),
+    layoutMetadata: JSON.parse(JSON.stringify(state.layoutMetadata)) as Record<string, unknown>,
     selectedId: state.selectedId,
     selectedFloor: state.selectedFloor,
     floorHeight: state.floorHeight,
@@ -903,6 +915,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: cloneRooms(previous.rooms),
         floors: cloneFloors(previous.floors),
+        layoutMetadata: JSON.parse(JSON.stringify(previous.layoutMetadata)) as Record<string, unknown>,
         selectedId: previous.selectedId,
         selectedFloor: previous.selectedFloor,
         floorHeight: previous.floorHeight,
@@ -919,6 +932,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         rooms: cloneRooms(next.rooms),
         floors: cloneFloors(next.floors),
+        layoutMetadata: JSON.parse(JSON.stringify(next.layoutMetadata)) as Record<string, unknown>,
         selectedId: next.selectedId,
         selectedFloor: next.selectedFloor,
         floorHeight: next.floorHeight,
