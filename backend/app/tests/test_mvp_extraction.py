@@ -217,6 +217,25 @@ def test_normalizer_extracts_explicit_named_rooms_from_hinglish_brief():
     assert _room_count(spec, RoomType.parking) == 1
 
 
+def test_normalizer_recovers_hyphenated_bedroom_and_bathroom_counts():
+    """Regression: live testing showed '2-bedroom' (hyphen, no space) failed to
+    match the explicit-count regex, so the model's undercount (1 bedroom) was
+    never corrected. '2 bedrooms'/'two bedrooms' already worked; only the
+    hyphenated adjective form was missed."""
+    normalized = normalize_extraction(
+        {"rooms": [{"type": "bedroom", "count": 1}]},
+        prompt=(
+            "Design a compact single-floor 2-bedroom house on a 12m x 15m "
+            "east-facing plot with a living room, kitchen beside dining, "
+            "two bathrooms, utility room, and good daylight."
+        ),
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert _room_count(spec, RoomType.bedroom) == 2
+    assert _room_count(spec, RoomType.bathroom) == 2
+
+
 def test_explicit_bedroom_total_drops_model_invented_master():
     normalized = normalize_extraction(
         {

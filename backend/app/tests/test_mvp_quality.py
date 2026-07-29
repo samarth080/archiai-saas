@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
-from app.schemas.requirements import RequirementsSpec, RoomType
+from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType
+from app.services.quality.hard_constraints import validate
 from app.services.quality.scorer import score
 from app.services.quality.soft_rules import adjacency_rule, bath_kitchen_rule
 from app.services.quality.vastu import evaluate_vastu, sector_for_room
@@ -132,6 +133,37 @@ def test_hard_violations_cap_the_report_below_a_valid_quality_score():
 
     assert report.hard_violations
     assert report.score <= 49
+
+
+def test_missing_requested_bedroom_is_a_hard_violation_not_a_soft_warning():
+    """Packet 7.1 — prompt-to-program truth gate: the engine always places every
+    requested room (test_mvp_engine.py pins that), so a shortfall here only
+    happens if requirements were wrong going in, or an edit dropped a room. Either
+    way quality must not call the layout satisfactory."""
+    spec = RequirementsSpec(
+        rooms=[RoomRequest(type=RoomType.bedroom, count=2)]
+    )
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=6, depth_m=6),
+        rooms=[_room("b1", RoomType.bedroom, "Bedroom 1", 0, 0, 3, 3)],
+    )
+
+    violations = validate(plan, spec)
+    assert [v.code for v in violations] == ["missing_requested_room"]
+
+    report = score(plan, spec)
+    assert report.hard_violations
+    assert report.score <= 49
+
+
+def test_validate_without_requirements_stays_geometry_only():
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=6, depth_m=6),
+        rooms=[_room("b1", RoomType.bedroom, "Bedroom 1", 0, 0, 3, 3)],
+    )
+
+    assert validate(plan) == []
+    assert validate(plan, None) == []
 
 
 def test_kitchen_scores_better_in_southeast_than_northeast():
