@@ -932,7 +932,7 @@ export default function ProjectPage() {
             <ToolRail />
             {(viewMode === 'floor_plan' || viewMode === '3d') && <MeasurePanel />}
             {(viewMode === 'floor_plan' || viewMode === '3d') && <SelectionGizmo />}
-            {viewMode === '3d' && (
+            {viewMode !== '3d' && (
               <div className="absolute right-4 top-16 z-10">
                 <ThreeDContextCard />
               </div>
