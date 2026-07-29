@@ -938,11 +938,7 @@ export default function ProjectPage() {
               </div>
             )}
             {!selectedId && viewMode === '3d' && (
-              <ProgramPanel
-                alternatives={alternatives}
-                onPickAlternative={handlePickOption}
-                positionClass="top-[15.5rem] bottom-9"
-              />
+              <ProgramPanel alternatives={alternatives} onPickAlternative={handlePickOption} />
             )}
             {viewMode === '3d' && (
               <InsightsStrip alternatives={alternatives} onPickAlternative={handlePickOption} />
