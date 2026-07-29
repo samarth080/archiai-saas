@@ -255,7 +255,10 @@ export function ToolRail() {
     },
   ]
 
-  const labeled = viewMode === 'floor_plan'
+  // Same labeled panel in every view — icon-only + hover tooltip used to be
+  // 3D/zoning/graph-only, which made tool selection look and behave
+  // differently per view for no functional reason.
+  const labeled = true
   const primaryTools = tools.slice(0, -2)
   const historyTools = tools.slice(-2)
 
