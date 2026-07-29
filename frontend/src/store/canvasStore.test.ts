@@ -538,6 +538,23 @@ describe('drag clamp to footprint', () => {
     expect(room.position.x).toBe(5)
     expect(room.position.z).toBe(3)
   })
+
+  it('clamps a quarter-turned room by its visible footprint', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().updateRoom(
+      'r1',
+      {
+        size: { w: 6, h: 3, d: 4 },
+        rotation: { x: 0, y: 90, z: 0 },
+        position: { x: 100, y: 1.5, z: 100 },
+      },
+      { log: false },
+    )
+
+    const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'r1')!
+    expect(room.position.x).toBe(6)
+    expect(room.position.z).toBe(5)
+  })
 })
 
 describe('resizeRoom', () => {
@@ -563,6 +580,22 @@ describe('resizeRoom', () => {
 
   it('caps oversized dimensions to the active floor footprint', () => {
     loadFootprintFloor()
+    useCanvasStore.getState().resizeRoom('r1', { w: 20, h: 3, d: 12 })
+
+    const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'r1')!
+    expect(room.size.w).toBe(8)
+    expect(room.size.d).toBe(8)
+    expect(room.position.x).toBe(4)
+    expect(room.position.z).toBe(4)
+  })
+
+  it('caps quarter-turned local dimensions against the matching world axes', () => {
+    loadFootprintFloor()
+    useCanvasStore.getState().updateRoom(
+      'r1',
+      { rotation: { x: 0, y: 90, z: 0 } },
+      { log: false },
+    )
     useCanvasStore.getState().resizeRoom('r1', { w: 20, h: 3, d: 12 })
 
     const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'r1')!
@@ -664,6 +697,39 @@ describe('undo/redo', () => {
     expect(useCanvasStore.getState().rooms.length).toBe(start)
     useCanvasStore.getState().redo()
     expect(useCanvasStore.getState().rooms.length).toBe(start + 1)
+  })
+
+  it('restores matching validation metadata with undo and redo', () => {
+    loadFootprintFloor()
+    const validQuality = { valid: true, score: 88, hard_violations: [], warnings: [] }
+    const invalidQuality = {
+      valid: false,
+      score: 42,
+      hard_violations: [
+        { code: 'overlap', room_ids: ['r1'], message: 'Room overlaps another space' },
+      ],
+      warnings: [],
+    }
+    useCanvasStore.setState({
+      layoutMetadata: { pipeline: 'mvp', mvpQuality: validQuality },
+    })
+
+    useCanvasStore.getState().updateRoom('r1', {
+      rotation: { x: 0, y: 90, z: 0 },
+    })
+    useCanvasStore.setState((state) => ({
+      layoutMetadata: { ...state.layoutMetadata, mvpQuality: invalidQuality },
+    }))
+
+    useCanvasStore.getState().undo()
+    let state = useCanvasStore.getState()
+    expect(state.rooms.find((room) => room.id === 'r1')?.rotation.y).toBe(0)
+    expect(state.layoutMetadata.mvpQuality).toEqual(validQuality)
+
+    state.redo()
+    state = useCanvasStore.getState()
+    expect(state.rooms.find((room) => room.id === 'r1')?.rotation.y).toBe(90)
+    expect(state.layoutMetadata.mvpQuality).toEqual(invalidQuality)
   })
 
   it('undo is a no-op with empty history', () => {

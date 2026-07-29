@@ -13,7 +13,7 @@ function typeLabel(roomType: string | undefined): string {
 interface ProgramPanelProps {
   alternatives: LayoutOption[]
   onPickAlternative: (option: LayoutOption) => void
-  /** Vertical placement — overridden when the 3D context card occupies the corner. */
+  /** Vertical placement override; defaults to sit below the top bar. */
   positionClass?: string
 }
 

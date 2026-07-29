@@ -2,9 +2,20 @@ import { useEffect, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { RefObject } from 'react'
 import * as THREE from 'three'
-import { type CanvasHistorySnapshot, type Room, useCanvasStore } from '../../store/canvasStore'
-import { COMPONENT_REGISTRY, clampComponentSize } from '../../store/componentRegistry'
+import {
+  type CanvasHistorySnapshot,
+  type CanvasViewMode,
+  type Room,
+  useCanvasStore,
+} from '../../store/canvasStore'
+import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
 import { isPrimaryPointerButton } from '../../store/interactionModel'
+import {
+  CORNER_RESIZE_HANDLES,
+  cornerHandlePosition,
+  resizeRoomFromWorldCorner,
+  type CornerResizeHandle,
+} from './resizeHandleGeometry'
 
 interface OrbitHandle {
   enabled: boolean
@@ -14,26 +25,15 @@ interface ResizeHandlesProps {
   room: Room
   orbitRef: RefObject<OrbitHandle>
   readOnly?: boolean
+  viewMode?: CanvasViewMode
 }
 
 interface ActiveResize {
   pointerId: number
-  sx: -1 | 1
-  sz: -1 | 1
+  handle: CornerResizeHandle
   startRoom: Room
   historySnapshot: CanvasHistorySnapshot
   plane: THREE.Plane
-}
-
-const HANDLES: { key: string; sx: -1 | 1; sz: -1 | 1 }[] = [
-  { key: 'nw', sx: -1, sz: -1 },
-  { key: 'ne', sx: 1, sz: -1 },
-  { key: 'se', sx: 1, sz: 1 },
-  { key: 'sw', sx: -1, sz: 1 },
-]
-
-function snapDimension(value: number, gridSize: number) {
-  return Math.max(gridSize, Math.round(value / gridSize) * gridSize)
 }
 
 function cloneRoomForResize(room: Room): Room {
@@ -45,12 +45,19 @@ function cloneRoomForResize(room: Room): Room {
   }
 }
 
-export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandlesProps) {
+export function ResizeHandles({
+  room,
+  orbitRef,
+  readOnly = false,
+  viewMode = '3d',
+}: ResizeHandlesProps) {
   const activeResizeRef = useRef<ActiveResize | null>(null)
   const updateRoom = useCanvasStore((s) => s.updateRoom)
   const setInteractionMode = useCanvasStore((s) => s.setInteractionMode)
   const setPointerIntent = useCanvasStore((s) => s.setPointerIntent)
+  const floors = useCanvasStore((s) => s.floors)
   const definition = COMPONENT_REGISTRY[room.objectType]
+  const footprint = floors.find((floor) => floor.level === room.floorLevel)?.footprint
 
   useEffect(() => {
     if (readOnly) return
@@ -70,13 +77,19 @@ export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandle
     }
 
     window.addEventListener('archiai:cancel-canvas-interaction', cancelInteraction)
-    return () => window.removeEventListener('archiai:cancel-canvas-interaction', cancelInteraction)
+    window.addEventListener('blur', cancelInteraction)
+    window.addEventListener('lostpointercapture', cancelInteraction, true)
+    return () => {
+      window.removeEventListener('archiai:cancel-canvas-interaction', cancelInteraction)
+      window.removeEventListener('blur', cancelInteraction)
+      window.removeEventListener('lostpointercapture', cancelInteraction, true)
+    }
   }, [readOnly, room.id, updateRoom, setInteractionMode, setPointerIntent, orbitRef])
 
   if (readOnly || !definition.canResize) return null
 
   const handlePointerDown =
-    (handle: { sx: -1 | 1; sz: -1 | 1 }) => (event: ThreeEvent<PointerEvent>) => {
+    (handle: CornerResizeHandle) => (event: ThreeEvent<PointerEvent>) => {
       if (!isPrimaryPointerButton(event.button)) return
       event.stopPropagation()
 
@@ -86,8 +99,7 @@ export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandle
 
       activeResizeRef.current = {
         pointerId: event.pointerId,
-        sx: handle.sx,
-        sz: handle.sz,
+        handle,
         startRoom: cloneRoomForResize(room),
         historySnapshot: useCanvasStore.getState().createHistorySnapshot(),
         plane,
@@ -109,27 +121,15 @@ export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandle
     const hit = new THREE.Vector3()
     if (!event.ray.intersectPlane(active.plane, hit)) return
 
-    const anchorX = active.startRoom.position.x - (active.sx * active.startRoom.size.w) / 2
-    const anchorZ = active.startRoom.position.z - (active.sz * active.startRoom.size.d) / 2
     const state = useCanvasStore.getState()
-    const rawSize = {
-      w: Math.abs(hit.x - anchorX),
-      h: active.startRoom.size.h,
-      d: Math.abs(hit.z - anchorZ),
-    }
-    const snappedSize = state.snapToGrid
-      ? {
-          ...rawSize,
-          w: snapDimension(rawSize.w, state.gridSize),
-          d: snapDimension(rawSize.d, state.gridSize),
-        }
-      : rawSize
-    const size = clampComponentSize(room.objectType, snappedSize, active.startRoom.size)
-    const position = {
-      x: anchorX + (active.sx * size.w) / 2,
-      y: active.startRoom.position.y,
-      z: anchorZ + (active.sz * size.d) / 2,
-    }
+    const { size, position } = resizeRoomFromWorldCorner({
+      room: active.startRoom,
+      handle: active.handle,
+      point: { x: hit.x, z: hit.z },
+      snapToGrid: state.snapToGrid,
+      gridSize: state.gridSize,
+      footprint,
+    })
 
     updateRoom(room.id, { size, position }, { log: false })
   }
@@ -171,34 +171,51 @@ export function ResizeHandles({ room, orbitRef, readOnly = false }: ResizeHandle
     const target = event.target as EventTarget & {
       releasePointerCapture?: (pointerId: number) => void
     }
-    target.releasePointerCapture?.(event.pointerId)
     activeResizeRef.current = null
+    target.releasePointerCapture?.(event.pointerId)
     setInteractionMode('select')
     setPointerIntent('idle')
   }
 
-  const handleSize = Math.max(0.28, Math.min(0.48, Math.max(room.size.w, room.size.d) * 0.08))
+  const handleSize = Math.max(
+    0.3,
+    Math.min(0.5, Math.max(room.size.w, room.size.d) * 0.08),
+  )
   const y = room.position.y + room.size.h / 2 + 0.08
+  const is3d = viewMode === '3d'
 
   return (
     <group>
-      {HANDLES.map((handle) => (
-        <mesh
-          key={handle.key}
-          position={[
-            room.position.x + (handle.sx * room.size.w) / 2,
-            y,
-            room.position.z + (handle.sz * room.size.d) / 2,
-          ]}
-          onPointerDown={handlePointerDown(handle)}
-          onPointerMove={handlePointerMove}
-          onPointerUp={finishResize}
-          onPointerCancel={finishResize}
-        >
-          <boxGeometry args={[handleSize, 0.08, handleSize]} />
-          <meshBasicMaterial color="#ffffff" depthTest={false} />
-        </mesh>
-      ))}
+      {CORNER_RESIZE_HANDLES.map((handle) => {
+        const position = cornerHandlePosition(room, handle)
+        const handleHeight = is3d ? Math.max(0.14, handleSize * 0.42) : 0.08
+        return (
+          <mesh
+            key={handle.key}
+            name={`resize-handle-${room.id}-${handle.key}`}
+            position={[position.x, y, position.z]}
+            renderOrder={20}
+            onPointerDown={handlePointerDown(handle)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={finishResize}
+            onPointerCancel={finishResize}
+          >
+            <boxGeometry args={[handleSize, handleHeight, handleSize]} />
+            <meshStandardMaterial
+              color="#8069df"
+              emissive="#8069df"
+              emissiveIntensity={is3d ? 0.55 : 0.25}
+              depthTest={false}
+            />
+            <lineSegments raycast={() => null}>
+              <edgesGeometry
+                args={[new THREE.BoxGeometry(handleSize, handleHeight, handleSize)]}
+              />
+              <lineBasicMaterial color="#ffffff" depthTest={false} />
+            </lineSegments>
+          </mesh>
+        )
+      })}
     </group>
   )
 }

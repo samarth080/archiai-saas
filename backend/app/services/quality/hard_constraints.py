@@ -6,17 +6,26 @@ Rect math. Used three ways: engine self-check (Phase 1 tests), the
 must stay fast), and the reject tier of the scorer (Phase 6).
 
 Violation codes (stable API): overlap, out_of_bounds, below_min_size,
-unreachable.
+unreachable, missing_requested_room.
 
 Reachability walks the access graph derived from doors: each door's midpoint
 connects every room whose boundary touches that point (interior doors connect
 two rooms; the front door touches one and adds no edge). The walk starts from
 the entry room, or the first room if no entry exists (hand-built plans).
+
+``requirements`` is optional (Packet 7.1 — prompt-to-program truth gate): the
+fast per-drop editor endpoint has no RequirementsSpec to compare against and
+must keep validating geometry only, so passing it stays opt-in and
+backward-compatible. When supplied (the scorer always has one), a requested
+room type/count entirely missing from the plan is a hard violation, not a
+soft-scored warning — the engine already guarantees exact requested counts,
+so a shortfall here means the source requirements or a later edit dropped a
+requested room, and quality must not call that layout satisfactory.
 """
 from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.layout_plan import Door, LayoutPlan, PlanRoom, Wall
 from app.schemas.quality_report import Violation
-from app.schemas.requirements import RoomType
+from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services.layout_engine.geometry import EPS, Rect
 
 _TOUCH_EPS = 0.05  # door-midpoint to room-boundary tolerance (5 cm)
@@ -48,9 +57,42 @@ def _touches(room: PlanRoom, x: float, y: float) -> bool:
     return on_vertical or on_horizontal
 
 
-def validate(plan: LayoutPlan) -> list[Violation]:
+def _missing_requested_rooms(
+    rooms: list[PlanRoom], requirements: RequirementsSpec
+) -> list[Violation]:
+    generated_counts: dict[RoomType, int] = {}
+    for room in rooms:
+        generated_counts[room.type] = generated_counts.get(room.type, 0) + 1
+
+    requested_counts: dict[RoomType, int] = {}
+    for requested in requirements.rooms:
+        requested_counts[requested.type] = (
+            requested_counts.get(requested.type, 0) + requested.count
+        )
+
+    violations: list[Violation] = []
+    for room_type in sorted(requested_counts, key=lambda t: t.value):
+        shortfall = requested_counts[room_type] - generated_counts.get(room_type, 0)
+        if shortfall > 0:
+            label = room_type.value.replace("_", " ")
+            violations.append(Violation(
+                code="missing_requested_room",
+                room_ids=[],
+                message=(
+                    f"Requested {requested_counts[room_type]} {label}(s) but the "
+                    f"layout only has {generated_counts.get(room_type, 0)}"
+                ),
+            ))
+    return violations
+
+
+def validate(
+    plan: LayoutPlan, requirements: RequirementsSpec | None = None
+) -> list[Violation]:
     violations: list[Violation] = []
     rooms = plan.rooms
+    if requirements is not None:
+        violations.extend(_missing_requested_rooms(rooms, requirements))
     if not rooms:
         return violations
 

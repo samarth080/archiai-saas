@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useMvpQualityValidation } from './useMvpQualityValidation'
-import { validateMvpLayout } from '../services/mvp.service'
+import { validateAndSyncMvpLayout } from '../services/mvp.service'
 import { layoutPlanToCanvas } from '../services/mvpLayoutAdapter'
 import { useCanvasStore } from '../store/canvasStore'
 import type {
@@ -12,7 +12,7 @@ import type {
 } from '../types/contracts'
 
 vi.mock('../services/mvp.service', () => ({
-  validateMvpLayout: vi.fn(),
+  validateAndSyncMvpLayout: vi.fn(),
 }))
 
 const requirements: RequirementsSpec = {
@@ -60,6 +60,29 @@ const refreshedQuality: MvpQualitySnapshot = {
   warnings: [],
 }
 
+const refreshedLayout: LayoutPlan = {
+  ...layout,
+  rooms: [{ ...layout.rooms[0], x: 5 }],
+  walls: [
+    {
+      id: 'wall-synced',
+      x1: 9,
+      y1: 0,
+      x2: 9,
+      y2: 4,
+      thickness: 0.115,
+    },
+  ],
+  doors: [
+    {
+      id: 'door-synced',
+      wall_ref: 'wall-synced',
+      offset: 1,
+      width: 0.9,
+    },
+  ],
+}
+
 async function advance(ms: number) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms)
@@ -68,8 +91,11 @@ async function advance(ms: number) {
 
 beforeEach(() => {
   vi.useFakeTimers()
-  vi.mocked(validateMvpLayout).mockReset()
-  vi.mocked(validateMvpLayout).mockResolvedValue(refreshedQuality)
+  vi.mocked(validateAndSyncMvpLayout).mockReset()
+  vi.mocked(validateAndSyncMvpLayout).mockResolvedValue({
+    layout: refreshedLayout,
+    quality: refreshedQuality,
+  })
   useCanvasStore.getState().loadLayout(
     layoutPlanToCanvas(layout, {
       prompt: 'vastu bedroom house',
@@ -90,7 +116,7 @@ describe('useMvpQualityValidation', () => {
 
     await advance(100)
 
-    expect(validateMvpLayout).not.toHaveBeenCalled()
+    expect(validateAndSyncMvpLayout).not.toHaveBeenCalled()
   })
 
   it('debounces room edits and publishes the latest full quality report', async () => {
@@ -103,16 +129,28 @@ describe('useMvpQualityValidation', () => {
     })
 
     await advance(99)
-    expect(validateMvpLayout).not.toHaveBeenCalled()
+    expect(validateAndSyncMvpLayout).not.toHaveBeenCalled()
 
     await advance(1)
-    expect(validateMvpLayout).toHaveBeenCalledWith(
+    expect(validateAndSyncMvpLayout).toHaveBeenCalledWith(
       expect.objectContaining({
         rooms: [expect.objectContaining({ id: 'room-1', x: 5, y: 0 })],
       }),
       { requirements, includeVastu: true },
     )
-    expect(useCanvasStore.getState().layoutMetadata.mvpQuality).toEqual(refreshedQuality)
+    const synced = useCanvasStore.getState()
+    expect(synced.layoutMetadata.mvpQuality).toEqual(refreshedQuality)
+    expect(synced.rooms.find((object) => object.id === 'wall-synced')).toBeDefined()
+    expect(synced.rooms.find((object) => object.id === 'door-synced')).toMatchObject({
+      hostWallId: 'wall-synced',
+    })
+    expect(synced.rooms.find((object) => object.id === 'room-1')?.position.x).toBe(7)
+    expect(synced.past).toHaveLength(1)
+    expect(synced.activityLog).toHaveLength(1)
+    expect(synced.saveStatus).toBe('unsaved')
+
+    await advance(100)
+    expect(validateAndSyncMvpLayout).toHaveBeenCalledTimes(1)
   })
 
   it('stays inactive for legacy canvas layouts', async () => {
@@ -126,6 +164,6 @@ describe('useMvpQualityValidation', () => {
     })
     await advance(100)
 
-    expect(validateMvpLayout).not.toHaveBeenCalled()
+    expect(validateAndSyncMvpLayout).not.toHaveBeenCalled()
   })
 })

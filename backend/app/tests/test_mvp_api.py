@@ -317,6 +317,7 @@ async def test_validate_full_returns_weighted_quality_without_changing_fast_defa
     assert full.json()["valid"] is True
     assert 0 <= full.json()["score"] <= 100
     assert isinstance(full.json()["warnings"], list)
+    assert "layout" not in full.json()
 
 
 async def test_full_validation_rebuilds_derived_geometry_but_fast_path_does_not(
@@ -347,6 +348,47 @@ async def test_full_validation_rebuilds_derived_geometry_but_fast_path_does_not(
     assert full.status_code == 200
     assert full.json()["valid"] is True
     assert full.json()["hard_violations"] == []
+
+
+async def test_full_validation_can_return_the_exact_rebuilt_editor_layout(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-derived-sync@example.com")
+    spec = _spec("3bhk_adjacencies")
+    plan = generate_plan(RequirementsSpec.model_validate(spec)).model_dump(mode="json")
+    plan["walls"] = []
+    plan["doors"] = []
+
+    response = await client.post(
+        "/api/validate?full=true&includeLayout=true",
+        json={"layout": plan, "requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["quality"]["valid"] is True
+    assert payload["layout"]["rooms"] == plan["rooms"]
+    assert payload["layout"]["walls"]
+    assert payload["layout"]["doors"]
+    wall_ids = {wall["id"] for wall in payload["layout"]["walls"]}
+    assert all(door["wall_ref"] in wall_ids for door in payload["layout"]["doors"])
+
+
+async def test_validation_layout_sync_requires_full_scoring(client: AsyncClient):
+    token = await _register(client, "mvp-derived-sync-fast@example.com")
+    plan = generate_plan(
+        RequirementsSpec.model_validate(_spec())
+    ).model_dump(mode="json")
+
+    response = await client.post(
+        "/api/validate?includeLayout=true",
+        json={"layout": plan},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 422
+    assert "full quality" in response.json()["error"].lower()
 
 
 async def test_validate_full_requires_requirements(client: AsyncClient):

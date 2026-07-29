@@ -6,9 +6,9 @@ import type {
   LayoutPlan,
   MvpQualitySnapshot,
   RequirementsSpec,
-  Rotation,
   RoomType,
 } from '../types/contracts'
+import { canonicalQuarterTurn, quarterTurnSwapsAxes } from '../utils/quarterTurn'
 
 const WALL_HEIGHT_M = 3
 const FALLBACK_COLOR = '#94a3b8'
@@ -62,11 +62,6 @@ function boundedCenter(origin: number, span: number, plotSpan: number) {
 
 function isCanonicalRoomType(value: unknown): value is RoomType {
   return typeof value === 'string' && CANONICAL_ROOM_TYPES.has(value as RoomType)
-}
-
-function canonicalRotation(value: number): Rotation {
-  const normalized = ((Math.round(value / 90) * 90) % 360 + 360) % 360
-  return normalized as Rotation
 }
 
 function wallObject(layout: LayoutPlan, index: number): Room {
@@ -131,31 +126,57 @@ function doorObject(layout: LayoutPlan, index: number): Room | null {
   }
 }
 
-export function layoutPlanToCanvas(
-  layout: LayoutPlan,
-  options: AdapterOptions = {},
-): CanvasLayout {
-  const roomObjects: Room[] = layout.rooms.map((room) => ({
-    id: room.id,
-    label: room.label,
-    roomType: room.type,
-    objectType: 'room',
-    floorId: 'floor_0',
-    floorLevel: 0,
-    position: {
-      x: boundedCenter(room.x, room.w, layout.plot.width_m),
-      y: WALL_HEIGHT_M / 2,
-      z: boundedCenter(room.y, room.h, layout.plot.depth_m),
-    },
-    size: { w: room.w, h: WALL_HEIGHT_M, d: room.h },
-    rotation: { x: 0, y: room.rotation, z: 0 },
-    color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
-  }))
+export function layoutPlanDerivedObjects(layout: LayoutPlan): Room[] {
   const wallObjects = layout.walls.map((_, index) => wallObject(layout, index))
   const doorObjects = layout.doors
     .map((_, index) => doorObject(layout, index))
     .filter((door): door is Room => door !== null)
-  const objects = [...roomObjects, ...wallObjects, ...doorObjects]
+  return [...wallObjects, ...doorObjects]
+}
+
+/**
+ * Canonical MVP walls and hosted doors are regenerated from room rectangles.
+ * Preserve every editable room and non-canonical component while replacing
+ * only those derived objects with the server's scored geometry.
+ */
+export function replaceDerivedCanvasObjects(
+  objects: Room[],
+  layout: LayoutPlan,
+): Room[] {
+  const preserved = objects.filter(
+    (object) => object.objectType !== 'wall' && object.objectType !== 'door',
+  )
+  return [...preserved, ...layoutPlanDerivedObjects(layout)]
+}
+
+export function layoutPlanToCanvas(
+  layout: LayoutPlan,
+  options: AdapterOptions = {},
+): CanvasLayout {
+  const roomObjects: Room[] = layout.rooms.map((room) => {
+    const swapsAxes = quarterTurnSwapsAxes(room.rotation)
+    return {
+      id: room.id,
+      label: room.label,
+      roomType: room.type,
+      objectType: 'room',
+      floorId: 'floor_0',
+      floorLevel: 0,
+      position: {
+        x: boundedCenter(room.x, room.w, layout.plot.width_m),
+        y: WALL_HEIGHT_M / 2,
+        z: boundedCenter(room.y, room.h, layout.plot.depth_m),
+      },
+      size: {
+        w: swapsAxes ? room.h : room.w,
+        h: WALL_HEIGHT_M,
+        d: swapsAxes ? room.w : room.h,
+      },
+      rotation: { x: 0, y: room.rotation, z: 0 },
+      color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
+    }
+  })
+  const objects = [...roomObjects, ...layoutPlanDerivedObjects(layout)]
   const footprint = {
     x: 0,
     z: 0,
@@ -217,16 +238,22 @@ export function canvasObjectsToLayoutPlan(
     .filter(
       (object) => object.objectType === 'room' && isCanonicalRoomType(object.roomType),
     )
-    .map((room) => ({
-      id: room.id,
-      type: room.roomType as RoomType,
-      label: room.label,
-      x: round3(room.position.x - room.size.w / 2 - footprint.x),
-      y: round3(room.position.z - room.size.d / 2 - footprint.z),
-      w: round3(room.size.w),
-      h: round3(room.size.d),
-      rotation: canonicalRotation(room.rotation.y),
-    }))
+    .map((room) => {
+      const rotation = canonicalQuarterTurn(room.rotation.y)
+      const swapsAxes = quarterTurnSwapsAxes(rotation)
+      const worldWidth = swapsAxes ? room.size.d : room.size.w
+      const worldDepth = swapsAxes ? room.size.w : room.size.d
+      return {
+        id: room.id,
+        type: room.roomType as RoomType,
+        label: room.label,
+        x: round3(room.position.x - worldWidth / 2 - footprint.x),
+        y: round3(room.position.z - worldDepth / 2 - footprint.z),
+        w: round3(worldWidth),
+        h: round3(worldDepth),
+        rotation,
+      }
+    })
 
   const wallObjects = objects.filter((object) => object.objectType === 'wall')
   const walls = wallObjects.map((wall) => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Scene } from './Scene'
 import { RoomMesh } from './RoomMesh'
@@ -7,6 +7,7 @@ import { canClearSelectionFromEmptyCanvas } from '../../store/interactionModel'
 import { useCanvasKeyboardShortcuts } from './useCanvasKeyboardShortcuts'
 import { shouldRenderCanvasObject } from './canvasObjectVisibility'
 import { EDITOR_PALETTE } from './editorPalette'
+import { hardViolationRoomIds, parseMvpQuality } from './qualityModel'
 
 interface Canvas3DProps {
   className?: string
@@ -18,6 +19,7 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
   const rooms = useCanvasStore((s) => s.rooms)
   const selectedFloor = useCanvasStore((s) => s.selectedFloor)
   const viewMode = useCanvasStore((s) => s.viewMode)
+  const layoutMetadata = useCanvasStore((s) => s.layoutMetadata)
   const clipboardMessage = useCanvasStore((s) => s.clipboardMessage)
   const clearClipboardMessage = useCanvasStore((s) => s.clearClipboardMessage)
   const visibleRooms =
@@ -28,6 +30,10 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
             (room.floorLevel ?? 0) === selectedFloor &&
             shouldRenderCanvasObject(room, viewMode),
         )
+  const invalidRoomIds = useMemo(
+    () => hardViolationRoomIds(parseMvpQuality(layoutMetadata)),
+    [layoutMetadata],
+  )
   const camera =
     viewMode === '3d'
       ? { position: [10, 12, 10] as [number, number, number], fov: 50 }
@@ -77,14 +83,21 @@ export function Canvas3D({ className, readOnly = false }: Canvas3DProps) {
       >
         <Scene orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
         {visibleRooms.map((r) => (
-          <RoomMesh key={r.id} room={r} orbitRef={orbitRef} readOnly={readOnly} viewMode={viewMode} />
+          <RoomMesh
+            key={r.id}
+            room={r}
+            orbitRef={orbitRef}
+            readOnly={readOnly}
+            viewMode={viewMode}
+            invalid={invalidRoomIds.has(r.id)}
+          />
         ))}
       </Canvas>
       {viewMode === '3d' && !readOnly && (
         <div className="pointer-events-none absolute bottom-36 left-4 max-w-xs rounded-lg border border-ink/10 bg-graphite-800/90 px-3 py-2 text-[11px] font-medium text-muted shadow-lg backdrop-blur">
           Left click selects · drag selected moves · right drag pans · middle drag
           orbits. Room blocks can be molded to fit irregular footprints — use the
-          corner handles in 2D Plan or the W/D/H fields in the panel.
+          purple corner handles in 3D Edit or the W/D/H fields in the panel.
         </div>
       )}
       {clipboardMessage && (

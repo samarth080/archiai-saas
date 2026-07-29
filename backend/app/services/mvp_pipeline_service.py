@@ -81,12 +81,29 @@ def quality_snapshot(
     *,
     include_vastu: bool = False,
 ) -> MvpQualitySnapshot:
+    _, quality = quality_snapshot_with_layout(
+        plan,
+        requirements,
+        include_vastu=include_vastu,
+    )
+    return quality
+
+
+def quality_snapshot_with_layout(
+    plan: LayoutPlan,
+    requirements: RequirementsSpec,
+    *,
+    include_vastu: bool = False,
+) -> tuple[LayoutPlan, MvpQualitySnapshot]:
+    """Return the exact rebuilt plan used for the accompanying quality report."""
+
     scored_plan = rebuild_derived_geometry(plan, requirements)
     report = score_quality(scored_plan, requirements, include_vastu=include_vastu)
-    return MvpQualitySnapshot(
+    quality = MvpQualitySnapshot(
         valid=not report.hard_violations,
         **report.model_dump(mode="python"),
     )
+    return scored_plan, quality
 
 
 async def save_mvp_snapshot(

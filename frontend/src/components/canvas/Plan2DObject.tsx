@@ -9,6 +9,7 @@ import { displayRoomColor } from './editorPalette'
 interface Plan2DObjectProps {
   room: Room
   selected: boolean
+  invalid: boolean
   showDimensions: boolean
   fontSize: number
   handleSize: number
@@ -48,6 +49,7 @@ function handleKeyboardSelect(event: KeyboardEvent<SVGGElement>, select: () => v
 export function Plan2DObject({
   room,
   selected,
+  invalid,
   showDimensions,
   fontSize,
   handleSize,
@@ -82,12 +84,14 @@ export function Plan2DObject({
   const showObjectDimensions = definition.canResize && showDimensions
   const dimensionOffset = Math.max(fontSize * 1.5, handleSize * 1.4)
   const rotation = Number.isFinite(room.rotation.y) ? room.rotation.y : 0
-  const stroke = selected
-    ? EDITOR_PALETTE.selectionSoft
-    : isOpening
-      ? '#A9AAAC'
-      : '#D1D1CF'
-  const strokeWidth = selected
+  const stroke = invalid
+    ? EDITOR_PALETTE.invalid
+    : selected
+      ? EDITOR_PALETTE.selectionSoft
+      : isOpening
+        ? '#A9AAAC'
+        : '#D1D1CF'
+  const strokeWidth = selected || invalid
     ? Math.max(0.06, fontSize * 0.15)
     : Math.max(0.022, fontSize * 0.06)
   const fillOpacity = isOpenSpace
@@ -114,8 +118,10 @@ export function Plan2DObject({
       role={definition.canSelect ? 'button' : undefined}
       tabIndex={!readOnly && definition.canSelect ? 0 : undefined}
       aria-label={`${room.label}, ${definition.label}`}
+      aria-invalid={invalid || undefined}
       data-testid={`plan-object-${room.id}`}
       data-object-type={room.objectType}
+      data-invalid={invalid ? 'true' : undefined}
       transform={objectTransform}
       style={{
         cursor: readOnly ? 'default' : selected && definition.canMove ? 'grab' : 'pointer',
@@ -151,6 +157,24 @@ export function Plan2DObject({
           stroke={EDITOR_PALETTE.selection}
           strokeOpacity="0.82"
           strokeWidth={Math.max(0.08, fontSize * 0.22)}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      )}
+
+      {invalid && (
+        <rect
+          data-testid={`plan-invalid-halo-${room.id}`}
+          x={-room.size.w / 2 - handleSize * 0.1}
+          y={-room.size.d / 2 - handleSize * 0.1}
+          width={room.size.w + handleSize * 0.2}
+          height={room.size.d + handleSize * 0.2}
+          rx={surfaceRadius + handleSize * 0.08}
+          fill="none"
+          stroke={EDITOR_PALETTE.invalid}
+          strokeOpacity="0.95"
+          strokeWidth={Math.max(0.07, fontSize * 0.18)}
+          strokeDasharray={`${fontSize * 0.5} ${fontSize * 0.24}`}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />

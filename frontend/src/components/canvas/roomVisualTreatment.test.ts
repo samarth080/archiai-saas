@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { COMPONENT_REGISTRY } from '../../store/componentRegistry'
+import { EDITOR_PALETTE } from './editorPalette'
 import { roomVisualTreatment } from './roomVisualTreatment'
 
 describe('roomVisualTreatment', () => {
@@ -27,5 +28,19 @@ describe('roomVisualTreatment', () => {
     expect(window.roughness).toBeLessThan(
       roomVisualTreatment(COMPONENT_REGISTRY.room, 'room', false, false).roughness,
     )
+  })
+
+  it('uses the shared danger treatment for rooms with hard violations', () => {
+    const invalid = roomVisualTreatment(
+      COMPONENT_REGISTRY.room,
+      'room',
+      true,
+      false,
+      true,
+    )
+
+    expect(invalid.emissive).toBe(EDITOR_PALETTE.invalid)
+    expect(invalid.emissiveIntensity).toBeGreaterThan(0.2)
+    expect(invalid.edgeColor).toBe(EDITOR_PALETTE.invalid)
   })
 })

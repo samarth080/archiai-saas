@@ -317,8 +317,10 @@ def _parse_count_token(value: str) -> int:
 
 
 def _explicit_count(prompt: str, noun_pattern: str) -> int | None:
+    # [\s-]+ (not \s+): a brief count-adjective like "2-bedroom" is hyphenated,
+    # not space-separated, and must match the same as "2 bedroom".
     match = re.search(
-        rf"\b(?P<count>{_COUNT_TOKEN})\s+(?:{noun_pattern})\b",
+        rf"\b(?P<count>{_COUNT_TOKEN})[\s-]+(?:{noun_pattern})\b",
         prompt,
         re.IGNORECASE,
     )

@@ -1,6 +1,6 @@
 """Phase 4 API orchestration for extraction, generation, validation, and save."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.schemas.mvp import (
     GenerateMvpResponse,
     HardQualitySnapshot,
     MvpQualitySnapshot,
+    MvpValidationSyncResponse,
     MvpVersionCreateRequest,
     MvpVersionResponse,
     ValidateMvpRequest,
@@ -24,11 +25,7 @@ from app.services.entitlement_service import (
     enforce_and_increment_usage,
 )
 from app.services.extraction import ExtractionFailed, extract_requirements
-from app.services.layout_engine import (
-    DoesNotFitError,
-    generate_plan,
-    rebuild_derived_geometry,
-)
+from app.services.layout_engine import DoesNotFitError, generate_plan
 from app.services.llm_client import (
     LLMError,
     LLMInvalidOutput,
@@ -39,6 +36,7 @@ from app.services.mvp_pipeline_service import (
     get_mvp_version,
     hard_quality_snapshot,
     quality_snapshot,
+    quality_snapshot_with_layout,
     save_mvp_snapshot,
     understood_summary,
     version_response,
@@ -206,25 +204,36 @@ async def generate_mvp_layout(
 
 @router.post(
     "/validate",
-    response_model=MvpQualitySnapshot | HardQualitySnapshot,
+    response_model=(
+        MvpValidationSyncResponse | MvpQualitySnapshot | HardQualitySnapshot
+    ),
 )
 async def validate_mvp_layout(
     request: ValidateMvpRequest,
     full: bool = False,
     vastu: bool = False,
+    include_layout: bool = Query(default=False, alias="includeLayout"),
     _user_id: str = Depends(_current_user_id),
-) -> MvpQualitySnapshot | HardQualitySnapshot:
+) -> MvpValidationSyncResponse | MvpQualitySnapshot | HardQualitySnapshot:
+    if include_layout and not full:
+        raise HTTPException(
+            status_code=422,
+            detail="includeLayout requires full quality scoring",
+        )
     if full:
         if request.requirements is None:
             raise HTTPException(
                 status_code=422,
                 detail="Requirements are required for full quality scoring",
             )
-        return quality_snapshot(
+        layout, quality = quality_snapshot_with_layout(
             request.layout,
             request.requirements,
             include_vastu=vastu,
         )
+        if include_layout:
+            return MvpValidationSyncResponse(layout=layout, quality=quality)
+        return quality
     return hard_quality_snapshot(request.layout)
 
 
@@ -239,9 +248,8 @@ async def save_mvp_version(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> MvpVersionResponse:
-    layout = rebuild_derived_geometry(request.layout, request.requirements)
-    quality = quality_snapshot(
-        layout,
+    layout, quality = quality_snapshot_with_layout(
+        request.layout,
         request.requirements,
         include_vastu=is_vastu_requested(request.prompt or ""),
     )

@@ -42,6 +42,15 @@ class MvpQualitySnapshot(QualityReport):
     valid: bool
 
 
+class MvpValidationSyncResponse(BaseModel):
+    """Full quality plus server-rebuilt derived geometry for live editors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    layout: LayoutPlan
+    quality: MvpQualitySnapshot
+
+
 class GenerateMvpRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

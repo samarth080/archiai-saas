@@ -29,7 +29,7 @@ def score(
 ) -> QualityReport:
     """Return a deterministic 0..100 report; invalid plans stay visibly invalid."""
 
-    violations = validate(plan)
+    violations = validate(plan, requirements)
     results = evaluate_generic_rules(plan, requirements)
     if include_vastu:
         vastu = evaluate_vastu(plan)
