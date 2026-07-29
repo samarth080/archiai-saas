@@ -100,9 +100,10 @@ export function DimensionAnnotations({ room, emphasized }: DimensionAnnotationsP
         </span>
       </Html>
 
-      {/* Area badge — selected room only; sits above the room label */}
+      {/* Area badge — selected room only; sits above the room label with
+          enough clearance that the two don't overlap at typical zoom. */}
       {emphasized && (
-        <Html position={[x, y + h / 2 + 0.65, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
+        <Html position={[x, y + h / 2 + 0.95, z]} center zIndexRange={[1, 0]} style={{ pointerEvents: 'none' }}>
           <span className="rounded-md border border-ink/15 bg-graphite-800/95 px-2 py-1 font-mono text-[11px] font-semibold tabular-nums text-ink shadow-sm">
             {formatDims(w, d)} · {formatArea(w * d)}
           </span>

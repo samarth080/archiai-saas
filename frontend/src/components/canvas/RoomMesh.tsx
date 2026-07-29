@@ -337,7 +337,7 @@ export function RoomMesh({
           />
           {room.label}
         </div>
-        {isSpace && (
+        {isSpace && !isSelected && (
           <div className="mt-0.5 pl-3 text-[9px] font-medium text-muted-light">
             {formatArea(room.size.w * room.size.d)}
           </div>
