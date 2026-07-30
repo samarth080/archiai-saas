@@ -683,6 +683,13 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** backend `pytest app/tests -ra` — 707 passed, 3 expected live-LM skips, 0 failed. Frontend `npm test -- --run` — 271 passed / 54 files, 0 failed. Live check against running LM Studio (`qwen/qwen3.5-9b`) on the exact failed prompt: 2 bedrooms, 2 bathrooms, plot 12×15 m, east-facing — correct. Commit `4c9ad6f` on `mvp/phase7-two-way-sync`, not merged/pushed.
 - [ ] **Deferred:** Packets 7.2–7.9 / `archiai_engine_generalization_workflow.md` (SpaceCatalog, ProgramGraph-as-canonical-input, archetypes, circulation, candidate search, rule packs, multi-floor) — none started.
 
+### Phase 7 close-out — editor UI fixes and manual 3D resize QA
+
+- [x] Four editor UI fixes, each its own commit: 3D context card no longer shows while already in 3D Edit (`b4fcb9e`); tool rail unified to one labeled style across all views instead of two different looks (`a15d964`); dimension-label overlap on a selected room fixed by removing a duplicate area readout and widening label spacing (`be64b77`); Space Program panel's leftover gap after the context-card fix closed by dropping its stale position override (`6abf93f`). Each verified with `tsc --noEmit`, full frontend suite (271/54, 0 failed), and `npm run build`.
+- [x] **Manual 3D resize-grip QA** (closes the item Phase 7 left open): verified via direct geometry reads on the `trial` project — 3 of 4 corner handles confirmed as genuine resizes (not moves) across two rooms, including one footprint-clamped case; the 4th handle's hitbox couldn't be reliably isolated from neighboring rooms in this remote session, though all 4 share one function differing only by a sign constant. Undo restored exact bit-for-bit values across 6+ attempts; Redo re-applied a resize bit-for-bit. Save + full page reload preserved resized geometry to full float precision. Incidentally confirmed the Packet 7.1 `missing_requested_room` check firing correctly on this project's own pre-existing 2-bedroom-requested/1-bedroom-saved data. Test edits were reverted and `trial` re-saved to its original state.
+- [x] Full suites re-verified after this pass: backend 707 passed / 3 expected skips / 0 failed; frontend 271 passed / 54 files / 0 failed.
+- [x] **Review gate: CLOSED.** Phase 7 complete. Not merged to `main`; pushed only to `origin/mvp/phase7-two-way-sync`.
+
 ---
 
 ## Development Rules
