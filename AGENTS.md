@@ -690,6 +690,15 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Full suites re-verified after this pass: backend 707 passed / 3 expected skips / 0 failed; frontend 271 passed / 54 files / 0 failed.
 - [x] **Review gate: CLOSED.** Phase 7 complete. Not merged to `main`; pushed only to `origin/mvp/phase7-two-way-sync`.
 
+### Packet 7.2 — Engine Benchmark and AVOID-adjacency finding (`packet7.2/engine-benchmark-audit`)
+
+- [x] Real (not estimated) baseline: `backend/scripts/benchmark_acceptance_prompts.py` runs the 6 acceptance prompts through the production `parse_prompt -> generate_layout` path. Scores 51-87, deterministic (fixed a false non-determinism reading caused by comparing fresh per-run UUIDs instead of geometry), AVOID-adjacency violations in 5/6 prompts.
+- [x] Root cause: `_order_zone_rooms`/`_chain_by_adjacency` only consider must/should pairs; AVOID is a post-placement score penalty only, never a placement input.
+- [x] Attempted a bounded fix (extend the MUST-pair cross-row repair to AVOID pairs too); live-tested, found it doesn't work when the conflicting type has 2+ instances (moving one still leaves another adjacent); also found the fix targeted `_graph_pack_rooms`, a candidate that never even runs without MUST pairs. Reverted cleanly rather than ship a no-op.
+- [x] Full finding written into `archiai_engine_generalization_workflow.md` §0.4 so the next attempt doesn't redo this diagnosis.
+- [x] Backend suite unchanged: 707 passed, 3 expected skips, 0 failed. No engine code changed.
+- [ ] No code fix shipped for the AVOID-adjacency gap in this packet — audit-only by design; a real fix needs Phase 4 (circulation) or Phase 5 (search), not a patch.
+
 ---
 
 ## Development Rules
