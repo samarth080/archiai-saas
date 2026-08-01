@@ -1,0 +1,227 @@
+"""Phase 1 — SpaceCatalog: one free-string-keyed registry replacing the
+12-value residential `RoomType` enum as the engine's vocabulary ground truth.
+
+Merges the three sizing/vocab sources the audit (`scripts/audit_catalog.py`)
+found disagreeing: `mvp_defaults.ROOM_SIZING` (12 residential types, has real
+min_w/min_d but a narrow, conflicting area table), `parser/data/size_rules
+.BASE_SIZES` (37 free-string types incl. non-residential, area only), and the
+zone/wet/daylight classification frozensets already living in
+`planning/program_graph.py` / `planning/program_validation.py`.
+
+Resolution rule (stated once, applied uniformly — see the audit script for
+the full conflict table): BASE_SIZES is authoritative for
+`preferred_area_m2` (broader vocabulary, actively maintained by the
+pattern-data pipeline); ROOM_SIZING is authoritative for `min_w`/`min_d`
+where a residential type has both. A BASE_SIZES-only type with no ROOM_SIZING
+minimum gets one derived from its area (assuming a near-square minimum at
+60% of preferred area, floored at 1.2 m) rather than left undefined.
+
+This module owns classification going forward; `program_graph.py`'s
+`_classify_*` helpers keep their own copies for now (Phase 1.2 wires the
+delegation) so this slice stays purely additive — nothing existing changes.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, replace
+from difflib import get_close_matches
+
+from app.config.mvp_defaults import ROOM_SIZING
+from app.services.parser.data.size_rules import BASE_SIZES
+
+# RoomType enum key -> the free-string catalog key it's an alias of, only
+# where the names differ (most match exactly: bedroom, bathroom, kitchen...).
+_ENUM_ALIAS_OF = {
+    "dining": "dining_room",
+    "entry": "foyer",
+    "utility": "laundry",
+    "parking": "garage",
+}
+
+_CIRCULATION_TYPES = frozenset({
+    "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "passage", "passageway", "landing", "atrium",
+})
+_SERVICE_TYPES = frozenset({
+    "bathroom", "ensuite", "toilet", "washroom", "wc", "laundry", "storage",
+    "utility", "garage", "mudroom", "pantry", "mechanical", "plant", "shaft",
+    "store_room", "stock_room",
+})
+_WET_TYPES = frozenset({
+    "bathroom", "ensuite", "toilet", "washroom", "wc", "kitchen", "kitchenette",
+    "laundry", "utility", "pantry",
+})
+_DAYLIGHT_TYPES = frozenset({
+    "bedroom", "master_bedroom", "kids_room", "living_room", "open_plan_living",
+    "office", "classroom", "consultation_room", "workspace", "dining_room",
+    "study", "reception", "waiting_room", "meeting_room",
+})
+_PUBLIC_TYPES = frozenset({
+    "living_room", "open_plan_living", "kitchen", "dining_room", "dining_area",
+    "foyer", "reception", "waiting_room", "retail_display", "checkout", "bar",
+    "sales_floor", "classroom", "lobby",
+})
+_PRIVATE_TYPES = frozenset({
+    "master_bedroom", "bedroom", "kids_room", "ensuite", "office",
+    "consultation_room", "workspace", "meeting_room", "pooja_room",
+    "meditation_room", "study",
+})
+_OUTDOOR_TYPES = frozenset({"garden", "courtyard", "yard"})
+_SEMI_OUTDOOR_TYPES = frozenset({"balcony", "terrace", "porch", "veranda"})
+
+_MIN_DIMENSION_FLOOR_M = 1.2
+_MIN_AREA_FRACTION_OF_PREFERRED = 0.6
+_DEFAULT_MAX_ASPECT = 2.5
+
+
+@dataclass(frozen=True)
+class SpaceType:
+    key: str
+    label: str
+    node_type: str
+    zone: str
+    min_w: float
+    min_d: float
+    preferred_area_m2: float
+    max_aspect: float = _DEFAULT_MAX_ASPECT
+    wet_room: bool = False
+    needs_exterior: bool = False
+    privacy_level: int = 0
+    circulation_weight: float = 1.0
+
+
+class UnknownSpaceType(KeyError):
+    """Raised by get() for a key not in the catalog and not a known alias.
+
+    Carries a nearest-match suggestion so callers/clarification flows can
+    offer it back to the user instead of a bare KeyError.
+    """
+
+    def __init__(self, key: str, suggestion: str | None):
+        self.key = key
+        self.suggestion = suggestion
+        message = f"Unknown space type: {key!r}"
+        if suggestion:
+            message += f" (did you mean {suggestion!r}?)"
+        super().__init__(message)
+
+
+def _zone_for(key: str) -> str:
+    if key in _OUTDOOR_TYPES:
+        return "outdoor"
+    if key in _SEMI_OUTDOOR_TYPES:
+        return "outdoor"
+    if key in _CIRCULATION_TYPES:
+        return "circulation"
+    if key in _SERVICE_TYPES:
+        return "service"
+    if key in _PUBLIC_TYPES:
+        return "public"
+    if key in _PRIVATE_TYPES:
+        return "private"
+    return "public"
+
+
+def _node_type_for(key: str) -> str:
+    if key in _CIRCULATION_TYPES:
+        return "circulation"
+    if key in _SERVICE_TYPES:
+        return "service"
+    return "space"
+
+
+def _privacy_level_for(key: str) -> int:
+    if key in _PUBLIC_TYPES or key in _CIRCULATION_TYPES:
+        return 0
+    if key in _SERVICE_TYPES:
+        return 1
+    if key in _PRIVATE_TYPES:
+        return 2
+    return 0
+
+
+def _circulation_weight_for(key: str) -> float:
+    return 2.0 if key in _CIRCULATION_TYPES else 1.0
+
+
+def _derive_min_dimensions(preferred_area_m2: float, max_aspect: float) -> tuple[float, float]:
+    """A near-square minimum at a fraction of preferred area — used only when
+    no ROOM_SIZING minimum exists for this type. Not a claim of correctness
+    for every space type, just a bounded, documented default."""
+    min_area = preferred_area_m2 * _MIN_AREA_FRACTION_OF_PREFERRED
+    side = math.sqrt(min_area / max_aspect) if max_aspect > 0 else math.sqrt(min_area)
+    long_side = min_area / side if side > 0 else _MIN_DIMENSION_FLOOR_M
+    min_d = max(_MIN_DIMENSION_FLOOR_M, round(side, 2))
+    min_w = max(_MIN_DIMENSION_FLOOR_M, round(long_side, 2))
+    return min_w, min_d
+
+
+def _build_catalog() -> dict[str, SpaceType]:
+    room_sizing_by_free_key: dict[str, tuple[float, float]] = {}
+    for room_type, sizing in ROOM_SIZING.items():
+        free_key = _ENUM_ALIAS_OF.get(room_type.value, room_type.value)
+        room_sizing_by_free_key[free_key] = (sizing.min_w, sizing.min_d)
+
+    catalog: dict[str, SpaceType] = {}
+    for key, area in BASE_SIZES.items():
+        minimum = room_sizing_by_free_key.get(key)
+        min_w, min_d = minimum if minimum else _derive_min_dimensions(area, _DEFAULT_MAX_ASPECT)
+        catalog[key] = SpaceType(
+            key=key,
+            label=key.replace("_", " ").title(),
+            node_type=_node_type_for(key),
+            zone=_zone_for(key),
+            min_w=min_w,
+            min_d=min_d,
+            preferred_area_m2=area,
+            wet_room=key in _WET_TYPES,
+            needs_exterior=key in _DAYLIGHT_TYPES,
+            privacy_level=_privacy_level_for(key),
+            circulation_weight=_circulation_weight_for(key),
+        )
+    return catalog
+
+
+CATALOG: dict[str, SpaceType] = _build_catalog()
+
+# Enum-name aliases ("dining" -> "dining_room") resolve through the same
+# lookup as any other alias text.
+_ALIAS_TO_CANONICAL: dict[str, str] = dict(_ENUM_ALIAS_OF)
+
+
+def resolve_alias(text: str) -> str | None:
+    """Best-effort resolution of free text to a canonical catalog key.
+
+    Tries an exact canonical-key match first, then the enum-name alias map.
+    Does not guess — returns None rather than a low-confidence match, per
+    the repo's existing "reject, never invent" principle.
+    """
+    normalized = text.strip().lower().replace(" ", "_").replace("-", "_")
+    if normalized in CATALOG:
+        return normalized
+    return _ALIAS_TO_CANONICAL.get(normalized)
+
+
+def get(key: str) -> SpaceType:
+    normalized = key.strip().lower().replace(" ", "_").replace("-", "_")
+    if normalized in CATALOG:
+        return CATALOG[normalized]
+    resolved = resolve_alias(normalized)
+    if resolved and resolved in CATALOG:
+        return CATALOG[resolved]
+    suggestions = get_close_matches(normalized, CATALOG.keys(), n=1)
+    raise UnknownSpaceType(key, suggestions[0] if suggestions else None)
+
+
+def register(space: SpaceType) -> None:
+    """Runtime extension for a space type nobody templated yet. Callers are
+    responsible for supplying sane values (this module does not clamp or
+    validate them) — the clarification-flow-vs-guess decision belongs to the
+    caller (e.g. extraction service), not this registry."""
+    CATALOG[space.key] = space
+
+
+def with_overrides(key: str, **overrides: object) -> SpaceType:
+    """Convenience for a caller that wants a variant of a known type (e.g. an
+    explicit area override) without mutating the shared catalog entry."""
+    return replace(get(key), **overrides)
