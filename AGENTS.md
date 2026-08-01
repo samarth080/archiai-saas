@@ -699,6 +699,15 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Backend suite unchanged: 707 passed, 3 expected skips, 0 failed. No engine code changed.
 - [ ] No code fix shipped for the AVOID-adjacency gap in this packet — audit-only by design; a real fix needs Phase 4 (circulation) or Phase 5 (search), not a patch.
 
+### Phase 1 — SpaceCatalog (`phase1/space-catalog`)
+
+- [x] `backend/scripts/audit_catalog.py`: real diff of ROOM_SIZING (12 residential types) vs BASE_SIZES (37 free-string types) — 11 of 12 overlapping types conflict on area, only bedroom already agreed.
+- [x] `app/services/catalog/space_catalog.py`: single free-string-keyed `SpaceType` registry (37 entries). Resolution rule: BASE_SIZES wins area, ROOM_SIZING wins min_w/min_d where both exist; derived minimums (near-square, 60% of area, floored at 1.2m) for BASE_SIZES-only types. `get()`/`resolve_alias()` never guess (UnknownSpaceType + difflib suggestion); `register()` is the runtime-extension escape hatch.
+- [x] Purely additive — nothing existing imports or is imported by it yet.
+- [x] `test_space_catalog.py`, 28 tests: every RoomType enum value round-trips, all 5 existing fixtures resolve untouched.
+- [x] Full suite: 735 passed (707 + 28 new), 3 expected skips, 0 failed.
+- [ ] Not done: schemas/requirements.py, layout_engine, quality/*, and the frontend contract don't consume the catalog yet — that's Phase 1.2 onward, not this slice.
+
 ---
 
 ## Development Rules
