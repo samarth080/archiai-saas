@@ -7,8 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas.requirements import RoomType
-from app.services.catalog import CATALOG, SpaceType, UnknownSpaceType, get, register, resolve_alias
+from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType
+from app.services.catalog import (
+    CATALOG,
+    SpaceType,
+    UnknownSpaceType,
+    get,
+    register,
+    resolve_alias,
+    spaces_from_rooms,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
 
@@ -96,3 +104,57 @@ def test_existing_requirement_fixtures_round_trip_through_the_catalog_untouched(
     for room in raw.get("rooms", []):
         space = get(room["type"])
         assert isinstance(space, SpaceType)
+
+
+# ── Phase 1.2 migration order item 1: rooms -> spaces normalizer ────────────
+
+
+def test_spaces_from_rooms_is_lossless_on_count():
+    rooms = [RoomRequest(type=RoomType.bedroom, count=2), RoomRequest(type=RoomType.bathroom, count=1)]
+    spaces = spaces_from_rooms(rooms)
+    assert [(s.space_type, s.count) for s in spaces] == [("bedroom", 2), ("bathroom", 1)]
+
+
+@pytest.mark.parametrize(
+    "enum_type,canonical_key",
+    [
+        (RoomType.dining, "dining_room"),
+        (RoomType.entry, "foyer"),
+        (RoomType.utility, "laundry"),
+        (RoomType.parking, "garage"),
+    ],
+)
+def test_spaces_from_rooms_maps_enum_only_names_to_their_catalog_key(enum_type, canonical_key):
+    spaces = spaces_from_rooms([RoomRequest(type=enum_type, count=1)])
+    assert spaces[0].space_type == canonical_key
+
+
+def test_every_room_type_enum_value_survives_the_normalizer():
+    # All 12 RoomType values are catalog keys (via alias resolution) — the
+    # migration is claimed lossless; prove it for every value, not a sample.
+    rooms = [RoomRequest(type=room_type, count=1) for room_type in RoomType]
+    spaces = spaces_from_rooms(rooms)
+    assert len(spaces) == len(rooms)
+    for space in spaces:
+        assert get(space.space_type) is not None
+
+
+def test_requirements_spec_spaces_field_is_additive_and_backward_compatible():
+    rooms = [RoomRequest(type=RoomType.bedroom, count=2)]
+    spec_without_spaces = RequirementsSpec(rooms=rooms)
+    assert spec_without_spaces.spaces == []
+
+    spec_with_spaces = RequirementsSpec(rooms=rooms, spaces=spaces_from_rooms(rooms))
+    assert spec_with_spaces.spaces[0].space_type == "bedroom"
+    assert spec_with_spaces.spaces[0].count == 2
+    # rooms untouched by populating spaces alongside it.
+    assert spec_with_spaces.rooms == rooms
+
+
+@pytest.mark.parametrize("name", ["1bhk", "2bhk", "3bhk_adjacencies", "4bhk", "clinic"])
+def test_existing_fixtures_normalize_to_spaces_losslessly(name):
+    raw = json.loads((FIXTURES / f"{name}.json").read_text())
+    spec = RequirementsSpec.model_validate(raw)
+    spaces = spaces_from_rooms(spec.rooms)
+    assert sum(s.count for s in spaces) == sum(r.count for r in spec.rooms)
+    assert len(spaces) == len(spec.rooms)

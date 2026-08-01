@@ -27,6 +27,7 @@ from dataclasses import dataclass, replace
 from difflib import get_close_matches
 
 from app.config.mvp_defaults import ROOM_SIZING
+from app.schemas.requirements import RoomRequest, SpaceRequest
 from app.services.parser.data.size_rules import BASE_SIZES
 
 # RoomType enum key -> the free-string catalog key it's an alias of, only
@@ -225,3 +226,14 @@ def with_overrides(key: str, **overrides: object) -> SpaceType:
     """Convenience for a caller that wants a variant of a known type (e.g. an
     explicit area override) without mutating the shared catalog entry."""
     return replace(get(key), **overrides)
+
+
+def spaces_from_rooms(rooms: list[RoomRequest]) -> list[SpaceRequest]:
+    """Phase 1.2 migration order item 1: lossless `RoomRequest` -> `SpaceRequest`
+    mapping. All 12 `RoomType` enum values are catalog keys (via `get()`'s
+    alias resolution), so this never drops or invents a room — a mismatch
+    here is a bug in the catalog seed, not something to silently swallow."""
+    return [
+        SpaceRequest(space_type=get(room.type.value).key, count=room.count)
+        for room in rooms
+    ]
