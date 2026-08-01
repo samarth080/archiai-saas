@@ -2,12 +2,17 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 
-from scrapling import AsyncFetcher
 from sqlalchemy.ext.asyncio import AsyncSession
 
 try:
-    from scrapling import StealthyFetcher
-except ImportError:  # pragma: no cover - the [fetchers] extra's browser deps are optional at runtime
+    # scrapling's import chain builds a default User-Agent via browserforge's
+    # bundled fingerprint dataset at *import time*; when that dataset drifts
+    # out of sync with scrapling's pinned Chrome version, browserforge raises
+    # ValueError instead of the module simply failing to import. Either way,
+    # the scraper is optional — the rest of the app must not go down with it.
+    from scrapling import AsyncFetcher, StealthyFetcher
+except Exception:  # pragma: no cover - environment/dependency-version issue, not a code path
+    AsyncFetcher = None
     StealthyFetcher = None
 
 from app.models.layout_pattern import LayoutPattern
@@ -96,7 +101,15 @@ async def fetch_public_page(url: str) -> str:
     cloud-metadata address. Known limitation: the StealthyFetcher browser
     escalation follows in-browser redirects itself, which we can't intercept;
     the initial URL is still validated, and the surface is admin-only.
+
+    Unlike StealthyFetcher (browser escalation, genuinely optional),
+    AsyncFetcher is the primary fetch path and has no fallback — if scrapling
+    itself failed to import (see the module-level try/except above), this
+    raises a clear ScraperFetchError instead of an opaque AttributeError.
     """
+    if AsyncFetcher is None:
+        raise ScraperFetchError("scrapling is not available in this environment")
+
     headers = {"User-Agent": f"{ROBOTS_USER_AGENT}/0.1 (+public-text-reference-pipeline)"}
 
     current_url = await assert_public_url_async(url)
