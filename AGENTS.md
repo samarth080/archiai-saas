@@ -708,6 +708,13 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Full suite: 735 passed (707 + 28 new), 3 expected skips, 0 failed.
 - [ ] Not done: schemas/requirements.py, layout_engine, quality/*, and the frontend contract don't consume the catalog yet — that's Phase 1.2 onward, not this slice.
 
+**Phase 1.2 — SpaceRequest/spaces:**
+
+- [x] `SpaceRequest` + `RequirementsSpec.spaces` added additively (default `[]`); `rooms`/`RoomType` unchanged. `spaces_from_rooms()` maps every RoomType value losslessly.
+- [x] Fixed 3 test_mvp_api.py assertions broken by the new field's legitimate presence in persisted JSON (compared raw fixture vs serialized model) — updated expected values, not the schema; confirmed via a full-suite search that no other comparison needed the same fix.
+- [x] Full suite: 747 passed (735 + 12 new), 3 expected skips, 0 failed. One transient scraper-test failure batch did not reproduce on rerun — confirmed unrelated.
+- [ ] Still nothing consumes `spaces` for generation/scoring yet.
+
 ---
 
 ## Development Rules

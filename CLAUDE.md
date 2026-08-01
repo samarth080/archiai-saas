@@ -774,6 +774,14 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** full backend suite **735 passed** (707 baseline + 28 new), 3 expected live-LM skips, 0 failed — confirms the "purely additive" claim, not just asserts it.
 - [ ] **Not done in this slice (next slices, per the doc's own Phase 1.2):** `schemas/requirements.py` doesn't consume the catalog yet (`RoomType` enum is unchanged); `layout_engine/engine.py`/`quality/*` don't read from it yet; the frontend contract (`contracts.ts`, room color mapping) is untouched. Phase 1 is a 4-5 day estimate in the doc; this is its first, safely-scoped sub-step, not the whole phase.
 
+**Phase 1.2 — SpaceRequest/spaces on the contract (migration order item 1):**
+
+- [x] `SpaceRequest` (`space_type: str`, `count`, `size_hint`, `area_m2`) added to `schemas/requirements.py`; `RequirementsSpec.spaces: list[SpaceRequest]` added alongside the existing `rooms` field, defaulting to `[]`. Nothing existing reads `spaces` yet — `rooms`/`RoomRequest`/`RoomType` are completely unchanged.
+- [x] `spaces_from_rooms()` (`app.services.catalog`) maps legacy rooms to catalog-keyed spaces losslessly — proven for **every** `RoomType` enum value and all 5 existing fixtures, not a sample.
+- [x] **Caught and fixed a real ripple effect, not a false pass:** adding the new field with its default made 3 `test_mvp_api.py` assertions fail — they compared a persisted/serialized `RequirementsSpec` against the *raw pre-migration fixture dict* by exact equality, and the persisted model now legitimately carries one more key (`spaces: []`). Fixed by updating the expected value to `{**spec, "spaces": []}`, not by reverting the schema change. Searched the whole suite for every other `== spec`-shaped comparison first and confirmed the other two (`test_mvp_clarification.py`, `test_mvp_contracts.py`) compare model-to-model — both sides already carry `spaces=[]` consistently, so they needed no fix.
+- [x] **Verification:** full backend suite **747 passed** (735 + 12 new), 3 expected live-LM skips, 0 failed. One run showed 13 scraper-test failures (`test_scraper_fetcher.py`/`test_scraper_pipeline.py`) that did not reproduce on an immediate rerun with zero code changes between attempts — investigated, confirmed transient/environmental (unrelated code path, no import or behavior touched by this change), not a real regression.
+- [ ] Still not done: nothing yet *consumes* `spaces` for generation or quality scoring — that's later Phase 1.2 items (porting the engine/quality to read `spaces`) and Phase 2 (ProgramGraph as canonical input).
+
 ---
 
 ## Development Rules
