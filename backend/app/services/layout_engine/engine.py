@@ -1,13 +1,17 @@
-"""RequirementsSpec -> LayoutPlan orchestrator (workflow Step 1.2).
+"""RequirementsSpec -> LayoutPlan orchestrator (workflow Step 1.2, banding
+generalized in Phase 3.1a).
 
-Pipeline: expand counts (auto-entry, master rule is upstream in the spec) ->
-zone public/private -> split the plot into a facing-side public band and a
-private band -> recursive subdivision per band -> leaf min-size check (a room
-that would fall below its sizing-table minimum raises DoesNotFitError — the
-structured "plot too small" the API turns into a clarification) -> emit
-deduplicated walls (one wall per shared edge) -> place doors (must-adjacency
-first, then a BFS spanning tree from the circulation room so the access graph
-is connected by construction, plus the front door on the entry's facing wall).
+Pipeline: build the program graph (auto-entry, master rule is upstream in the
+spec) -> archetypes.zoned_bands assigns rooms to an ordered N-zone band
+progression (public/circulation/semi_private/service/private/..., driven by
+the graph's own catalog-based zone_of, not a residential-only enum) -> split
+the plot into those bands, facing-side first -> recursive subdivision per
+band -> leaf min-size check (a room that would fall below its sizing-table
+minimum raises DoesNotFitError — the structured "plot too small" the API
+turns into a clarification) -> emit deduplicated walls (one wall per shared
+edge) -> place doors (must-adjacency first, then a BFS spanning tree from the
+circulation room so the access graph is connected by construction, plus the
+front door on the entry's facing wall).
 
 v0 limitations (documented, deliberate): single storey — `floors > 1` places
 every room on one plot (the duplex case is an extraction/clarification concern,
@@ -21,32 +25,20 @@ from app.config.mvp_defaults import (
     DEFAULT_PLOT_WIDTH_M,
     DOOR_WIDTH_M,
     MAX_ROOMS_PER_LAYOUT,
-    PRIVATE_ROOM_TYPES,
-    PUBLIC_ROOM_TYPES,
     ROOM_SIZING,
     WALL_THICKNESS_M,
 )
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
+from app.services.layout_engine.archetypes import select_archetype
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
-from app.services.planning import from_requirements, to_engine_program
+from app.services.planning import EngineProgram, from_requirements, to_engine_program
 from app.services.planning.program_completion import ensure_entry
 
 _MIN_DOOR_EDGE = DOOR_WIDTH_M + 0.1     # a door needs this much shared wall
 _NARROW_DOOR_WIDTH = 0.7                # connectivity fallback on tight edges
 _NARROW_DOOR_EDGE = _NARROW_DOOR_WIDTH + 0.1
-
-# Placement order inside each band: entry leads (facing bias pulls it to the
-# facing edge), circulation-heavy rooms early, service rooms last.
-_PUBLIC_ORDER = [
-    RoomType.entry, RoomType.living_room, RoomType.dining,
-    RoomType.kitchen, RoomType.balcony, RoomType.parking,
-]
-_PRIVATE_ORDER = [
-    RoomType.master_bedroom, RoomType.bathroom, RoomType.bedroom,
-    RoomType.study, RoomType.pooja_room, RoomType.utility,
-]
 
 
 class DoesNotFitError(ValueError):
@@ -62,89 +54,46 @@ class DoesNotFitError(ValueError):
 # ── Expansion + zoning ────────────────────────────────────────────────────────
 
 
-def _expand(spec: RequirementsSpec) -> list[RoomNeed]:
-    """Program construction via the ProgramGraph bridge (workflow Phase 2.2b):
-    ``from_requirements`` builds the graph, ``ensure_entry`` replaces the old
-    inline auto-entry hack, ``to_engine_program`` derives the flat needs list
-    subdivision already consumes. Sizing/labels are byte-identical to the
-    pre-graph version (see ``from_requirements``'s docstring for why it uses
-    raw ``RoomType`` values and ``ROOM_SIZING``, not the catalog, for this
-    path) — this is a refactor of *how* the list is built, not a behavior
-    change.
+def _build_program(spec: RequirementsSpec) -> EngineProgram:
+    """Program construction via the ProgramGraph bridge (workflow Phase 2.2b,
+    extended in 3.1a): ``from_requirements`` builds the graph, ``ensure_entry``
+    replaces the old inline auto-entry hack, ``to_engine_program`` derives the
+    full :class:`EngineProgram` — the flat needs list subdivision consumes,
+    plus ``zone_of``/``must_adjacent``/etc. that ``archetypes.zoned_bands`` now
+    consumes for banding (Phase 2.2b only kept ``needs``, discarding the rest).
+    Sizing/labels for a ``spec.rooms``-sourced program are byte-identical to
+    the pre-graph version (see ``from_requirements``'s docstring for why it
+    uses raw ``RoomType`` values and ``ROOM_SIZING``, not the catalog, for
+    this path).
 
-    Keys are remapped from the graph's own node ids ("node-3") back to the
-    legacy "r1".."rN" scheme, in the same list order the graph already
-    produces (spec.rooms order, entry appended last if injected — matching
-    the old dict-based ``_expand``'s insertion order exactly). This isn't
-    cosmetic: ``_place_doors`` below tie-breaks its BFS spanning tree on the
-    lexicographic sort of room keys, so a different key scheme can change
-    *which* doors get placed, not just their id — confirmed by diffing
-    against a pre-refactor golden snapshot of all 5 fixtures before this key
-    remap was added.
+    Every node-id-keyed field is remapped from the graph's own node ids
+    ("node-3") back to the legacy "r1".."rN" scheme, in the same list order
+    the graph already produces (spec.rooms order, entry appended last if
+    injected — matching the old dict-based ``_expand``'s insertion order
+    exactly). This isn't cosmetic: ``_place_doors`` below tie-breaks its BFS
+    spanning tree on the lexicographic sort of room keys, so a different key
+    scheme can change *which* doors get placed, not just their id — confirmed
+    by diffing against a pre-refactor golden snapshot of all 5 fixtures
+    before this key remap was added.
     """
     graph = ensure_entry(from_requirements(spec))
-    needs = to_engine_program(graph).needs
-    return [dataclasses.replace(need, key=f"r{i}") for i, need in enumerate(needs, start=1)]
+    program = to_engine_program(graph)
+    remap = {need.key: f"r{i}" for i, need in enumerate(program.needs, start=1)}
 
+    def _pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return [(remap[a], remap[b]) for a, b in pairs if a in remap and b in remap]
 
-def _order_group(group: list[RoomNeed], order: list[RoomType], spec: RequirementsSpec) -> list[RoomNeed]:
-    rank = {t.value: i for i, t in enumerate(order)}
-    ordered = sorted(group, key=lambda n: (rank.get(n.type, 99), n.key))
-
-    # Soft adjacency as placement order: pull one partner of each `must` pair
-    # directly behind the first room of the other type (attached bathroom
-    # behind the master bedroom, etc.).
-    for pref in spec.adjacency:
-        if pref.strength != "must":
-            continue
-        anchor = next((n for n in ordered if n.type == pref.room_a.value), None)
-        partner = next((n for n in ordered if n.type == pref.room_b.value), None)
-        if anchor is None or partner is None:
-            anchor = next((n for n in ordered if n.type == pref.room_b.value), None)
-            partner = next((n for n in ordered if n.type == pref.room_a.value), None)
-        if anchor is None or partner is None or anchor is partner:
-            continue
-        ordered.remove(partner)
-        ordered.insert(ordered.index(anchor) + 1, partner)
-    return ordered
-
-
-# ── Bands ─────────────────────────────────────────────────────────────────────
-
-
-def _bands(plot_w: float, plot_d: float, facing: Facing, public: list[RoomNeed], private: list[RoomNeed]):
-    """(band_rect, ordered_group) pairs — public band on the facing side."""
-    if not public or not private:
-        return [(Rect(0.0, 0.0, plot_w, plot_d), public or private)]
-
-    area_pub = sum(n.preferred_area for n in public)
-    area_prv = sum(n.preferred_area for n in private)
-    share = area_pub / (area_pub + area_prv)
-
-    if facing in (Facing.east, Facing.west):
-        span, other = plot_w, plot_d
-    else:
-        span, other = plot_d, plot_w
-    t = span * share
-    floor_pub = max(1.5, sum(n.min_area for n in public) * 1.02 / other)
-    floor_prv = max(1.5, sum(n.min_area for n in private) * 1.02 / other)
-    if floor_pub + floor_prv > span + EPS:
-        raise DoesNotFitError(
-            "plot too small to separate public and private zones — increase plot size",
-            required_area=sum(n.min_area for n in public + private),
-            plot_area=plot_w * plot_d,
-        )
-    t = min(max(t, floor_pub), span - floor_prv)
-
-    if facing == Facing.east:
-        pub, prv = Rect(plot_w - t, 0, t, plot_d), Rect(0, 0, plot_w - t, plot_d)
-    elif facing == Facing.west:
-        pub, prv = Rect(0, 0, t, plot_d), Rect(t, 0, plot_w - t, plot_d)
-    elif facing == Facing.south:
-        pub, prv = Rect(0, plot_d - t, plot_w, t), Rect(0, 0, plot_w, plot_d - t)
-    else:  # north
-        pub, prv = Rect(0, 0, plot_w, t), Rect(0, t, plot_w, plot_d - t)
-    return [(pub, public), (prv, private)]
+    return dataclasses.replace(
+        program,
+        needs=[dataclasses.replace(need, key=remap[need.key]) for need in program.needs],
+        zone_of={remap[k]: v for k, v in program.zone_of.items() if k in remap},
+        must_adjacent=_pairs(program.must_adjacent),
+        should_adjacent=_pairs(program.should_adjacent),
+        avoid=_pairs(program.avoid),
+        circulation_nodes=[remap[k] for k in program.circulation_nodes if k in remap],
+        floor_of={remap[k]: v for k, v in program.floor_of.items() if k in remap},
+        entry_node=remap.get(program.entry_node),
+    )
 
 
 # ── Walls (deduplicated) + doors ─────────────────────────────────────────────
@@ -360,7 +309,8 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
     plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
     facing = spec.facing or DEFAULT_FACING
 
-    needs = _expand(spec)
+    program = _build_program(spec)
+    needs = program.needs
     if not needs:
         raise DoesNotFitError("no rooms requested")
     if len(needs) > MAX_ROOMS_PER_LAYOUT:
@@ -374,12 +324,10 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             required_area=required, plot_area=plot_area,
         )
 
-    public = _order_group([n for n in needs if RoomType(n.type) in PUBLIC_ROOM_TYPES], _PUBLIC_ORDER, spec)
-    private = _order_group([n for n in needs if RoomType(n.type) in PRIVATE_ROOM_TYPES], _PRIVATE_ORDER, spec)
-
     placed: list[tuple[RoomNeed, Rect]] = []
     try:
-        for band_rect, group in _bands(plot_w, plot_d, facing, public, private):
+        _, archetype_fn, _ = select_archetype(program)
+        for band_rect, group in archetype_fn(program, plot_w, plot_d, facing).bands:
             placed.extend(subdivide(group, band_rect, facing))
     except SubdivisionError as exc:
         raise DoesNotFitError(f"{exc} — increase plot size") from exc
