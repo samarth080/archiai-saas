@@ -724,6 +724,14 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification caveat:** `pytest` could not run this session — `conftest.py` forces `app.main` -> scraper router -> `scrapling` -> `browserforge` header generation, which now raises (pinned `chrome_version=148` has zero matches in the current fingerprint dataset). Confirmed pre-existing, unrelated to this change, blocks the whole suite's collection (tried a browserforge downgrade, still fails). Verified instead by running every assertion directly against the real modules (no mocks): new tests all pass, plus spot-checked golden `test_program_graph.py` round-trip/identical-layout and `test_space_catalog.py` checks still pass. Re-run via `pytest` once the scrapling pin is fixed.
 - [ ] Not done: `engine.py` doesn't consume `EngineProgram` yet (Phase 2.2), no `from_requirements()` builder, no auto-entry-as-graph-rule (`program_completion.py`).
 
+**Phase 2.2a — from_requirements() adapter (stacked on 2.1, same branch):**
+
+- [x] `from_requirements(spec) -> ProgramGraph` in `planning/program_graph.py`, parallel to the other adapters. Uses `spec.spaces` when populated, else normalizes `spec.rooms` via `catalog.spaces_from_rooms()`. `spec.adjacency`/`avoid_adjacency` are still RoomType-keyed, so each pref resolves to its catalog key before matching nodes — id-level, every matching pair gets its own edge (verified: 2 bathrooms x pooja_room avoid = 2 edges, not 1).
+- [x] Deliberately does not auto-inject entry — `engine._expand()`'s hack stays put until 2.2b replaces it with a real graph completion rule.
+- [x] 6 new tests in test_engine_program.py (22 total): spaces-over-rooms precedence, no-auto-entry, enum-to-catalog-key alias (clinic's entry->foyer), id-level avoid bucketing, full round-trip on the 3bhk_adjacencies fixture.
+- [x] Verification: same pytest blocker as 2.1 — verified via direct script execution, plus reran all Phase 2.1 checks and the golden test_program_graph.py suite to confirm no interference. All pass. Scrapling/browserforge fix spawned as its own separate task.
+- [ ] Not done: engine.py still calls `_expand(spec)` unchanged — 2.2b (the byte-identical-output swap) is next.
+
 ---
 
 ## Development Rules

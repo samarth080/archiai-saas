@@ -1,9 +1,16 @@
-"""Phase 2.1 — EngineProgram bridge. Purely additive: engine.py does not
-consume this yet (Phase 2.2), so these tests only pin the bridge itself."""
+"""Phase 2.1/2.2a — EngineProgram bridge + RequirementsSpec adapter. Purely
+additive: engine.py does not consume either yet (Phase 2.2b), so these tests
+only pin the bridge and adapter themselves."""
+import json
+from pathlib import Path
+
+from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType, SpaceRequest
 from app.services.layout_engine.subdivision import RoomNeed
-from app.services.planning import Edge, Node, ProgramGraph, to_engine_program
+from app.services.planning import Edge, Node, ProgramGraph, from_requirements, to_engine_program
 from app.services.planning.program_graph import from_room_specs
 from app.services.prompt_service import RoomSpec
+
+FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
 
 
 def test_needs_are_room_need_instances_keyed_by_node_id():
@@ -163,3 +170,87 @@ def test_buildable_nodes_only_openings_and_structural_excluded():
     ])
     program = to_engine_program(graph)
     assert [n.key for n in program.needs] == ["a"]
+
+
+# ── from_requirements(spec) -> ProgramGraph (Phase 2.2a) ─────────────────────
+
+
+def _load_fixture(name: str) -> RequirementsSpec:
+    raw = json.loads((FIXTURES / f"{name}.json").read_text())
+    return RequirementsSpec.model_validate(raw)
+
+
+def test_from_requirements_uses_rooms_when_spaces_is_empty():
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.bedroom, count=2),
+        RoomRequest(type=RoomType.bathroom, count=1),
+    ])
+    graph = from_requirements(spec)
+    assert len(graph.buildable_nodes()) == 3
+    assert len(graph.nodes_of_space_type("bedroom")) == 2
+    assert len(graph.nodes_of_space_type("bathroom")) == 1
+
+
+def test_from_requirements_prefers_spaces_when_populated():
+    spec = RequirementsSpec(
+        rooms=[RoomRequest(type=RoomType.bedroom, count=2)],
+        spaces=[SpaceRequest(space_type="consultation_room", count=3)],
+    )
+    graph = from_requirements(spec)
+    assert len(graph.buildable_nodes()) == 3
+    assert len(graph.nodes_of_space_type("consultation_room")) == 3
+    assert graph.nodes_of_space_type("bedroom") == []
+
+
+def test_from_requirements_does_not_auto_inject_entry():
+    # Contrasts with engine._expand()'s own auto-entry hack — this adapter
+    # is a faithful structural translation only; injection stays the
+    # engine's job until Phase 2.2b replaces it with a graph completion rule.
+    spec = RequirementsSpec(rooms=[RoomRequest(type=RoomType.bedroom, count=1)])
+    graph = from_requirements(spec)
+    assert graph.nodes_of_space_type("foyer") == []
+    assert len(graph.buildable_nodes()) == 1
+
+
+def test_must_adjacency_resolves_through_enum_alias_to_catalog_key():
+    # clinic fixture: entry~living_room MUST. RoomType.entry aliases to the
+    # catalog key "foyer" — the edge must land on the *foyer* node, not on a
+    # nonexistent "entry" node.
+    spec = _load_fixture("clinic")
+    graph = from_requirements(spec)
+    foyer = graph.first_of_space_type("foyer")
+    living_room = graph.first_of_space_type("living_room")
+    assert foyer is not None and living_room is not None
+    matching = [
+        e for e in graph.edges
+        if e.strength == "MUST" and {e.node_a, e.node_b} == {foyer.id, living_room.id}
+    ]
+    assert len(matching) == 1
+
+
+def test_avoid_adjacency_is_id_level_for_every_multi_instance_room():
+    # 3bhk_adjacencies fixture: pooja_room~bathroom AVOID, with 2 bathrooms.
+    # Both bathroom instances must get their own AVOID edge to pooja_room —
+    # the exact id-level fix Packet 7.2's benchmark audit called for.
+    spec = _load_fixture("3bhk_adjacencies")
+    graph = from_requirements(spec)
+    pooja = graph.first_of_space_type("pooja_room")
+    bathrooms = graph.nodes_of_space_type("bathroom")
+    assert len(bathrooms) == 2
+    avoid_pairs = {
+        frozenset((e.node_a, e.node_b))
+        for e in graph.edges
+        if e.strength == "AVOID"
+    }
+    for bathroom in bathrooms:
+        assert frozenset((pooja.id, bathroom.id)) in avoid_pairs
+
+
+def test_from_requirements_round_trips_into_engine_program():
+    spec = _load_fixture("3bhk_adjacencies")
+    graph = from_requirements(spec)
+    program = to_engine_program(graph)
+    total_rooms = sum(r.count for r in spec.rooms)
+    assert len(program.needs) == total_rooms
+    assert len(program.avoid) == 4  # 2 bathrooms x (pooja + kitchen)
+    assert len(program.must_adjacent) == 2  # master_bedroom x 2 bathrooms

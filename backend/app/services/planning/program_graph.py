@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable, Optional
 
+from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services import catalog
 from app.services.layout_engine.subdivision import RoomNeed
 from app.services.prompt_service import RoomSpec
@@ -318,6 +319,80 @@ def from_parser_output(parsed: "ParsedRequirements", room_specs: list[RoomSpec])
                         reason=f"parser separation {room_a}~{room_b}",
                     )
                 )
+    return graph
+
+
+def _catalog_key(room_type: RoomType) -> str:
+    return catalog.get(room_type.value).key
+
+
+def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
+    """Build a graph from the MVP engine's own contract, ``RequirementsSpec``.
+
+    Uses ``spec.spaces`` (the free-string superset, Phase 1.2) when the
+    caller populated it; otherwise normalizes ``spec.rooms`` through the
+    catalog losslessly (``catalog.spaces_from_rooms``) — every existing
+    caller today only sets ``rooms``, so this is the common path.
+
+    ``spec.adjacency``/``spec.avoid_adjacency`` are still ``RoomType``-keyed
+    (the closed enum hasn't been retired from the contract yet), so they are
+    resolved to catalog keys before matching nodes — this is id-level once
+    resolved: every node of a matching type gets its own edge, not one edge
+    per type.
+
+    Plot size and facing are engine-level facts, not graph nodes, and are
+    intentionally left off the graph. Entry injection (the engine's
+    ``counts[RoomType.entry] = 1`` auto-add) is deliberately NOT replicated
+    here — that stays the engine's own responsibility until Phase 2.2 wires
+    a graph completion rule in its place.
+    """
+    space_requests = spec.spaces if spec.spaces else catalog.spaces_from_rooms(spec.rooms)
+
+    graph = ProgramGraph()
+    nodes_by_key: dict[str, list[Node]] = {}
+    for request in space_requests:
+        for _ in range(request.count):
+            node = Node(
+                type=_classify_node_type(request.space_type),
+                space_type=request.space_type,
+                label=request.space_type.replace("_", " ").title(),
+                zone=_classify_zone(request.space_type),
+                target_area_sqm=request.area_m2,
+                size_hint=request.size_hint,
+                source="requirements",
+            )
+            graph.add_node(_apply_type_semantics(node))
+            nodes_by_key.setdefault(request.space_type, []).append(node)
+
+    def nodes_for(room_type: RoomType) -> list[Node]:
+        return nodes_by_key.get(_catalog_key(room_type), [])
+
+    for pref in spec.adjacency:
+        strength = pref.strength.upper()
+        for a in nodes_for(pref.room_a):
+            for b in nodes_for(pref.room_b):
+                if a.id == b.id:
+                    continue
+                graph.add_edge(Edge(
+                    node_a=a.id, node_b=b.id,
+                    relation_type="adjacent",
+                    strength=strength,
+                    door_required=strength == "MUST",
+                    reason=f"requirements adjacency {pref.room_a.value}~{pref.room_b.value}",
+                ))
+
+    for pair in spec.avoid_adjacency:
+        for a in nodes_for(pair.room_a):
+            for b in nodes_for(pair.room_b):
+                if a.id == b.id:
+                    continue
+                graph.add_edge(Edge(
+                    node_a=a.id, node_b=b.id,
+                    relation_type="adjacent",
+                    strength="AVOID",
+                    reason=f"requirements avoid {pair.room_a.value}~{pair.room_b.value}",
+                ))
+
     return graph
 
 
