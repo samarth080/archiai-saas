@@ -13,6 +13,8 @@ v0 limitations (documented, deliberate): single storey — `floors > 1` places
 every room on one plot (the duplex case is an extraction/clarification concern,
 not an engine one, until Section 17 work); rooms are emitted with rotation=0.
 """
+import dataclasses
+
 from app.config.mvp_defaults import (
     DEFAULT_FACING,
     DEFAULT_PLOT_DEPTH_M,
@@ -28,6 +30,8 @@ from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
+from app.services.planning import from_requirements, to_engine_program
+from app.services.planning.program_completion import ensure_entry
 
 _MIN_DOOR_EDGE = DOOR_WIDTH_M + 0.1     # a door needs this much shared wall
 _NARROW_DOOR_WIDTH = 0.7                # connectivity fallback on tight edges
@@ -58,30 +62,29 @@ class DoesNotFitError(ValueError):
 # ── Expansion + zoning ────────────────────────────────────────────────────────
 
 
-def _label(room_type: RoomType, index: int, count: int) -> str:
-    base = room_type.value.replace("_", " ").title()
-    return f"{base} {index}" if count > 1 else base
-
-
 def _expand(spec: RequirementsSpec) -> list[RoomNeed]:
-    needs: list[RoomNeed] = []
-    counter = 0
-    counts = {r.type: r.count for r in spec.rooms}
-    if RoomType.entry not in counts:
-        counts[RoomType.entry] = 1  # every plan needs a way in
-    for room_type, count in counts.items():
-        sizing = ROOM_SIZING[room_type]
-        for i in range(1, count + 1):
-            counter += 1
-            needs.append(RoomNeed(
-                key=f"r{counter}",
-                type=room_type.value,
-                label=_label(room_type, i, count),
-                preferred_area=sizing.preferred_area_m2,
-                min_w=sizing.min_w,
-                min_d=sizing.min_d,
-            ))
-    return needs
+    """Program construction via the ProgramGraph bridge (workflow Phase 2.2b):
+    ``from_requirements`` builds the graph, ``ensure_entry`` replaces the old
+    inline auto-entry hack, ``to_engine_program`` derives the flat needs list
+    subdivision already consumes. Sizing/labels are byte-identical to the
+    pre-graph version (see ``from_requirements``'s docstring for why it uses
+    raw ``RoomType`` values and ``ROOM_SIZING``, not the catalog, for this
+    path) — this is a refactor of *how* the list is built, not a behavior
+    change.
+
+    Keys are remapped from the graph's own node ids ("node-3") back to the
+    legacy "r1".."rN" scheme, in the same list order the graph already
+    produces (spec.rooms order, entry appended last if injected — matching
+    the old dict-based ``_expand``'s insertion order exactly). This isn't
+    cosmetic: ``_place_doors`` below tie-breaks its BFS spanning tree on the
+    lexicographic sort of room keys, so a different key scheme can change
+    *which* doors get placed, not just their id — confirmed by diffing
+    against a pre-refactor golden snapshot of all 5 fixtures before this key
+    remap was added.
+    """
+    graph = ensure_entry(from_requirements(spec))
+    needs = to_engine_program(graph).needs
+    return [dataclasses.replace(need, key=f"r{i}") for i, need in enumerate(needs, start=1)]
 
 
 def _order_group(group: list[RoomNeed], order: list[RoomType], spec: RequirementsSpec) -> list[RoomNeed]:

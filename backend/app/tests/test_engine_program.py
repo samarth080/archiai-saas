@@ -7,6 +7,7 @@ from pathlib import Path
 from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType, SpaceRequest
 from app.services.layout_engine.subdivision import RoomNeed
 from app.services.planning import Edge, Node, ProgramGraph, from_requirements, to_engine_program
+from app.services.planning.program_completion import ensure_entry
 from app.services.planning.program_graph import from_room_specs
 from app.services.prompt_service import RoomSpec
 
@@ -204,26 +205,39 @@ def test_from_requirements_prefers_spaces_when_populated():
 
 def test_from_requirements_does_not_auto_inject_entry():
     # Contrasts with engine._expand()'s own auto-entry hack — this adapter
-    # is a faithful structural translation only; injection stays the
-    # engine's job until Phase 2.2b replaces it with a graph completion rule.
+    # is a faithful structural translation only; injection stays
+    # program_completion.ensure_entry's job (Phase 2.2b).
     spec = RequirementsSpec(rooms=[RoomRequest(type=RoomType.bedroom, count=1)])
     graph = from_requirements(spec)
+    assert graph.nodes_of_space_type("entry") == []
     assert graph.nodes_of_space_type("foyer") == []
     assert len(graph.buildable_nodes()) == 1
 
 
-def test_must_adjacency_resolves_through_enum_alias_to_catalog_key():
-    # clinic fixture: entry~living_room MUST. RoomType.entry aliases to the
-    # catalog key "foyer" — the edge must land on the *foyer* node, not on a
-    # nonexistent "entry" node.
+def test_rooms_sourced_nodes_use_the_raw_room_type_value_not_the_catalog_key():
+    # engine.py's own zoning split does RoomType(need.type) against
+    # PUBLIC_ROOM_TYPES/PRIVATE_ROOM_TYPES (mvp_defaults.py) — that only
+    # accepts real enum strings, so spec.rooms-sourced nodes must carry the
+    # raw value ("dining", not "dining_room") for engine.py to consume them.
+    spec = RequirementsSpec(rooms=[RoomRequest(type=RoomType.dining, count=1)])
+    graph = from_requirements(spec)
+    assert graph.nodes_of_space_type("dining") != []
+    assert graph.nodes_of_space_type("dining_room") == []
+    assert RoomType(graph.nodes_of_space_type("dining")[0].space_type) == RoomType.dining
+
+
+def test_must_adjacency_resolves_on_the_raw_entry_value():
+    # clinic fixture: entry~living_room MUST. spec.rooms-sourced nodes use
+    # the raw "entry" value directly (see the test above) — the edge must
+    # land on that node.
     spec = _load_fixture("clinic")
     graph = from_requirements(spec)
-    foyer = graph.first_of_space_type("foyer")
+    entry = graph.first_of_space_type("entry")
     living_room = graph.first_of_space_type("living_room")
-    assert foyer is not None and living_room is not None
+    assert entry is not None and living_room is not None
     matching = [
         e for e in graph.edges
-        if e.strength == "MUST" and {e.node_a, e.node_b} == {foyer.id, living_room.id}
+        if e.strength == "MUST" and {e.node_a, e.node_b} == {entry.id, living_room.id}
     ]
     assert len(matching) == 1
 
@@ -254,3 +268,38 @@ def test_from_requirements_round_trips_into_engine_program():
     assert len(program.needs) == total_rooms
     assert len(program.avoid) == 4  # 2 bathrooms x (pooja + kitchen)
     assert len(program.must_adjacent) == 2  # master_bedroom x 2 bathrooms
+
+
+# ── program_completion.ensure_entry (Phase 2.2b) ─────────────────────────────
+
+
+def test_ensure_entry_injects_a_single_entry_node_matching_room_sizing():
+    from app.config.mvp_defaults import ROOM_SIZING
+
+    spec = RequirementsSpec(rooms=[RoomRequest(type=RoomType.bedroom, count=1)])
+    graph = from_requirements(spec)
+    graph = ensure_entry(graph)
+    entries = graph.nodes_of_space_type("entry")
+    assert len(entries) == 1
+    sizing = ROOM_SIZING[RoomType.entry]
+    assert entries[0].target_area_sqm == sizing.preferred_area_m2
+    assert entries[0].min_width_m == sizing.min_w
+    assert entries[0].min_depth_m == sizing.min_d
+
+
+def test_ensure_entry_is_idempotent():
+    spec = RequirementsSpec(rooms=[RoomRequest(type=RoomType.bedroom, count=1)])
+    graph = ensure_entry(from_requirements(spec))
+    graph = ensure_entry(graph)
+    assert len(graph.nodes_of_space_type("entry")) == 1
+
+
+def test_ensure_entry_noop_when_program_already_has_one():
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.entry, count=1),
+        RoomRequest(type=RoomType.bedroom, count=1),
+    ])
+    graph = from_requirements(spec)
+    graph = ensure_entry(graph)
+    assert len(graph.nodes_of_space_type("entry")) == 1
+    assert len(graph.buildable_nodes()) == 2
