@@ -715,6 +715,15 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Full suite: 747 passed (735 + 12 new), 3 expected skips, 0 failed. One transient scraper-test failure batch did not reproduce on rerun — confirmed unrelated.
 - [ ] Still nothing consumes `spaces` for generation/scoring yet.
 
+**Phase 2.1 — EngineProgram bridge (stacked on Phase 1.2, same branch):**
+
+- [x] `EngineProgram` dataclass + `to_engine_program()` in `planning/program_graph.py` (exported via `app.services.planning`): id-keyed `needs: list[RoomNeed]`, `zone_of`/`floor_of`, id-level `must_adjacent`/`should_adjacent`/`avoid`, `circulation_nodes`, `entry_node`. `engine.py` untouched — purely additive, no behavior change.
+- [x] Sizing precedence: explicit node area/minima > new `Node.size_hint` x multiplier (nothing produces it yet, added ahead of its producer like `SpaceRequest.size_hint` was) > catalog default > `width x depth` fallback for an unresolvable space_type. Hard minima never scale with size_hint.
+- [x] Adjacency bucketing is id-level, not type-level — fixes the exact bug Packet 7.2 diagnosed (two bedrooms no longer collapse onto one `("bedroom","bathroom")` pair).
+- [x] `test_engine_program.py`, 16 tests: sizing precedence tiers, id-level must/avoid, zone/floor coverage, circulation_nodes, entry_node incl. None case, buildable-node filtering.
+- [x] **Verification caveat:** `pytest` could not run this session — `conftest.py` forces `app.main` -> scraper router -> `scrapling` -> `browserforge` header generation, which now raises (pinned `chrome_version=148` has zero matches in the current fingerprint dataset). Confirmed pre-existing, unrelated to this change, blocks the whole suite's collection (tried a browserforge downgrade, still fails). Verified instead by running every assertion directly against the real modules (no mocks): new tests all pass, plus spot-checked golden `test_program_graph.py` round-trip/identical-layout and `test_space_catalog.py` checks still pass. Re-run via `pytest` once the scrapling pin is fixed.
+- [ ] Not done: `engine.py` doesn't consume `EngineProgram` yet (Phase 2.2), no `from_requirements()` builder, no auto-entry-as-graph-rule (`program_completion.py`).
+
 ---
 
 ## Development Rules

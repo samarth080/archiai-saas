@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable, Optional
 
+from app.services import catalog
+from app.services.layout_engine.subdivision import RoomNeed
 from app.services.prompt_service import RoomSpec
 
 if TYPE_CHECKING:  # avoid any import cost / cycles at runtime
@@ -105,6 +107,7 @@ class Node:
     target_area_sqm: Optional[float] = None
     min_area_sqm: Optional[float] = None
     max_area_sqm: Optional[float] = None
+    size_hint: Optional[str] = None  # small | medium | large | xlarge — see to_engine_program
     width: Optional[float] = None
     depth: Optional[float] = None
     height: Optional[float] = None
@@ -434,3 +437,118 @@ def to_room_specs(graph: ProgramGraph) -> list[RoomSpec]:
             )
         )
     return specs
+
+
+# ── Bridge to EngineProgram (Phase 2.1 — additive; engine.py does not consume
+# this yet, that is Phase 2.2) ────────────────────────────────────────────────
+
+_SIZE_HINT_MULTIPLIERS = {"small": 0.7, "medium": 1.0, "large": 1.35, "xlarge": 1.75}
+_ADJACENCY_RELATIONS = frozenset({"adjacent", "connected_by_door", "near"})
+_ENTRY_TYPES = ("entry", "foyer", "lobby", "reception")
+_FLOOR_BY_PREFERENCE = {"basement": -1, "ground": 0, "upper": 1, "any": 0}
+
+
+@dataclass(frozen=True)
+class EngineProgram:
+    """Everything generation needs, derived from the graph. Pure data.
+
+    This is what a future engine (Phase 2.2) consumes instead of a flat
+    ``RequirementsSpec`` — building it here changes no generated layout.
+    """
+
+    needs: list[RoomNeed]
+    zone_of: dict[str, str]
+    must_adjacent: list[tuple[str, str]]
+    should_adjacent: list[tuple[str, str]]
+    avoid: list[tuple[str, str]]
+    circulation_nodes: list[str]
+    floor_of: dict[str, int]
+    entry_node: Optional[str]
+
+
+def _resolve_sizing(node: Node) -> tuple[float, float, float]:
+    """(preferred_area, min_w, min_d) for one node.
+
+    Precedence for the target/preferred area: explicit node area > size_hint
+    x catalog multiplier > catalog default > derived from width/depth. Hard
+    minima (min_w/min_d) never scale with size_hint — only explicit node
+    minima override the catalog's.
+    """
+    try:
+        space = catalog.get(node.space_type)
+    except catalog.UnknownSpaceType:
+        space = None
+
+    if node.target_area_sqm is not None:
+        area = node.target_area_sqm
+    elif node.size_hint and space is not None:
+        area = space.preferred_area_m2 * _SIZE_HINT_MULTIPLIERS[node.size_hint]
+    elif space is not None:
+        area = space.preferred_area_m2
+    else:
+        area = (node.width or 3.0) * (node.depth or 3.0)
+
+    min_w = node.min_width_m if node.min_width_m is not None else (space.min_w if space else 1.2)
+    min_d = node.min_depth_m if node.min_depth_m is not None else (space.min_d if space else 1.2)
+    return round(area, 2), min_w, min_d
+
+
+def _entry_node(nodes: list[Node]) -> Optional[str]:
+    for candidate_type in _ENTRY_TYPES:
+        for node in nodes:
+            if node.space_type == candidate_type:
+                return node.id
+    return None
+
+
+def _edge_buckets(
+    edges: list[Edge],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    must: list[tuple[str, str]] = []
+    should: list[tuple[str, str]] = []
+    avoid: list[tuple[str, str]] = []
+    for edge in edges:
+        pair = (edge.node_a, edge.node_b)
+        if edge.relation_type == "separated" or edge.strength == "AVOID":
+            avoid.append(pair)
+        elif edge.strength == "MUST" and edge.relation_type in _ADJACENCY_RELATIONS:
+            must.append(pair)
+        elif edge.strength == "SHOULD" and edge.relation_type in _ADJACENCY_RELATIONS:
+            should.append(pair)
+    return must, should, avoid
+
+
+def to_engine_program(graph: ProgramGraph) -> EngineProgram:
+    """Derive an :class:`EngineProgram` from a graph — id-level adjacency
+    (not type-level), so e.g. two bedroom nodes each keep their own
+    must/avoid pairs instead of collapsing onto "bedroom" as a type."""
+    buildable = graph.buildable_nodes()
+    needs: list[RoomNeed] = []
+    zone_of: dict[str, str] = {}
+    floor_of: dict[str, int] = {}
+    for node in buildable:
+        area, min_w, min_d = _resolve_sizing(node)
+        needs.append(RoomNeed(
+            key=node.id,
+            type=node.space_type,
+            label=node.label or node.space_type.replace("_", " ").title(),
+            preferred_area=area,
+            min_w=min_w,
+            min_d=min_d,
+        ))
+        zone_of[node.id] = node.zone
+        floor_of[node.id] = _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+
+    must_adjacent, should_adjacent, avoid = _edge_buckets(graph.edges)
+    circulation_nodes = [n.id for n in buildable if n.type == "circulation"]
+
+    return EngineProgram(
+        needs=needs,
+        zone_of=zone_of,
+        must_adjacent=must_adjacent,
+        should_adjacent=should_adjacent,
+        avoid=avoid,
+        circulation_nodes=circulation_nodes,
+        floor_of=floor_of,
+        entry_node=_entry_node(buildable),
+    )

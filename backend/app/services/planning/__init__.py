@@ -5,6 +5,7 @@ lossless RoomSpec bridge, and validation.py for explainable warnings.
 """
 from app.services.planning.program_graph import (
     Edge,
+    EngineProgram,
     Node,
     ProgramGraph,
     from_building_template,
@@ -12,6 +13,7 @@ from app.services.planning.program_graph import (
     from_room_specs,
     from_user_objects,
     merge,
+    to_engine_program,
     to_room_specs,
 )
 from app.services.planning.graph_scoring import (
