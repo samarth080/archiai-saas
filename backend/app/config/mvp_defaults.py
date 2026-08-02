@@ -58,14 +58,3 @@ ROOM_SIZING: dict[RoomType, RoomSizing] = {
     RoomType.utility:        RoomSizing(1.5, 1.8, 3.5),
     RoomType.parking:        RoomSizing(2.7, 5.0, 14.0),
 }
-
-# Zoning used by the subdivision engine (Step 1.2): public band on the entry
-# side, private band behind it — "bedrooms away from entry" as structure.
-PUBLIC_ROOM_TYPES = frozenset({
-    RoomType.entry, RoomType.living_room, RoomType.dining,
-    RoomType.kitchen, RoomType.balcony, RoomType.parking,
-})
-PRIVATE_ROOM_TYPES = frozenset({
-    RoomType.bedroom, RoomType.master_bedroom, RoomType.bathroom,
-    RoomType.pooja_room, RoomType.study, RoomType.utility,
-})

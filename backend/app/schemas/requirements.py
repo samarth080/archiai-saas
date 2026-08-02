@@ -79,6 +79,24 @@ class RoomRequest(BaseModel):
     count: StrictInt = Field(ge=1, le=50)
 
 
+class SpaceRequest(BaseModel):
+    """Phase 1 (engine generalization) superset of RoomRequest: a free-string
+    `space_type` validated against `services.catalog.SpaceCatalog` at the
+    service boundary rather than the closed `RoomType` enum, so the contract
+    can eventually express non-residential programs `RoomType` cannot. Added
+    additively alongside `rooms` (workflow Phase 1.2 migration order item 1)
+    — `rooms` keeps working exactly as before; nothing existing reads
+    `spaces` yet."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    space_type: str = Field(min_length=1, max_length=64)
+    count: StrictInt = Field(ge=1, le=50)
+    size_hint: Literal["small", "medium", "large", "xlarge"] | None = None
+    # Explicit user override beats any hint or catalog default.
+    area_m2: float | None = Field(default=None, gt=1, lt=2000)
+
+
 class AdjacencyPref(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -112,6 +130,10 @@ class RequirementsSpec(BaseModel):
     building_type: BuildingType = BuildingType.house
     floors: StrictInt = Field(default=1, ge=1, le=5)
     rooms: list[RoomRequest] = Field(default_factory=list)
+    # Superset of `rooms` (Phase 1.2) — free-string SpaceRequest entries.
+    # Nothing populates or reads this yet; it exists so the migration can
+    # proceed one call site at a time instead of a single breaking cutover.
+    spaces: list[SpaceRequest] = Field(default_factory=list)
     adjacency: list[AdjacencyPref] = Field(default_factory=list)
     avoid_adjacency: list[AvoidPair] = Field(default_factory=list)
     plot: PlotSpec = Field(default_factory=PlotSpec)

@@ -19,10 +19,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable, Optional
 
+from app.config.mvp_defaults import ROOM_SIZING
+from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services import catalog
 from app.services.prompt_service import RoomSpec
 
 if TYPE_CHECKING:  # avoid any import cost / cycles at runtime
     from app.services.building_template_service import BuildingTemplate
+    from app.services.layout_engine.subdivision import RoomNeed
     from app.services.parser.constraint_extractor import AdjacencyConstraint
     from app.services.prompt_service import ParsedRequirements
 
@@ -37,8 +41,8 @@ _CIRCULATION_TYPES = frozenset({
 })
 _SERVICE_TYPES = frozenset({
     "bathroom", "ensuite", "toilet", "washroom", "wc", "laundry", "storage",
-    "utility", "garage", "mudroom", "pantry", "mechanical", "plant", "shaft",
-    "store_room", "stock_room",
+    "utility", "garage", "parking", "mudroom", "pantry", "mechanical", "plant",
+    "shaft", "store_room", "stock_room",
 })
 _WET_TYPES = frozenset({
     "bathroom", "ensuite", "toilet", "washroom", "wc", "kitchen", "kitchenette",
@@ -48,16 +52,16 @@ _WET_TYPES = frozenset({
 _DAYLIGHT_TYPES = frozenset({
     "bedroom", "master_bedroom", "kids_room", "living_room", "open_plan_living",
     "office", "classroom", "consultation_room", "workspace", "dining_room",
-    "study", "reception", "waiting_room", "meeting_room",
+    "dining", "study", "reception", "waiting_room", "meeting_room",
 })
 _OPEN_PLAN_TYPES = frozenset({
     "living_room", "open_plan_living", "kitchen", "dining_room", "dining_area",
-    "workspace", "retail_display", "sales_floor",
+    "dining", "workspace", "retail_display", "sales_floor",
 })
 _PUBLIC_TYPES = frozenset({
     "living_room", "open_plan_living", "kitchen", "dining_room", "dining_area",
-    "foyer", "reception", "waiting_room", "retail_display", "checkout", "bar",
-    "sales_floor", "classroom", "lobby",
+    "dining", "foyer", "reception", "waiting_room", "retail_display", "checkout",
+    "bar", "sales_floor", "classroom", "lobby",
 })
 _PRIVATE_TYPES = frozenset({
     "master_bedroom", "bedroom", "kids_room", "ensuite", "office",
@@ -105,6 +109,7 @@ class Node:
     target_area_sqm: Optional[float] = None
     min_area_sqm: Optional[float] = None
     max_area_sqm: Optional[float] = None
+    size_hint: Optional[str] = None  # small | medium | large | xlarge — see to_engine_program
     width: Optional[float] = None
     depth: Optional[float] = None
     height: Optional[float] = None
@@ -318,6 +323,135 @@ def from_parser_output(parsed: "ParsedRequirements", room_specs: list[RoomSpec])
     return graph
 
 
+def _catalog_key(room_type: RoomType) -> str:
+    return catalog.get(room_type.value).key
+
+
+def _numbered_label(base: str, index: int, count: int) -> str:
+    return f"{base} {index}" if count > 1 else base
+
+
+def add_requirements_node(
+    graph: ProgramGraph,
+    nodes_by_key: dict[str, list[Node]],
+    space_type: str,
+    *,
+    label: str,
+    target_area_sqm: Optional[float] = None,
+    min_width_m: Optional[float] = None,
+    min_depth_m: Optional[float] = None,
+    size_hint: Optional[str] = None,
+) -> None:
+    node = Node(
+        type=_classify_node_type(space_type),
+        space_type=space_type,
+        label=label,
+        zone=_classify_zone(space_type),
+        target_area_sqm=target_area_sqm,
+        min_width_m=min_width_m,
+        min_depth_m=min_depth_m,
+        size_hint=size_hint,
+        source="requirements",
+    )
+    graph.add_node(_apply_type_semantics(node))
+    nodes_by_key.setdefault(space_type, []).append(node)
+
+
+def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
+    """Build a graph from the MVP engine's own contract, ``RequirementsSpec``.
+
+    Uses ``spec.spaces`` (the free-string superset, Phase 1.2) when the
+    caller populated it; otherwise builds from ``spec.rooms`` directly —
+    every existing caller today only sets ``rooms``, so this is the common
+    path, and it deliberately does NOT round-trip through
+    ``catalog.spaces_from_rooms`` first: that helper drops the original
+    ``RoomType``, but engine byte-identical output (Phase 2.2b) depends on
+    two things only the original enum value carries — ``ROOM_SIZING``'s
+    area/minima (the catalog's own values disagree with ``ROOM_SIZING`` on
+    11 of 12 overlapping types, per the Phase 1 audit) and the legacy
+    per-instance label scheme (``RoomType.value``, not the catalog's
+    post-alias key — e.g. "Dining", not "Dining Room").
+
+    ``spec.adjacency``/``spec.avoid_adjacency`` are still ``RoomType``-keyed
+    (the closed enum hasn't been retired from the contract yet); nodes built
+    from ``spec.rooms`` use the raw enum value as ``space_type`` (matched
+    directly), nodes built from ``spec.spaces`` use the catalog key (matched
+    via alias resolution) — either way this is id-level: every node of a
+    matching type gets its own edge, not one edge per type.
+
+    Plot size and facing are engine-level facts, not graph nodes, and are
+    intentionally left off the graph. Entry injection (the engine's
+    ``counts[RoomType.entry] = 1`` auto-add) is deliberately NOT replicated
+    here — that is ``program_completion.ensure_entry``'s job.
+    """
+    graph = ProgramGraph()
+    nodes_by_key: dict[str, list[Node]] = {}
+
+    if spec.spaces:
+        for request in spec.spaces:
+            for i in range(1, request.count + 1):
+                add_requirements_node(
+                    graph, nodes_by_key, request.space_type,
+                    label=_numbered_label(
+                        request.space_type.replace("_", " ").title(), i, request.count
+                    ),
+                    target_area_sqm=request.area_m2,
+                    size_hint=request.size_hint,
+                )
+    else:
+        # Raw RoomType.value (not the catalog-aliased key) — engine.py's own
+        # zoning split does `RoomType(need.type)` against PUBLIC_ROOM_TYPES/
+        # PRIVATE_ROOM_TYPES (see engine.py `generate_plan`), which only
+        # accepts real enum strings. The classification frozensets above
+        # already carry "entry"/"utility" as raw synonyms of "foyer"/
+        # "laundry"; "dining"/"parking" were added alongside them for the
+        # same reason.
+        for room in spec.rooms:
+            sizing = ROOM_SIZING[room.type]
+            base_label = room.type.value.replace("_", " ").title()
+            for i in range(1, room.count + 1):
+                add_requirements_node(
+                    graph, nodes_by_key, room.type.value,
+                    label=_numbered_label(base_label, i, room.count),
+                    target_area_sqm=sizing.preferred_area_m2,
+                    min_width_m=sizing.min_w,
+                    min_depth_m=sizing.min_d,
+                )
+
+    def nodes_for(room_type: RoomType) -> list[Node]:
+        # Try the raw enum value first (the `spec.rooms` branch above), then
+        # fall back to the catalog-aliased key (the `spec.spaces` branch).
+        return nodes_by_key.get(room_type.value) or nodes_by_key.get(_catalog_key(room_type), [])
+
+    for pref in spec.adjacency:
+        strength = pref.strength.upper()
+        for a in nodes_for(pref.room_a):
+            for b in nodes_for(pref.room_b):
+                if a.id == b.id:
+                    continue
+                graph.add_edge(Edge(
+                    node_a=a.id, node_b=b.id,
+                    relation_type="adjacent",
+                    strength=strength,
+                    door_required=strength == "MUST",
+                    reason=f"requirements adjacency {pref.room_a.value}~{pref.room_b.value}",
+                ))
+
+    for pair in spec.avoid_adjacency:
+        for a in nodes_for(pair.room_a):
+            for b in nodes_for(pair.room_b):
+                if a.id == b.id:
+                    continue
+                graph.add_edge(Edge(
+                    node_a=a.id, node_b=b.id,
+                    relation_type="adjacent",
+                    strength="AVOID",
+                    reason=f"requirements avoid {pair.room_a.value}~{pair.room_b.value}",
+                ))
+
+    return graph
+
+
 def from_building_template(template: "BuildingTemplate") -> ProgramGraph:
     """Build a graph from a building template's default rooms + adjacency
     priorities. Useful as a starting program when the prompt is sparse."""
@@ -434,3 +568,125 @@ def to_room_specs(graph: ProgramGraph) -> list[RoomSpec]:
             )
         )
     return specs
+
+
+# ── Bridge to EngineProgram (Phase 2.1 — additive; engine.py does not consume
+# this yet, that is Phase 2.2) ────────────────────────────────────────────────
+
+_SIZE_HINT_MULTIPLIERS = {"small": 0.7, "medium": 1.0, "large": 1.35, "xlarge": 1.75}
+_ADJACENCY_RELATIONS = frozenset({"adjacent", "connected_by_door", "near"})
+_ENTRY_TYPES = ("entry", "foyer", "lobby", "reception")
+_FLOOR_BY_PREFERENCE = {"basement": -1, "ground": 0, "upper": 1, "any": 0}
+
+
+@dataclass(frozen=True)
+class EngineProgram:
+    """Everything generation needs, derived from the graph. Pure data.
+
+    This is what a future engine (Phase 2.2) consumes instead of a flat
+    ``RequirementsSpec`` — building it here changes no generated layout.
+    """
+
+    needs: list[RoomNeed]
+    zone_of: dict[str, str]
+    must_adjacent: list[tuple[str, str]]
+    should_adjacent: list[tuple[str, str]]
+    avoid: list[tuple[str, str]]
+    circulation_nodes: list[str]
+    floor_of: dict[str, int]
+    entry_node: Optional[str]
+
+
+def _resolve_sizing(node: Node) -> tuple[float, float, float]:
+    """(preferred_area, min_w, min_d) for one node.
+
+    Precedence for the target/preferred area: explicit node area > size_hint
+    x catalog multiplier > catalog default > derived from width/depth. Hard
+    minima (min_w/min_d) never scale with size_hint — only explicit node
+    minima override the catalog's.
+    """
+    try:
+        space = catalog.get(node.space_type)
+    except catalog.UnknownSpaceType:
+        space = None
+
+    if node.target_area_sqm is not None:
+        area = node.target_area_sqm
+    elif node.size_hint and space is not None:
+        area = space.preferred_area_m2 * _SIZE_HINT_MULTIPLIERS[node.size_hint]
+    elif space is not None:
+        area = space.preferred_area_m2
+    else:
+        area = (node.width or 3.0) * (node.depth or 3.0)
+
+    min_w = node.min_width_m if node.min_width_m is not None else (space.min_w if space else 1.2)
+    min_d = node.min_depth_m if node.min_depth_m is not None else (space.min_d if space else 1.2)
+    return round(area, 2), min_w, min_d
+
+
+def _entry_node(nodes: list[Node]) -> Optional[str]:
+    for candidate_type in _ENTRY_TYPES:
+        for node in nodes:
+            if node.space_type == candidate_type:
+                return node.id
+    return None
+
+
+def _edge_buckets(
+    edges: list[Edge],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    must: list[tuple[str, str]] = []
+    should: list[tuple[str, str]] = []
+    avoid: list[tuple[str, str]] = []
+    for edge in edges:
+        pair = (edge.node_a, edge.node_b)
+        if edge.relation_type == "separated" or edge.strength == "AVOID":
+            avoid.append(pair)
+        elif edge.strength == "MUST" and edge.relation_type in _ADJACENCY_RELATIONS:
+            must.append(pair)
+        elif edge.strength == "SHOULD" and edge.relation_type in _ADJACENCY_RELATIONS:
+            should.append(pair)
+    return must, should, avoid
+
+
+def to_engine_program(graph: ProgramGraph) -> EngineProgram:
+    """Derive an :class:`EngineProgram` from a graph — id-level adjacency
+    (not type-level), so e.g. two bedroom nodes each keep their own
+    must/avoid pairs instead of collapsing onto "bedroom" as a type."""
+    # Local import: engine.py (inside layout_engine) now imports this module
+    # to build EngineProgram, and layout_engine/__init__.py eagerly imports
+    # engine.py — a module-level import here would be a circular import at
+    # package-init time. Deferring to call time breaks the cycle since by
+    # then both packages have finished loading.
+    from app.services.layout_engine.subdivision import RoomNeed
+
+    buildable = graph.buildable_nodes()
+    needs: list[RoomNeed] = []
+    zone_of: dict[str, str] = {}
+    floor_of: dict[str, int] = {}
+    for node in buildable:
+        area, min_w, min_d = _resolve_sizing(node)
+        needs.append(RoomNeed(
+            key=node.id,
+            type=node.space_type,
+            label=node.label or node.space_type.replace("_", " ").title(),
+            preferred_area=area,
+            min_w=min_w,
+            min_d=min_d,
+        ))
+        zone_of[node.id] = node.zone
+        floor_of[node.id] = _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+
+    must_adjacent, should_adjacent, avoid = _edge_buckets(graph.edges)
+    circulation_nodes = [n.id for n in buildable if n.type == "circulation"]
+
+    return EngineProgram(
+        needs=needs,
+        zone_of=zone_of,
+        must_adjacent=must_adjacent,
+        should_adjacent=should_adjacent,
+        avoid=avoid,
+        circulation_nodes=circulation_nodes,
+        floor_of=floor_of,
+        entry_node=_entry_node(buildable),
+    )

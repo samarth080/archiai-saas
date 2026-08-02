@@ -93,6 +93,20 @@ def test_engine_is_deterministic():
     assert a == b
 
 
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_room_ids_follow_the_legacy_r_n_scheme(name):
+    # Phase 2.2b: _expand() now builds needs via the ProgramGraph bridge
+    # instead of a flat dict-counting loop, and remaps the graph's own
+    # node ids ("node-3") back to this "r1".."rN" scheme. Not cosmetic —
+    # _place_doors's BFS spanning tree tie-breaks on the lexicographic sort
+    # of room keys, so a different id scheme can silently change *which*
+    # doors get placed for a fixture with real adjacency ambiguity (caught
+    # by diffing 4bhk/3bhk_adjacencies against a pre-refactor snapshot: the
+    # node-id scheme produced a different door set, not just different ids).
+    plan = generate_plan(_load(name))
+    assert {r.id for r in plan.rooms} == {f"r{i}" for i in range(1, len(plan.rooms) + 1)}
+
+
 def test_rebuild_derived_geometry_restores_generated_plan_artifacts():
     spec = _load("2bhk")
     plan = generate_plan(spec)

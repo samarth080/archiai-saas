@@ -690,6 +690,58 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Full suites re-verified after this pass: backend 707 passed / 3 expected skips / 0 failed; frontend 271 passed / 54 files / 0 failed.
 - [x] **Review gate: CLOSED.** Phase 7 complete. Not merged to `main`; pushed only to `origin/mvp/phase7-two-way-sync`.
 
+### Packet 7.2 — Engine Benchmark and AVOID-adjacency finding (`packet7.2/engine-benchmark-audit`)
+
+- [x] Real (not estimated) baseline: `backend/scripts/benchmark_acceptance_prompts.py` runs the 6 acceptance prompts through the production `parse_prompt -> generate_layout` path. Scores 51-87, deterministic (fixed a false non-determinism reading caused by comparing fresh per-run UUIDs instead of geometry), AVOID-adjacency violations in 5/6 prompts.
+- [x] Root cause: `_order_zone_rooms`/`_chain_by_adjacency` only consider must/should pairs; AVOID is a post-placement score penalty only, never a placement input.
+- [x] Attempted a bounded fix (extend the MUST-pair cross-row repair to AVOID pairs too); live-tested, found it doesn't work when the conflicting type has 2+ instances (moving one still leaves another adjacent); also found the fix targeted `_graph_pack_rooms`, a candidate that never even runs without MUST pairs. Reverted cleanly rather than ship a no-op.
+- [x] Full finding written into `archiai_engine_generalization_workflow.md` §0.4 so the next attempt doesn't redo this diagnosis.
+- [x] Backend suite unchanged: 707 passed, 3 expected skips, 0 failed. No engine code changed.
+- [ ] No code fix shipped for the AVOID-adjacency gap in this packet — audit-only by design; a real fix needs Phase 4 (circulation) or Phase 5 (search), not a patch.
+
+### Phase 1 — SpaceCatalog (`phase1/space-catalog`)
+
+- [x] `backend/scripts/audit_catalog.py`: real diff of ROOM_SIZING (12 residential types) vs BASE_SIZES (37 free-string types) — 11 of 12 overlapping types conflict on area, only bedroom already agreed.
+- [x] `app/services/catalog/space_catalog.py`: single free-string-keyed `SpaceType` registry (37 entries). Resolution rule: BASE_SIZES wins area, ROOM_SIZING wins min_w/min_d where both exist; derived minimums (near-square, 60% of area, floored at 1.2m) for BASE_SIZES-only types. `get()`/`resolve_alias()` never guess (UnknownSpaceType + difflib suggestion); `register()` is the runtime-extension escape hatch.
+- [x] Purely additive — nothing existing imports or is imported by it yet.
+- [x] `test_space_catalog.py`, 28 tests: every RoomType enum value round-trips, all 5 existing fixtures resolve untouched.
+- [x] Full suite: 735 passed (707 + 28 new), 3 expected skips, 0 failed.
+- [ ] Not done: schemas/requirements.py, layout_engine, quality/*, and the frontend contract don't consume the catalog yet — that's Phase 1.2 onward, not this slice.
+
+**Phase 1.2 — SpaceRequest/spaces:**
+
+- [x] `SpaceRequest` + `RequirementsSpec.spaces` added additively (default `[]`); `rooms`/`RoomType` unchanged. `spaces_from_rooms()` maps every RoomType value losslessly.
+- [x] Fixed 3 test_mvp_api.py assertions broken by the new field's legitimate presence in persisted JSON (compared raw fixture vs serialized model) — updated expected values, not the schema; confirmed via a full-suite search that no other comparison needed the same fix.
+- [x] Full suite: 747 passed (735 + 12 new), 3 expected skips, 0 failed. One transient scraper-test failure batch did not reproduce on rerun — confirmed unrelated.
+- [ ] Still nothing consumes `spaces` for generation/scoring yet.
+
+**Phase 2.1 — EngineProgram bridge (stacked on Phase 1.2, same branch):**
+
+- [x] `EngineProgram` dataclass + `to_engine_program()` in `planning/program_graph.py` (exported via `app.services.planning`): id-keyed `needs: list[RoomNeed]`, `zone_of`/`floor_of`, id-level `must_adjacent`/`should_adjacent`/`avoid`, `circulation_nodes`, `entry_node`. `engine.py` untouched — purely additive, no behavior change.
+- [x] Sizing precedence: explicit node area/minima > new `Node.size_hint` x multiplier (nothing produces it yet, added ahead of its producer like `SpaceRequest.size_hint` was) > catalog default > `width x depth` fallback for an unresolvable space_type. Hard minima never scale with size_hint.
+- [x] Adjacency bucketing is id-level, not type-level — fixes the exact bug Packet 7.2 diagnosed (two bedrooms no longer collapse onto one `("bedroom","bathroom")` pair).
+- [x] `test_engine_program.py`, 16 tests: sizing precedence tiers, id-level must/avoid, zone/floor coverage, circulation_nodes, entry_node incl. None case, buildable-node filtering.
+- [x] **Verification caveat:** `pytest` could not run this session — `conftest.py` forces `app.main` -> scraper router -> `scrapling` -> `browserforge` header generation, which now raises (pinned `chrome_version=148` has zero matches in the current fingerprint dataset). Confirmed pre-existing, unrelated to this change, blocks the whole suite's collection (tried a browserforge downgrade, still fails). Verified instead by running every assertion directly against the real modules (no mocks): new tests all pass, plus spot-checked golden `test_program_graph.py` round-trip/identical-layout and `test_space_catalog.py` checks still pass. Re-run via `pytest` once the scrapling pin is fixed.
+- [ ] Not done: `engine.py` doesn't consume `EngineProgram` yet (Phase 2.2), no `from_requirements()` builder, no auto-entry-as-graph-rule (`program_completion.py`).
+
+**Phase 2.2a — from_requirements() adapter (stacked on 2.1, same branch):**
+
+- [x] `from_requirements(spec) -> ProgramGraph` in `planning/program_graph.py`, parallel to the other adapters. Uses `spec.spaces` when populated, else normalizes `spec.rooms` via `catalog.spaces_from_rooms()`. `spec.adjacency`/`avoid_adjacency` are still RoomType-keyed, so each pref resolves to its catalog key before matching nodes — id-level, every matching pair gets its own edge (verified: 2 bathrooms x pooja_room avoid = 2 edges, not 1).
+- [x] Deliberately does not auto-inject entry — `engine._expand()`'s hack stays put until 2.2b replaces it with a real graph completion rule.
+- [x] 6 new tests in test_engine_program.py (22 total): spaces-over-rooms precedence, no-auto-entry, enum-to-catalog-key alias (clinic's entry->foyer), id-level avoid bucketing, full round-trip on the 3bhk_adjacencies fixture.
+- [x] Verification: same pytest blocker as 2.1 — verified via direct script execution, plus reran all Phase 2.1 checks and the golden test_program_graph.py suite to confirm no interference. All pass. Scrapling/browserforge fix spawned as its own separate task.
+- [ ] Not done: engine.py still calls `_expand(spec)` unchanged — 2.2b (the byte-identical-output swap) is next.
+
+**Phase 2.2b — engine.py consumes the graph pipeline (stacked on 2.2a, same branch):**
+
+- [x] `_expand(spec)` is now `ensure_entry(from_requirements(spec))` -> `to_engine_program(graph).needs`. `generate_plan()` output verified byte-identical (ids aside) against a real pre-refactor snapshot for all 5 fixtures.
+- [x] **Revised 2.2a's design after finding 2 real conflicts:** (1) catalog area != ROOM_SIZING area for 11/12 types — `from_requirements`'s rooms branch now sets explicit sizing from ROOM_SIZING directly instead of going through spaces_from_rooms/catalog. (2) engine.py's own zoning (`RoomType(need.type) in PUBLIC_ROOM_TYPES`) requires raw RoomType values, not catalog-aliased keys — rooms branch now uses raw values ("dining" not "dining_room"), so 2.2a's `nodes_by_key`/`ensure_entry` design (which assumed catalog keys, e.g. "foyer") got corrected to raw values ("entry"), with a fallback to catalog keys for the spaces path. Updated 2.2a's own tests to match. Side-fixed a small pre-existing classification gap (`_PUBLIC_TYPES`/`_SERVICE_TYPES` were missing "dining"/"parking" as raw synonyms, mirroring the existing entry/foyer, utility/laundry pairs).
+- [x] `planning/program_completion.py` (new): `ensure_entry()` replaces the old inline auto-entry hack.
+- [x] **Real bug caught by the golden-diff, not by the existing invariant tests:** 4bhk's door count differed (15 vs 14) after wiring in — root cause is `_place_doors`'s BFS tie-break sorting room key strings lexicographically, so the graph's "node-3" id scheme picks different doors than the legacy "r1".."rN" scheme even though geometry is otherwise identical. Fixed by remapping needs' keys back to r1..rN before subdivision. New permanent test (`test_room_ids_follow_the_legacy_r_n_scheme` in test_mvp_engine.py) pins this, since the file's existing tests are invariant-only by design and would not have caught it.
+- [x] Also hit and fixed a genuine circular import (layout_engine/__init__ -> engine.py -> planning -> program_graph.py -> layout_engine.subdivision, re-entering layout_engine mid-init) by deferring the RoomNeed import inside to_engine_program() to call time.
+- [x] Verification: golden snapshot diff (5 fixtures), every test_mvp_engine.py test rerun directly (valid-plan, fills-plot, determinism, entry-facing, attached-bathroom, wall-dedup, doors, DoesNotFitError, rebuild_derived_geometry), the real 200-example derandomized Hypothesis go/no-go gate (0 failures), plus test_engine_program.py/test_program_graph.py/test_space_catalog.py/test_mvp_contracts.py via direct reflection. test_mvp_api.py/test_mvp_clarification.py need the blocked DB fixture — import clean, assertions not rerun, flagged as residual risk.
+- [ ] Not done, on purpose: `_order_group` still matches `spec.adjacency` by type, not `program.must_adjacent` by id — doing that id-level fix now would change which bathroom gets attached in 3bhk_adjacencies (2 bathrooms, 1 must-pair), breaking byte-identical output. Needs its own slice with its own acceptance test.
+
 ---
 
 ## Development Rules
