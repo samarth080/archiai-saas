@@ -326,7 +326,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
 
     placed: list[tuple[RoomNeed, Rect]] = []
     try:
-        _, archetype_fn, _ = select_archetype(program)
+        _, archetype_fn, _ = select_archetype(program, spec.layout_style)
         for band_rect, group in archetype_fn(program, plot_w, plot_d, facing).bands:
             placed.extend(subdivide(group, band_rect, facing))
     except SubdivisionError as exc:
