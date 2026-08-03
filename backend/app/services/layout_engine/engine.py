@@ -16,8 +16,24 @@ front door on the entry's facing wall).
 v0 limitations (documented, deliberate): single storey — `floors > 1` places
 every room on one plot (the duplex case is an extraction/clarification concern,
 not an engine one, until Section 17 work); rooms are emitted with rotation=0.
+
+Polygon boundary path (workflow Phase 8): when `spec.plot.boundary` is set,
+`generate_plan` dispatches to `_generate_plan_polygon` instead — a parallel
+pipeline (own subdivider, own wall builder) that mirrors this one structurally
+but operates on a general straight-edge polygon rather than plot_w x plot_d.
+It is deliberately NOT unified with the rect path: GEOS/shapely floating-point
+arithmetic is not guaranteed bit-identical to the exact `Rect` arithmetic this
+file already leans on (see the "round EDGES, not x/w independently" comment
+below — this file has been bitten by float-path drift before), so routing
+every rectangular plot through shapely for a superficially cleaner abstraction
+would mean re-proving float-for-float equivalence against the whole existing
+test suite. Two smaller parallel functions is the safer, smaller diff.
+`_place_doors` below is reused UNCHANGED by both paths — it only ever reads
+`RoomNeed`/`Wall`/wall-length, never the shape type, confirmed genuinely
+shape-agnostic.
 """
 import dataclasses
+import math
 
 from app.config.mvp_defaults import (
     DEFAULT_FACING,
@@ -28,10 +44,12 @@ from app.config.mvp_defaults import (
     ROOM_SIZING,
     WALL_THICKNESS_M,
 )
-from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
+from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Vertex, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
+from app.services.layout_engine import polygon
 from app.services.layout_engine.archetypes import select_archetype
 from app.services.layout_engine.geometry import EPS, Rect, Segment
+from app.services.layout_engine.polygon_subdivision import subdivide_polygon
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
 from app.services.planning import EngineProgram, from_requirements, to_engine_program
 from app.services.planning.program_completion import ensure_entry
@@ -143,7 +161,44 @@ def _build_walls(placed: list[tuple[RoomNeed, Rect]], plot_w: float, plot_d: flo
 
 
 def _wall_length(w: Wall) -> float:
-    return abs(w.x2 - w.x1) + abs(w.y2 - w.y1)
+    # Euclidean, not Manhattan: a slanted polygon-boundary wall isn't
+    # axis-aligned, and abs(dx)+abs(dy) understates/overstates its true
+    # length, corrupting door-offset centering in _place_doors. A no-op for
+    # every axis-aligned wall (Manhattan == Euclidean when one of dx/dy is
+    # exactly zero) — verified byte-identical against all 5 fixtures.
+    return math.hypot(w.x2 - w.x1, w.y2 - w.y1)
+
+
+def _build_walls_polygon(placed: list[tuple[RoomNeed, "polygon.Polygon"]], plot_polygon: "polygon.Polygon"):
+    """Polygon counterpart of `_build_walls` — same one-wall-per-shared-edge
+    contract, computed via `polygon.shared_edges`/`polygon.is_on_boundary`
+    instead of `Rect.shared_edge`/coordinate-vs-plot-span comparisons."""
+    walls: list[Wall] = []
+    wall_rooms: dict[str, tuple[str, str | None]] = {}
+
+    def add(seg: Segment, a: str, b: str | None) -> str:
+        wall_id = f"w{len(walls) + 1}"
+        walls.append(Wall(
+            id=wall_id,
+            x1=_round(seg.x1), y1=_round(seg.y1),
+            x2=_round(seg.x2), y2=_round(seg.y2),
+            thickness=WALL_THICKNESS_M,
+        ))
+        wall_rooms[wall_id] = (a, b)
+        return wall_id
+
+    for i, (need_a, poly_a) in enumerate(placed):
+        for need_b, poly_b in placed[i + 1:]:
+            for seg in polygon.shared_edges(poly_a, poly_b):
+                add(seg, need_a.key, need_b.key)
+
+    for need, poly in placed:  # boundary portions belong to exactly one room
+        coords = list(poly.exterior.coords)
+        for (x1, y1), (x2, y2) in zip(coords, coords[1:]):
+            mid = ((x1 + x2) / 2, (y1 + y2) / 2)
+            if polygon.is_on_boundary(mid, plot_polygon):
+                add(Segment(x1, y1, x2, y2), need.key, None)
+    return walls, wall_rooms
 
 
 def _circulation_key(placed: list[tuple[RoomNeed, Rect]]) -> str:
@@ -304,7 +359,85 @@ def rebuild_derived_geometry(
     return plan.model_copy(update={"walls": walls, "doors": doors})
 
 
+def _generate_plan_polygon(spec: RequirementsSpec) -> LayoutPlan:
+    """Polygon counterpart of `generate_plan`'s tail — same validation order,
+    same error types, no zone/archetype banding (Phase 8 scope: `zoned_bands`
+    already collapses to one band for a single zone group, so subdividing the
+    whole boundary as one band is the smallest thing that satisfies "rooms
+    fill the boundary"; polygon-aware banding is deferred)."""
+    facing = spec.facing or DEFAULT_FACING
+    plot_polygon = polygon.polygon_from_vertices(spec.plot.boundary)
+    if not plot_polygon.is_valid or not plot_polygon.is_simple or plot_polygon.area <= EPS:
+        raise DoesNotFitError("plot boundary is not a valid simple polygon")
+
+    program = _build_program(spec)
+    needs = program.needs
+    if not needs:
+        raise DoesNotFitError("no rooms requested")
+    if len(needs) > MAX_ROOMS_PER_LAYOUT:
+        raise DoesNotFitError(f"more than {MAX_ROOMS_PER_LAYOUT} rooms requested")
+
+    plot_area = plot_polygon.area
+    required = sum(n.min_area for n in needs)
+    if required * 1.05 > plot_area:
+        raise DoesNotFitError(
+            f"rooms need at least {required:.0f} m^2 but the plot is {plot_area:.0f} m^2 — increase plot size",
+            required_area=required, plot_area=plot_area,
+        )
+
+    try:
+        placed = subdivide_polygon(needs, plot_polygon, facing)
+    except SubdivisionError as exc:
+        raise DoesNotFitError(f"{exc} — increase plot size") from exc
+
+    for need, poly in placed:  # leaf min-size gate (swap-tolerant), off the bbox
+        minx, miny, maxx, maxy = poly.bounds
+        w, d = maxx - minx, maxy - miny
+        fits = (w >= need.min_w - EPS and d >= need.min_d - EPS) or (
+            w >= need.min_d - EPS and d >= need.min_w - EPS
+        )
+        if not fits:
+            raise DoesNotFitError(
+                f"{need.label} would be {w:.1f}x{d:.1f} m, below its minimum "
+                f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
+            )
+
+    walls, wall_rooms = _build_walls_polygon(placed, plot_polygon)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing)
+
+    rooms = []
+    for need, poly in placed:
+        minx, miny, maxx, maxy = poly.bounds
+        x, y = _round(minx), _round(miny)
+        w, h = round(_round(maxx) - x, 3), round(_round(maxy) - y, 3)
+        vertices = None
+        if not polygon.is_axis_aligned_rect(poly):
+            ring = list(poly.exterior.coords)[:-1]  # drop the closing duplicate
+            vertices = [Vertex(x=_round(px), y=_round(py)) for px, py in ring]
+        rooms.append(PlanRoom(
+            id=need.key, type=RoomType(need.type), label=need.label,
+            x=x, y=y, w=w, h=h, rotation=0, vertices=vertices,
+        ))
+
+    plot_minx, plot_miny, plot_maxx, plot_maxy = plot_polygon.bounds
+    boundary_ring = list(plot_polygon.exterior.coords)[:-1]
+    return LayoutPlan(
+        plot=PlanPlot(
+            width_m=plot_maxx - plot_minx,
+            depth_m=plot_maxy - plot_miny,
+            facing=facing,
+            boundary=[Vertex(x=_round(px), y=_round(py)) for px, py in boundary_ring],
+        ),
+        rooms=rooms,
+        walls=walls,
+        doors=doors,
+    )
+
+
 def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
+    if spec.plot.boundary is not None:
+        return _generate_plan_polygon(spec)
+
     plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
     plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
     facing = spec.facing or DEFAULT_FACING

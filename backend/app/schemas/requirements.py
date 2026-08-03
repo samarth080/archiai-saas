@@ -112,11 +112,29 @@ class AvoidPair(BaseModel):
     room_b: RoomType
 
 
+class Vertex(BaseModel):
+    """A single (x, y) boundary/room-outline point, same meters/NW-origin
+    convention as LayoutPlan (workflow Phase 8, polygon boundary engine).
+    Defined here rather than layout_plan.py: that module already imports
+    from this one (Facing, RoomType), so putting Vertex here — where PlotSpec
+    needs it too — avoids a circular import."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: Annotated[float, Field(ge=-200, le=200)]
+    y: Annotated[float, Field(ge=-200, le=200)]
+
+
 class PlotSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     width_m: Meters | None = None
     depth_m: Meters | None = None
+    # Straight-edge polygon footprint override (workflow Phase 8). When set,
+    # the engine subdivides this boundary directly instead of a width_m x
+    # depth_m rectangle; width_m/depth_m (if also present) are ignored by the
+    # engine but may still be used for display/estimation upstream.
+    boundary: list[Vertex] | None = None
 
     @field_validator("width_m", "depth_m", mode="before")
     @classmethod

@@ -173,6 +173,7 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         "width_m": 9.0,
         "depth_m": 12.0,
         "facing": "east",
+        "boundary": None,
     }
     assert body["designId"]
     assert body["designVersionId"]
@@ -183,16 +184,21 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
 
         assert design is not None
         assert version is not None
-        # `spaces` (Phase 1 SpaceCatalog migration) is a new additive field
-        # with an empty-list default; the fixture predates it, so the
-        # persisted, fully-validated model legitimately has one more key
-        # than the raw input fixture — not a round-trip fidelity loss.
-        assert version.requirements_json == {**spec, "spaces": []}
+        # `spaces` (Phase 1 SpaceCatalog migration) and `plot.boundary`
+        # (Phase 8 polygon-boundary engine) are new additive fields with
+        # None/empty-list defaults; the fixture predates both, so the
+        # persisted, fully-validated model legitimately has more keys than
+        # the raw input fixture — not a round-trip fidelity loss.
+        assert version.requirements_json == {
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}
+        }
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
         assert design.layout_json["metadata"]["pipeline"] == "mvp"
         assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
-        assert design.layout_json["metadata"]["mvpRequirements"] == {**spec, "spaces": []}
+        assert design.layout_json["metadata"]["mvpRequirements"] == {
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}
+        }
         assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
         assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
         object_types = {item["objectType"] for item in design.layout_json["rooms"]}
@@ -204,7 +210,9 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     )
     assert latest.status_code == 200
     assert latest.json()["designId"] == body["designId"]
-    assert latest.json()["metadata"]["mvpRequirements"] == {**spec, "spaces": []}
+    assert latest.json()["metadata"]["mvpRequirements"] == {
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}
+    }
     assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
     assert latest.json()["metadata"]["mvpVastuEnabled"] is False
 
@@ -214,7 +222,9 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     )
     assert fetched.status_code == 200
     assert fetched.json()["layout"] == body["layout"]
-    assert fetched.json()["requirements"] == {**spec, "spaces": []}
+    assert fetched.json()["requirements"] == {
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}
+    }
 
 
 async def test_generate_returns_structured_plot_clarification_when_program_does_not_fit(
@@ -250,7 +260,7 @@ async def test_generate_with_defaults_returns_explicit_assumptions(client: Async
     assert response.status_code == 200
     body = response.json()
     assert body["defaults_applied"] == ["9×12 m plot", "east facing"]
-    assert body["requirements"]["plot"] == {"width_m": 9.0, "depth_m": 12.0}
+    assert body["requirements"]["plot"] == {"width_m": 9.0, "depth_m": 12.0, "boundary": None}
     assert body["requirements"]["facing"] == "east"
     assert body["requirements"]["missing_info"] == []
 
