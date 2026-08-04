@@ -143,3 +143,64 @@ def test_open_plan_public_rooms_still_connect_directly():
     layout = _generate("apartment with entry, living room, kitchen, dining room and 2 bedrooms")
 
     assert _door_between(layout, "kitchen", "dining_room") is not None
+
+
+# ── Regression: a room whose every shared wall falls just under
+# _MIN_DOORWAY_SPAN was invisible to the ENTIRE door-placement algorithm
+# (not just under-prioritised) and ended up with zero doors despite
+# genuinely sharing real walls with two other rooms. User-reported: with 2
+# bathrooms on a generated 3BHK, one connected to a neighbour and the other
+# connected to nothing at all. Reproduced directly, root-caused to
+# `_MIN_DOORWAY_SPAN`/`doorable` having no fallback, and fixed with a
+# narrower fallback tier mirroring the MVP engine's own established pattern.
+
+
+def test_room_with_only_narrow_shared_walls_still_gets_a_door():
+    from app.services.layout_service import _generate_partition_walls
+
+    # bath1's only two boundaries are 1.0m each — above _MIN_WALL_SPAN (0.3,
+    # a wall gets drawn) but below _MIN_DOORWAY_SPAN (1.2, the old code's
+    # only source of doorable candidates), so before the fix it was excluded
+    # from every door-placement pass and left with zero doors.
+    rooms = [
+        {"id": "bed", "objectType": "room", "roomType": "bedroom",
+         "position": {"x": 1.5, "z": 1.5}, "size": {"w": 3.0, "d": 3.0}},
+        {"id": "bath1", "objectType": "room", "roomType": "bathroom",
+         "position": {"x": 3.5, "z": 0.5}, "size": {"w": 1.0, "d": 1.0}},
+        {"id": "kitchen", "objectType": "room", "roomType": "kitchen",
+         "position": {"x": 5.5, "z": 1.5}, "size": {"w": 3.0, "d": 3.0}},
+        {"id": "bath2", "objectType": "room", "roomType": "bathroom",
+         "position": {"x": 4.5, "z": 3.5}, "size": {"w": 3.0, "d": 1.0}},
+    ]
+    markers = _generate_partition_walls(rooms, floor_id="floor_0", floor_level=0, elevation=0.0)
+    doors = [m for m in markers if m["label"] == "Interior Door"]
+
+    def touches_bath1(door: dict) -> bool:
+        x1, x2 = 3.0, 4.0
+        z1, z2 = 0.0, 1.0
+        return (x1 - 0.05 <= door["position"]["x"] <= x2 + 0.05) and (
+            z1 - 0.05 <= door["position"]["z"] <= z2 + 0.05
+        )
+
+    assert any(touches_bath1(d) for d in doors), "bath1 has no door despite sharing real walls"
+
+
+def test_no_room_ends_up_with_zero_doors_in_a_real_generated_layout():
+    layout = _generate("3bhk house with 2 washrooms")
+    rooms = [r for r in layout["rooms"] if r["objectType"] == "room"]
+    doors = [r for r in layout["rooms"] if r["objectType"] == "door"]
+
+    def rect_of(room: dict) -> tuple[float, float, float, float]:
+        p, s = room["position"], room["size"]
+        return (p["x"] - s["w"] / 2, p["z"] - s["d"] / 2, p["x"] + s["w"] / 2, p["z"] + s["d"] / 2)
+
+    rects = {r["id"]: rect_of(r) for r in rooms}
+    doors_per_room = {r["id"]: 0 for r in rooms}
+    for door in doors:
+        x, z = door["position"]["x"], door["position"]["z"]
+        for room_id, (x1, z1, x2, z2) in rects.items():
+            if (x1 - 0.1 <= x <= x2 + 0.1) and (z1 - 0.1 <= z <= z2 + 0.1):
+                doors_per_room[room_id] += 1
+
+    zero_door_rooms = [r["label"] for r in rooms if doors_per_room[r["id"]] == 0]
+    assert zero_door_rooms == []
