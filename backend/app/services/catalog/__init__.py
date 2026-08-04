@@ -1,5 +1,6 @@
 from app.services.catalog.space_catalog import (
     CATALOG,
+    CIRCULATION_WIDTHS,
     SpaceType,
     UnknownSpaceType,
     get,
@@ -12,6 +13,7 @@ from app.services.catalog.space_catalog import (
 
 __all__ = [
     "CATALOG",
+    "CIRCULATION_WIDTHS",
     "SpaceType",
     "UnknownSpaceType",
     "get",

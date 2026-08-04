@@ -74,6 +74,21 @@ _MIN_DIMENSION_FLOOR_M = 1.2
 _MIN_AREA_FRACTION_OF_PREFERRED = 0.6
 _DEFAULT_MAX_ASPECT = 2.5
 
+# Workflow Phase 4.2 — corridor min width by context. Only "residential" is
+# actually consumed yet (by `_build_catalog` below, for the default
+# CATALOG["corridor"]/["hallway"] entries): nothing upstream (RequirementsSpec,
+# EngineProgram) carries a commercial/accessibility context flag through to
+# `program_completion.ensure_corridor` yet, so those two remain named,
+# documented constants ready for that wiring rather than dead numbers, not a
+# claim that building-type-aware width selection is live end-to-end.
+CIRCULATION_WIDTHS: dict[str, float] = {
+    "residential": 1.0,
+    "commercial": 1.5,
+    "accessible": 1.8,
+}
+_CIRCULATION_MIN_LENGTH_M = 1.5  # a floor, not the target — real length comes
+# from preferred_area_m2 / carving (workflow 4.3), same as every other room.
+
 
 @dataclass(frozen=True)
 class SpaceType:
@@ -162,6 +177,12 @@ def _build_catalog() -> dict[str, SpaceType]:
     for room_type, sizing in ROOM_SIZING.items():
         free_key = _ENUM_ALIAS_OF.get(room_type.value, room_type.value)
         room_sizing_by_free_key[free_key] = (sizing.min_w, sizing.min_d)
+    # Circulation spine types get a real narrow-and-long minimum instead of
+    # `_derive_min_dimensions`'s generic near-square formula (which would
+    # give a corridor a ~3m-square minimum — architecturally wrong for
+    # something meant to be a thin strip).
+    for spine_key in ("corridor", "hallway"):
+        room_sizing_by_free_key[spine_key] = (CIRCULATION_WIDTHS["residential"], _CIRCULATION_MIN_LENGTH_M)
 
     catalog: dict[str, SpaceType] = {}
     for key, area in BASE_SIZES.items():

@@ -10,7 +10,7 @@ from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType, Sp
 from app.services import catalog
 from app.services.layout_engine.subdivision import RoomNeed
 from app.services.planning import Edge, Node, ProgramGraph, from_requirements, to_engine_program
-from app.services.planning.program_completion import ensure_entry
+from app.services.planning.program_completion import ensure_corridor, ensure_entry
 from app.services.planning.program_graph import from_room_specs
 from app.services.prompt_service import RoomSpec
 
@@ -316,3 +316,67 @@ def test_ensure_entry_noop_when_program_already_has_one():
     graph = ensure_entry(graph)
     assert len(graph.nodes_of_space_type("entry")) == 1
     assert len(graph.buildable_nodes()) == 2
+
+
+# ── program_completion.ensure_corridor (workflow Phase 4.1) ─────────────────
+
+
+def test_ensure_corridor_injects_when_three_or_more_private_semi_private_rooms():
+    from app.services import catalog
+
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.master_bedroom, count=1),
+        RoomRequest(type=RoomType.bedroom, count=2),
+    ])
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    corridors = graph.nodes_of_space_type("corridor")
+    assert len(corridors) == 1
+    space = catalog.get("corridor")
+    assert corridors[0].target_area_sqm == space.preferred_area_m2
+    assert corridors[0].min_width_m == space.min_w
+    assert corridors[0].min_depth_m == space.min_d
+
+
+def test_ensure_corridor_does_not_inject_under_the_threshold():
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.bedroom, count=1),
+        RoomRequest(type=RoomType.bathroom, count=1),  # service, not private/semi_private
+    ])
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    assert graph.nodes_of_space_type("corridor") == []
+
+
+def test_ensure_corridor_does_not_fire_just_because_entry_exists():
+    # The exact false-positive already caught for the archetype selector
+    # (Phase 3.2): "no circulation node" must NOT mean "no node of type
+    # circulation" (entry counts as that), since ensure_entry has always
+    # already run by this point and would make the broad check never fire.
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.master_bedroom, count=1),
+        RoomRequest(type=RoomType.bedroom, count=2),
+    ])
+    graph = ensure_entry(from_requirements(spec))
+    assert graph.nodes_of_space_type("entry"), "fixture must actually have an entry by this point"
+    graph = ensure_corridor(graph)
+    assert len(graph.nodes_of_space_type("corridor")) == 1
+
+
+def test_ensure_corridor_is_idempotent():
+    spec = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.master_bedroom, count=1),
+        RoomRequest(type=RoomType.bedroom, count=2),
+    ])
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    graph = ensure_corridor(graph)
+    assert len(graph.nodes_of_space_type("corridor")) == 1
+
+
+def test_ensure_corridor_noop_when_program_already_has_a_hallway():
+    spec = RequirementsSpec(spaces=[
+        SpaceRequest(space_type="master_bedroom", count=1),
+        SpaceRequest(space_type="bedroom", count=2),
+        SpaceRequest(space_type="hallway", count=1),
+    ])
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    assert len(graph.nodes_of_space_type("hallway")) == 1
+    assert graph.nodes_of_space_type("corridor") == []
