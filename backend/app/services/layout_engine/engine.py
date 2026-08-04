@@ -30,7 +30,7 @@ from app.config.mvp_defaults import (
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
 from app.services import catalog
-from app.services.layout_engine.archetypes import select_archetype
+from app.services.layout_engine.archetypes import macro_zone, select_archetype
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
 from app.services.planning import EngineProgram, from_requirements, to_engine_program
@@ -168,6 +168,7 @@ def _place_doors(
     wall_rooms: dict[str, tuple[str, str | None]],
     spec: RequirementsSpec,
     facing: Facing,
+    zone_of: dict[str, str],
     *,
     allow_disconnected: bool = False,
 ) -> list[Door]:
@@ -236,7 +237,30 @@ def _place_doors(
             f"no door-sized wall reaches: {', '.join(unreachable)} — increase plot size"
         )
 
-    # 3. Front door on the entry's facing-side boundary wall (best effort).
+    # 3. Direct doors between every remaining adjacent pair. Step 2 only adds
+    #    the minimum doors needed for bare reachability (a spanning tree) —
+    #    a room can be fully "reachable" while a wall it visibly shares with
+    #    its next-door neighbour stays solid, which reads as broken
+    #    connectivity even though nothing is technically unreachable (e.g. a
+    #    dining room right next to the entry with no door between them,
+    #    routed instead through the living room). Skip a pair only when
+    #    there's a real reason not to connect them directly: both rooms are
+    #    private/service-zoned (bedroom-bedroom, bedroom-bathroom — privacy,
+    #    not a defect) or the pair is explicitly avoided in the spec.
+    avoid_type_pairs = {frozenset((p.room_a.value, p.room_b.value)) for p in spec.avoid_adjacency}
+    for pair, pair_walls in by_pair.items():
+        pair_types = frozenset(types_by_key[k] for k in pair)
+        if pair_types in avoid_type_pairs:
+            continue
+        if all(macro_zone(zone_of.get(k, "semi_private")) == "private" for k in pair):
+            continue
+        best = max(pair_walls, key=_wall_length)
+        if _wall_length(best) >= _MIN_DOOR_EDGE:
+            add_door(best, DOOR_WIDTH_M)
+        elif _wall_length(best) >= _NARROW_DOOR_EDGE:
+            add_door(best, _NARROW_DOOR_WIDTH)
+
+    # 4. Front door on the entry's facing-side boundary wall (best effort).
     entry_key = next((n.key for n, _ in placed if n.type == RoomType.entry.value), None)
     if entry_key is not None:
         def on_facing(wall: Wall) -> bool:
@@ -304,12 +328,14 @@ def rebuild_derived_geometry(
         plan.plot.width_m,
         plan.plot.depth_m,
     )
+    zone_of = {need.key: catalog.zone_for(need.type) for need, _ in placed}
     doors = _place_doors(
         placed,
         walls,
         wall_rooms,
         spec,
         plan.plot.facing,
+        zone_of,
         allow_disconnected=True,
     )
     return plan.model_copy(update={"walls": walls, "doors": doors})
@@ -354,7 +380,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             )
 
     walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by

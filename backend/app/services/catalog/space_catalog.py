@@ -240,6 +240,17 @@ def min_dimensions(key: str, default: tuple[float, float] = (1.2, 1.2)) -> tuple
     return space.min_w, space.min_d
 
 
+def zone_for(key: str, default: str = "semi_private") -> str:
+    """Lenient, never-raises zone lookup — same rationale/fallback pattern as
+    :func:`min_dimensions`, used by ``engine.rebuild_derived_geometry`` so an
+    edited/unknown room type still gets a reasonable door-placement zone
+    instead of crashing."""
+    try:
+        return get(key).zone
+    except UnknownSpaceType:
+        return default
+
+
 def with_overrides(key: str, **overrides: object) -> SpaceType:
     """Convenience for a caller that wants a variant of a known type (e.g. an
     explicit area override) without mutating the shared catalog entry."""

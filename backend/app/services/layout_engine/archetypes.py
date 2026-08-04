@@ -19,7 +19,7 @@ minimum width, even though the *aggregate* of every band's floor comfortably
 fit the plot. Splitting a facing-side "circulation" band for something as
 small as a foyer, or a same-size "service" band for two bathrooms, isn't how
 real plans read anyway. So the 7-value ``zone_of`` is folded into the 3
-*macro* bands the doc names (``_MACRO_ZONE``) before banding — circulation
+*macro* bands the doc names (``MACRO_ZONE``) before banding — circulation
 joins public, service/technical/outdoor join private (unless a must-adjacency
 redistribution moves a service node to its partner's band first).
 
@@ -70,7 +70,7 @@ from app.services.planning import EngineProgram
 
 # zone_of value -> macro band, in facing-to-back order. Mirrors the old
 # "entry leads the public band, service rooms sit with private" intent.
-_MACRO_ZONE = {
+MACRO_ZONE = {
     "circulation": "public",
     "public": "public",
     "semi_private": "semi_private",
@@ -89,8 +89,8 @@ class BandPlan:
     corridor_rects: list[tuple[str, Rect]] = field(default_factory=list)
 
 
-def _macro_zone(zone: str) -> str:
-    return _MACRO_ZONE.get(zone, "private")
+def macro_zone(zone: str) -> str:
+    return MACRO_ZONE.get(zone, "private")
 
 
 def _redistribute_service(program: EngineProgram) -> dict[str, str]:
@@ -230,7 +230,7 @@ def _circulation_weight(space_type: str) -> float:
 
 def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Facing) -> BandPlan:
     """Ordered zone progression, facing-anchored — public/circulation
-    leads, then semi_private, then private/service (see ``_MACRO_ZONE``).
+    leads, then semi_private, then private/service (see ``MACRO_ZONE``).
     Raises ``SubdivisionError`` (same type ``subdivide`` raises, so
     ``engine.py``'s existing handler converts it) when bands can't fit."""
     if not program.needs:
@@ -239,7 +239,7 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
     zone_of = _redistribute_service(program)
     groups: dict[str, list[RoomNeed]] = {}
     for need in program.needs:
-        macro = _macro_zone(zone_of.get(need.key, "semi_private"))
+        macro = macro_zone(zone_of.get(need.key, "semi_private"))
         groups.setdefault(macro, []).append(need)
     for zone, rooms in groups.items():
         groups[zone] = _pull_must_adjacent(rooms, program.must_adjacent)
@@ -263,7 +263,7 @@ def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float,
 
     zone_of = _redistribute_service(program)
     public = _pull_must_adjacent(
-        [n for n in program.needs if _macro_zone(zone_of.get(n.key, "semi_private")) == "public"],
+        [n for n in program.needs if macro_zone(zone_of.get(n.key, "semi_private")) == "public"],
         program.must_adjacent,
     )
     public_keys = {n.key for n in public}
@@ -299,7 +299,7 @@ def hub_and_spoke(program: EngineProgram, plot_w: float, plot_d: float, facing: 
         return BandPlan(bands=[(Rect(0.0, 0.0, plot_w, plot_d), list(program.needs))])
 
     candidates = [
-        n for n in program.needs if _macro_zone(program.zone_of.get(n.key, "semi_private")) == "public"
+        n for n in program.needs if macro_zone(program.zone_of.get(n.key, "semi_private")) == "public"
     ] or list(program.needs)
     hub = max(candidates, key=lambda n: (_circulation_weight(n.type), n.preferred_area))
 
@@ -381,7 +381,7 @@ def select_archetype(
 
     repeat_counts: dict[str, int] = {}
     for need in program.needs:
-        if _macro_zone(program.zone_of.get(need.key, "semi_private")) in ("semi_private", "private"):
+        if macro_zone(program.zone_of.get(need.key, "semi_private")) in ("semi_private", "private"):
             repeat_counts[need.type] = repeat_counts.get(need.type, 0) + 1
     repeated_type = next((t for t, count in repeat_counts.items() if count >= _MIN_REPEAT_UNITS), None)
     has_corridor_spine = any(n.type in _CORRIDOR_SPINE_TYPES for n in program.needs)
@@ -392,7 +392,7 @@ def select_archetype(
         )
 
     public_needs = [
-        n for n in program.needs if _macro_zone(program.zone_of.get(n.key, "semi_private")) == "public"
+        n for n in program.needs if macro_zone(program.zone_of.get(n.key, "semi_private")) == "public"
     ]
     if public_needs:
         hub = max(public_needs, key=lambda n: (_circulation_weight(n.type), n.preferred_area))

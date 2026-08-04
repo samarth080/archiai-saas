@@ -7,6 +7,7 @@ from app.services.catalog.space_catalog import (
     register,
     resolve_alias,
     spaces_from_rooms,
+    zone_for,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "register",
     "resolve_alias",
     "spaces_from_rooms",
+    "zone_for",
 ]
