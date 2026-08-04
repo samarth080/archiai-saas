@@ -22,10 +22,10 @@ soft-scored warning — the engine already guarantees exact requested counts,
 so a shortfall here means the source requirements or a later edit dropped a
 requested room, and quality must not call that layout satisfactory.
 """
-from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.layout_plan import Door, LayoutPlan, PlanRoom, Wall
 from app.schemas.quality_report import Violation
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services import catalog
 from app.services.layout_engine.geometry import EPS, Rect
 
 _TOUCH_EPS = 0.05  # door-midpoint to room-boundary tolerance (5 cm)
@@ -117,11 +117,14 @@ def validate(
                 message=f"{room.label} extends outside the plot",
             ))
 
-    # (c) minimum sizes from the sizing table (orientation-tolerant)
+    # (c) minimum sizes from the sizing table (orientation-tolerant). Lenient
+    # catalog lookup — never raises — so a non-residential room type still
+    # gets a real minimum instead of a KeyError; see min_dimensions' own
+    # docstring for why this stays permissive here.
     for room in rooms:
-        sizing = ROOM_SIZING[room.type]
-        fits = (room.w >= sizing.min_w - EPS and room.h >= sizing.min_d - EPS) or (
-            room.w >= sizing.min_d - EPS and room.h >= sizing.min_w - EPS
+        min_w, min_d = catalog.min_dimensions(room.type)
+        fits = (room.w >= min_w - EPS and room.h >= min_d - EPS) or (
+            room.w >= min_d - EPS and room.h >= min_w - EPS
         )
         if not fits:
             violations.append(Violation(
@@ -129,7 +132,7 @@ def validate(
                 room_ids=[room.id],
                 message=(
                     f"{room.label} is {room.w:.1f}x{room.h:.1f} m, below its minimum "
-                    f"{sizing.min_w:.1f}x{sizing.min_d:.1f} m"
+                    f"{min_w:.1f}x{min_d:.1f} m"
                 ),
             ))
 

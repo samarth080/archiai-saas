@@ -17,12 +17,23 @@ the new canonical contract for the MVP pipeline; converters map LayoutPlan.rooms
 to the existing canvas objects (center-based x/z) so the current 3D editor keeps
 working. Walls/doors are DERIVED artifacts — regenerated deterministically from
 rooms after every edit, never hand-maintained state.
+
+``PlanRoom.type`` (engine generalization workflow, migration-order item 4):
+a free string, not the closed ``RoomType`` enum — same bound as
+``requirements.SpaceRequest.space_type`` (min/max length only), validated
+against ``services.catalog.SpaceCatalog`` at the service boundary rather than
+here, matching that field's own established precedent. The wire format is
+unaffected for every existing residential value: Pydantic normalizes a
+``RoomType`` member passed in (e.g. ``RoomType.bedroom``) to its plain string
+(``"bedroom"``) either way, so this is additive, not a breaking rename — the
+field name stays ``type``, not ``space_type``, so persisted layouts and the
+frontend contract keep reading the same key.
 """
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.requirements import Facing, RoomType, _reject_string_number
+from app.schemas.requirements import Facing, _reject_string_number
 
 Meters = Annotated[float, Field(gt=0, lt=200)]
 Coord = Annotated[float, Field(ge=-200, le=200)]
@@ -40,7 +51,7 @@ class PlanRoom(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    type: RoomType
+    type: str = Field(min_length=1, max_length=64)
     label: str
     x: Coord
     y: Coord

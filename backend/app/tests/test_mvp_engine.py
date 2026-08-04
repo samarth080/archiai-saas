@@ -164,6 +164,55 @@ def test_single_room_spec_works():
     assert validate(plan) == []
 
 
+# ── PlanRoom.type migration (engine generalization workflow, migration-order
+# item 4) — spec.spaces free-string programs now run end to end, not just
+# through archetypes.py unit tests. ───────────────────────────────────────
+
+
+def test_generate_plan_supports_a_non_residential_free_string_program():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {"space_type": "reception", "count": 1},
+            {"space_type": "waiting_room", "count": 1},
+            {"space_type": "consultation_room", "count": 3},
+            {"space_type": "bathroom", "count": 1},
+        ],
+        "plot": {"width_m": 12.0, "depth_m": 14.0},
+        "facing": "east",
+    })
+
+    plan = generate_plan(spec)
+
+    types = sorted(r.type for r in plan.rooms)
+    assert types.count("consultation_room") == 3
+    assert "reception" in types
+    assert "waiting_room" in types
+    assert validate(plan) == []  # zero hard violations, same bar as every residential fixture
+
+
+def test_generate_plan_rejects_an_unknown_space_type_as_a_structured_does_not_fit():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [{"space_type": "zzz_totally_unknown", "count": 1}],
+        "plot": {"width_m": 9.0, "depth_m": 9.0},
+    })
+
+    with pytest.raises(DoesNotFitError) as exc:
+        generate_plan(spec)
+    assert "zzz_totally_unknown" in str(exc.value)
+
+
+def test_rebuild_derived_geometry_handles_a_hand_edited_non_residential_room_type():
+    spec = RequirementsSpec.model_validate({"rooms": [{"type": "living_room", "count": 1}]})
+    plan = generate_plan(spec)
+    edited = plan.model_copy(update={
+        "rooms": [r.model_copy(update={"type": "consultation_room"}) for r in plan.rooms],
+    })
+
+    rebuilt = rebuild_derived_geometry(edited, spec)  # must not raise (e.g. KeyError)
+
+    assert rebuilt.rooms[0].type == "consultation_room"
+
+
 def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
     """Regression from the Phase 4 live gate: area-only cut clamping made the
     attached bathroom a 1.2 m sliver despite sufficient total plot area."""

@@ -108,7 +108,7 @@ def layout_plan_to_canvas(
         {
             "id": room.id,
             "label": room.label,
-            "roomType": room.type.value,
+            "roomType": room.type,
             "objectType": "room",
             "floorId": "floor_0",
             "floorLevel": 0,
@@ -119,7 +119,7 @@ def layout_plan_to_canvas(
             },
             "size": {"w": room.w, "h": WALL_HEIGHT_M, "d": room.h},
             "rotation": _rotation(room.rotation),
-            "color": _room_color(room.type.value),
+            "color": _room_color(room.type),
         }
         for room in plan.rooms
     ]

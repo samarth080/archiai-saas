@@ -25,11 +25,11 @@ from app.config.mvp_defaults import (
     DEFAULT_PLOT_WIDTH_M,
     DOOR_WIDTH_M,
     MAX_ROOMS_PER_LAYOUT,
-    ROOM_SIZING,
     WALL_THICKNESS_M,
 )
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
+from app.services import catalog
 from app.services.layout_engine.archetypes import select_archetype
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
@@ -76,7 +76,14 @@ def _build_program(spec: RequirementsSpec) -> EngineProgram:
     by diffing against a pre-refactor golden snapshot of all 5 fixtures
     before this key remap was added.
     """
-    graph = ensure_entry(from_requirements(spec))
+    try:
+        graph = ensure_entry(from_requirements(spec))
+    except catalog.UnknownSpaceType as exc:
+        # `spec.spaces`'s free-string boundary (from_requirements validates
+        # it eagerly) — translate into the existing clarification path
+        # rather than a raw 500; `spec.rooms`'s closed RoomType enum can
+        # never reach here (Pydantic already rejects an invalid value).
+        raise DoesNotFitError(str(exc)) from exc
     program = to_engine_program(graph)
     remap = {need.key: f"r{i}" for i, need in enumerate(program.needs, start=1)}
 
@@ -273,16 +280,20 @@ def rebuild_derived_geometry(
 
     placed: list[tuple[RoomNeed, Rect]] = []
     for room in plan.rooms:
-        sizing = ROOM_SIZING[room.type]
+        # Lenient lookup (never raises): an edited room's type could be any
+        # catalog-known free string now, not just the 12 residential values
+        # ROOM_SIZING covers — see `catalog.min_dimensions`'s own docstring
+        # for why this stays permissive rather than rejecting the edit.
+        min_w, min_d = catalog.min_dimensions(room.type)
         placed.append(
             (
                 RoomNeed(
                     key=room.id,
-                    type=room.type.value,
+                    type=room.type,
                     label=room.label,
                     preferred_area=room.w * room.h,
-                    min_w=sizing.min_w,
-                    min_d=sizing.min_d,
+                    min_w=min_w,
+                    min_d=min_d,
                 ),
                 Rect(room.x, room.y, room.w, room.h),
             )
@@ -351,7 +362,12 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
     rooms = [
         PlanRoom(
             id=need.key,
-            type=RoomType(need.type),
+            # `need.type` is already validated by this point — a raw RoomType
+            # value from `spec.rooms` (Pydantic-enforced closed enum) or a
+            # catalog-checked key from `spec.spaces` (`from_requirements`
+            # calls `catalog.get()` eagerly) — no cast needed, and casting
+            # via `RoomType(...)` would reject any non-residential type here.
+            type=need.type,
             label=need.label,
             x=_round(rect.x), y=_round(rect.y),
             w=round(_round(rect.x2) - _round(rect.x), 3),
