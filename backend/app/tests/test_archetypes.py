@@ -209,12 +209,33 @@ def test_corridor_rects_is_populated_with_real_geometry():
 
 
 def test_corridor_carving_tiles_the_whole_plot_with_zero_gaps():
+    # The 3 bedrooms served by the corridor are now comb-arranged (workflow
+    # 4.5) — stacked side by side along the corridor's edge rather than one
+    # combined band left to the general recursive tree — so bands no longer
+    # form a single 1-D strip sorted by x. Verify real 2-D tiling instead:
+    # total area matches exactly, and no two bands genuinely overlap.
     plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
     assert sum(rect.area for rect, _ in plan.bands) == pytest.approx(12.0 * 14.0)
-    rects = sorted((rect for rect, _ in plan.bands), key=lambda r: r.x)
-    for a, b in zip(rects, rects[1:]):
-        assert a.x2 == pytest.approx(b.x)
-        assert not a.overlaps(b)
+    rects = [rect for rect, _ in plan.bands]
+    for i, a in enumerate(rects):
+        for b in rects[i + 1:]:
+            assert not a.overlaps(b)
+
+
+def test_corridor_served_rooms_are_all_directly_adjacent_to_the_corridor():
+    """Workflow 4.5's actual guarantee: every semi_private/private room the
+    corridor serves shares a real wall with it — not just some of them,
+    which is what a plain recursive-tree subdivision of the whole served
+    group could produce (a room nested behind another, only reachable
+    through it — the exact shape of a real Hypothesis counterexample this
+    fix closes)."""
+    plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
+    corridor_rect = next(rect for rect, group in plan.bands if any(n.key == "corr" for n in group))
+    served_keys = {"b1", "b2", "b3"}
+    for rect, group in plan.bands:
+        if not any(n.key in served_keys for n in group):
+            continue
+        assert corridor_rect.shared_edge(rect) is not None, group[0].key
 
 
 def test_no_corridor_node_means_unchanged_behavior():

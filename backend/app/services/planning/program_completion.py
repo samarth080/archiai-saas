@@ -51,7 +51,16 @@ def ensure_entry(graph: ProgramGraph) -> ProgramGraph:
 # specifically a spine/hallway type, not any circulation node.
 _CORRIDOR_SYNONYMS = ("corridor", "hallway", "passage", "passageway")
 _CORRIDOR_TRIGGER_ZONES = ("private", "semi_private")
-_MIN_ROOMS_NEEDING_CORRIDOR = 3  # workflow Phase 4.1: "private ∪ semi_private >= 3"
+# The doc's own Phase 4.1 prose says ">= 3"; lowered to 2 after wiring this
+# rule in and running it against the Phase 4.5 privacy-chain hard check
+# (through_room_access) — 2 genuinely private rooms with no other neighbour
+# is already enough to landlock one behind the other (a real, derandomized
+# Hypothesis counterexample: a lone pooja_room whose only neighbours were a
+# bedroom and a bathroom). This also matches the threshold the pre-existing
+# `planning/validation.py` "no circulation" warning already used
+# (`private_count >= 2`), which the doc cites as this rule's own precedent —
+# the doc's literal "3" was the outlier, not this value.
+_MIN_ROOMS_NEEDING_CORRIDOR = 2
 
 
 def ensure_corridor(graph: ProgramGraph) -> ProgramGraph:

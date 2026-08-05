@@ -272,6 +272,18 @@ def zone_for(key: str, default: str = "semi_private") -> str:
         return default
 
 
+def privacy_level_for(key: str, default: int = 0) -> int:
+    """Lenient, never-raises privacy-level lookup — same pattern as
+    :func:`zone_for`/:func:`min_dimensions`. Used by
+    ``hard_constraints``'s ``through_room_access`` check (workflow Phase
+    4.5), which must keep validating an edited/unknown room type rather
+    than crashing on it."""
+    try:
+        return get(key).privacy_level
+    except UnknownSpaceType:
+        return default
+
+
 def with_overrides(key: str, **overrides: object) -> SpaceType:
     """Convenience for a caller that wants a variant of a known type (e.g. an
     explicit area override) without mutating the shared catalog entry."""

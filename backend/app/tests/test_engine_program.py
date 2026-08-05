@@ -321,7 +321,7 @@ def test_ensure_entry_noop_when_program_already_has_one():
 # ── program_completion.ensure_corridor (workflow Phase 4.1) ─────────────────
 
 
-def test_ensure_corridor_injects_when_three_or_more_private_semi_private_rooms():
+def test_ensure_corridor_injects_when_two_or_more_private_semi_private_rooms():
     from app.services import catalog
 
     spec = RequirementsSpec(rooms=[
@@ -337,13 +337,24 @@ def test_ensure_corridor_injects_when_three_or_more_private_semi_private_rooms()
     assert corridors[0].min_depth_m == space.min_d
 
 
-def test_ensure_corridor_does_not_inject_under_the_threshold():
-    spec = RequirementsSpec(rooms=[
+def test_ensure_corridor_threshold_is_exactly_two():
+    # Below threshold: a single private room has nothing to be landlocked
+    # behind, so no corridor is warranted.
+    one_private = RequirementsSpec(rooms=[
         RoomRequest(type=RoomType.bedroom, count=1),
         RoomRequest(type=RoomType.bathroom, count=1),  # service, not private/semi_private
     ])
-    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
-    assert graph.nodes_of_space_type("corridor") == []
+    assert ensure_corridor(ensure_entry(from_requirements(one_private))).nodes_of_space_type("corridor") == []
+
+    # At threshold: 2 genuinely private rooms is already enough for one to
+    # end up with no neighbour but the other (workflow 4.5's own
+    # counterexample — lowered from the doc's literal ">= 3" after this was
+    # found live; see the module-level comment on _MIN_ROOMS_NEEDING_CORRIDOR).
+    two_private = RequirementsSpec(rooms=[
+        RoomRequest(type=RoomType.bedroom, count=1),
+        RoomRequest(type=RoomType.pooja_room, count=1),
+    ])
+    assert len(ensure_corridor(ensure_entry(from_requirements(two_private))).nodes_of_space_type("corridor")) == 1
 
 
 def test_ensure_corridor_does_not_fire_just_because_entry_exists():

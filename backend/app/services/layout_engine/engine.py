@@ -30,15 +30,16 @@ from app.config.mvp_defaults import (
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
 from app.services import catalog
-from app.services.layout_engine.archetypes import macro_zone, select_archetype
+from app.services.layout_engine.archetypes import select_archetype, zoned_bands
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
 from app.services.planning import EngineProgram, from_requirements, to_engine_program
-from app.services.planning.program_completion import ensure_entry
+from app.services.planning.program_completion import ensure_corridor, ensure_entry
 
 _MIN_DOOR_EDGE = DOOR_WIDTH_M + 0.1     # a door needs this much shared wall
 _NARROW_DOOR_WIDTH = 0.7                # connectivity fallback on tight edges
 _NARROW_DOOR_EDGE = _NARROW_DOOR_WIDTH + 0.1
+_PRIVACY_THRESHOLD = 2  # matches quality.hard_constraints' own through_room_access threshold
 
 
 class DoesNotFitError(ValueError):
@@ -54,7 +55,7 @@ class DoesNotFitError(ValueError):
 # ── Expansion + zoning ────────────────────────────────────────────────────────
 
 
-def _build_program(spec: RequirementsSpec) -> EngineProgram:
+def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> EngineProgram:
     """Program construction via the ProgramGraph bridge (workflow Phase 2.2b,
     extended in 3.1a): ``from_requirements`` builds the graph, ``ensure_entry``
     replaces the old inline auto-entry hack, ``to_engine_program`` derives the
@@ -78,6 +79,8 @@ def _build_program(spec: RequirementsSpec) -> EngineProgram:
     """
     try:
         graph = ensure_entry(from_requirements(spec))
+        if inject_corridor:
+            graph = ensure_corridor(graph)
     except catalog.UnknownSpaceType as exc:
         # `spec.spaces`'s free-string boundary (from_requirements validates
         # it eagerly) — translate into the existing clarification path
@@ -237,6 +240,41 @@ def _place_doors(
                     add_door(best, DOOR_WIDTH_M)
                 break
 
+    # 1.5. Guarantee any corridor/hallway spine has a door to a NON-PRIVATE
+    #      neighbour, using its widest available shared wall even if narrow
+    #      (below the usual narrow-door floor). Found live: the corridor's
+    #      position is computed independently of the public band's own
+    #      internal subdivision, so their shared edge can end up a genuine
+    #      sliver by coincidence of proportions — without this, the BFS
+    #      spanning tree (step 2 below) can end up bridging the corridor to
+    #      the rest of the house ONLY through one of the private rooms it
+    #      exists to serve, defeating the entire point of workflow 4.5's
+    #      privacy-chain guarantee (every OTHER room the corridor serves
+    #      becomes reachable only by passing through whichever private room
+    #      happens to be that accidental bridge). A physically-real minimum
+    #      still applies — this is a deliberately narrow service door, not
+    #      an invented opening.
+    _MIN_PHYSICAL_DOOR_EDGE = 0.4
+    for corridor_key in (k for k, t in types_by_key.items() if t in ("corridor", "hallway")):
+        candidates = [
+            (pair, walls) for pair, walls in by_pair.items()
+            if corridor_key in pair
+            and catalog.privacy_level_for(types_by_key[next(iter(pair - {corridor_key}))]) < _PRIVACY_THRESHOLD
+            and not is_avoided(pair)
+        ]
+        if not candidates:
+            continue
+        if any(w.id in doored_walls for _, walls in candidates for w in walls):
+            continue  # already bridged to something non-private
+        _, best_walls = max(candidates, key=lambda pw: max(_wall_length(w) for w in pw[1]))
+        best = max(best_walls, key=_wall_length)
+        if _wall_length(best) >= _MIN_DOOR_EDGE:
+            add_door(best, DOOR_WIDTH_M)
+        elif _wall_length(best) >= _NARROW_DOOR_EDGE:
+            add_door(best, _NARROW_DOOR_WIDTH)
+        elif _wall_length(best) >= _MIN_PHYSICAL_DOOR_EDGE:
+            add_door(best, _wall_length(best))
+
     # 2. BFS spanning tree from the circulation room — connectivity by
     #    construction. Wide doors preferred; narrow fallback keeps a tight
     #    plan reachable rather than failing it.
@@ -284,12 +322,26 @@ def _place_doors(
     #    dining room right next to the entry with no door between them,
     #    routed instead through the living room). Skip a pair only when
     #    there's a real reason not to connect them directly: both rooms are
-    #    private/service-zoned (bedroom-bedroom, bedroom-bathroom — privacy,
+    #    genuinely private (bedroom-bedroom, bedroom-pooja_room — privacy,
     #    not a defect) or the pair is explicitly avoided in the spec.
+    #
+    #    Uses catalog.privacy_level_for, NOT macro_zone — deliberately.
+    #    macro_zone folds "service" into the same "private" bucket as
+    #    genuinely private rooms (zoned_bands' banding wants that fold; see
+    #    its own docstring), so a bedroom-bathroom pair used to get skipped
+    #    here exactly like a bedroom-bedroom pair. That silently starved a
+    #    private room of its only non-private neighbour whenever its sole
+    #    other neighbour was a private-zoned room too — caught by workflow
+    #    4.5's own privacy-chain check going red on a live Hypothesis
+    #    counterexample (a pooja_room boxed in between a bedroom and a
+    #    bathroom, both skipped here, forcing the spanning tree to route it
+    #    through the bedroom). A bathroom at catalog privacy_level 1 is not
+    #    "private" by the same definition the new check uses, so it must be
+    #    allowed to bridge a private room to the rest of the house.
     for pair, pair_walls in by_pair.items():
         if is_avoided(pair):
             continue
-        if all(macro_zone(zone_of.get(k, "semi_private")) == "private" for k in pair):
+        if all(catalog.privacy_level_for(types_by_key[k]) >= _PRIVACY_THRESHOLD for k in pair):
             continue
         best = max(pair_walls, key=_wall_length)
         if _wall_length(best) >= _MIN_DOOR_EDGE:
@@ -398,13 +450,37 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             required_area=required, plot_area=plot_area,
         )
 
-    placed: list[tuple[RoomNeed, Rect]] = []
+    def _place(prog: EngineProgram, archetype_fn) -> list[tuple[RoomNeed, Rect]]:
+        result: list[tuple[RoomNeed, Rect]] = []
+        for band_rect, group in archetype_fn(prog, plot_w, plot_d, facing).bands:
+            result.extend(subdivide(group, band_rect, facing))
+        return result
+
+    archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
+    active_program = program
     try:
-        _, archetype_fn, _ = select_archetype(program, spec.layout_style)
-        for band_rect, group in archetype_fn(program, plot_w, plot_d, facing).bands:
-            placed.extend(subdivide(group, band_rect, facing))
+        placed = _place(program, archetype_fn)
     except SubdivisionError as exc:
-        raise DoesNotFitError(f"{exc} — increase plot size") from exc
+        if archetype_key == "zoned_bands":
+            raise DoesNotFitError(f"{exc} — increase plot size") from exc
+        # A more specific archetype (e.g. double_loaded_corridor's two
+        # wings) can need more room along one axis than zoned_bands' single
+        # progression does for the same program, purely from splitting into
+        # more separate bands — found live on the clinic fixture, which
+        # double_loaded_corridor's own selection criteria correctly match
+        # but couldn't actually fit, while zoned_bands (the general-purpose
+        # default every archetype falls back to) fit it fine. Try that
+        # proven fallback once before giving up. Deliberately NOT a further
+        # fallback to no-corridor placement: that would let generate_plan
+        # return a plan with a real through_room_access violation on a
+        # tight plot, silently breaking the exact guarantee workflow 4.5
+        # exists for — an honest DoesNotFitError is the correct outcome
+        # when even the general-purpose archetype can't fit the program
+        # AND keep every private room genuinely reachable.
+        try:
+            placed = _place(program, zoned_bands)
+        except SubdivisionError:
+            raise DoesNotFitError(f"{exc} — increase plot size") from exc
 
     for need, rect in placed:  # leaf min-size gate (swap-tolerant)
         fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
@@ -417,7 +493,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             )
 
     walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing, active_program.zone_of)
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by

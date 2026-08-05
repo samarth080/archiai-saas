@@ -6,12 +6,24 @@ Rect math. Used three ways: engine self-check (Phase 1 tests), the
 must stay fast), and the reject tier of the scorer (Phase 6).
 
 Violation codes (stable API): overlap, out_of_bounds, below_min_size,
-unreachable, missing_requested_room.
+unreachable, missing_requested_room, through_room_access.
 
 Reachability walks the access graph derived from doors: each door's midpoint
 connects every room whose boundary touches that point (interior doors connect
 two rooms; the front door touches one and adds no edge). The walk starts from
 the entry room, or the first room if no entry exists (hand-built plans).
+
+``through_room_access`` (workflow Phase 4.5, the privacy-chain check): a
+room with ``privacy_level >= 2`` (bedrooms, offices, ... — see
+``catalog.privacy_level_for``) must not be reachable ONLY by walking
+through another such room. Implemented by re-walking the same door graph
+with every OTHER privacy_level>=2 room deleted; if the room drops out of
+the reachable set, its only path required passing through a private
+neighbour. The one exception: a MUST-adjacency partner (an ensuite through
+its own bedroom is working as intended, not a defect) — that specific
+partner is never deleted from the walk. Only checked for rooms the plain
+reachability walk above already found reachable, so a genuinely
+disconnected room is reported once, as ``unreachable``, not twice.
 
 ``requirements`` is optional (Packet 7.1 — prompt-to-program truth gate): the
 fast per-drop editor endpoint has no RequirementsSpec to compare against and
@@ -55,6 +67,91 @@ def _touches(room: PlanRoom, x: float, y: float) -> bool:
         r.x - _TOUCH_EPS <= x <= r.x2 + _TOUCH_EPS
     )
     return on_vertical or on_horizontal
+
+
+def _door_adjacency(plan: LayoutPlan) -> dict[str, set[str]]:
+    """room id -> set of room ids it directly shares a door with."""
+    walls_by_id = {w.id: w for w in plan.walls}
+    adjacency: dict[str, set[str]] = {room.id: set() for room in plan.rooms}
+    for door in plan.doors:
+        wall = walls_by_id.get(door.wall_ref)
+        if wall is None:
+            continue
+        x, y = _door_point(door, wall)
+        touching = [room.id for room in plan.rooms if _touches(room, x, y)]
+        for a in touching:
+            for b in touching:
+                if a != b:
+                    adjacency[a].add(b)
+    return adjacency
+
+
+def _walk(start: str, adjacency: dict[str, set[str]], blocked: frozenset[str] = frozenset()) -> set[str]:
+    seen = {start}
+    stack = [start]
+    while stack:
+        for neighbour in adjacency.get(stack.pop(), ()):
+            if neighbour in blocked or neighbour in seen:
+                continue
+            seen.add(neighbour)
+            stack.append(neighbour)
+    return seen
+
+
+_PRIVACY_THRESHOLD = 2
+
+
+def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | None) -> set[frozenset]:
+    """Room-id pairs allowed to route through each other despite both being
+    privacy_level>=2 — e.g. an ensuite through its own MUST-attached
+    bedroom. Empty (no exemptions) when there's no requirements to compare
+    against, same opt-in posture as `_missing_requested_rooms`."""
+    if requirements is None:
+        return set()
+    types_by_id = {r.id: r.type for r in rooms}
+    exempt: set[frozenset] = set()
+    for pref in requirements.adjacency:
+        if pref.strength != "must":
+            continue
+        a_ids = [rid for rid, t in types_by_id.items() if t == pref.room_a.value]
+        b_ids = [rid for rid, t in types_by_id.items() if t == pref.room_b.value]
+        for a in a_ids:
+            for b in b_ids:
+                if a != b:
+                    exempt.add(frozenset((a, b)))
+    return exempt
+
+
+def _through_room_access_violations(
+    plan: LayoutPlan,
+    adjacency: dict[str, set[str]],
+    start: str,
+    reachable: set[str],
+    requirements: RequirementsSpec | None,
+) -> list[Violation]:
+    rooms = plan.rooms
+    privacy = {r.id: catalog.privacy_level_for(r.type) for r in rooms}
+    private_ids = {rid for rid, lvl in privacy.items() if lvl >= _PRIVACY_THRESHOLD}
+    if len(private_ids) < 2:
+        return []  # need at least one OTHER private room to block a path
+
+    exempt_pairs = _must_exempt_pairs(rooms, requirements)
+    labels = {r.id: r.label for r in rooms}
+    violations: list[Violation] = []
+    for pid in sorted(private_ids):
+        if pid == start or pid not in reachable:
+            continue  # a disconnected room is already reported as `unreachable`
+        blocked = frozenset(
+            other for other in private_ids
+            if other != pid and frozenset((pid, other)) not in exempt_pairs
+        )
+        if pid not in _walk(start, adjacency, blocked):
+            violations.append(Violation(
+                code="through_room_access",
+                room_ids=[pid],
+                message=f"{labels[pid]} is only reachable by walking through another private room",
+            ))
+    return violations
 
 
 def _missing_requested_rooms(
@@ -137,27 +234,9 @@ def validate(
             ))
 
     # (d) every room reachable through doors
-    walls_by_id = {w.id: w for w in plan.walls}
-    adjacency: dict[str, set[str]] = {room.id: set() for room in rooms}
-    for door in plan.doors:
-        wall = walls_by_id.get(door.wall_ref)
-        if wall is None:
-            continue
-        x, y = _door_point(door, wall)
-        touching = [room.id for room in rooms if _touches(room, x, y)]
-        for a in touching:
-            for b in touching:
-                if a != b:
-                    adjacency[a].add(b)
-
+    adjacency = _door_adjacency(plan)
     start = next((r.id for r in rooms if r.type == RoomType.entry), rooms[0].id)
-    seen = {start}
-    stack = [start]
-    while stack:
-        for neighbour in adjacency[stack.pop()]:
-            if neighbour not in seen:
-                seen.add(neighbour)
-                stack.append(neighbour)
+    seen = _walk(start, adjacency)
     for room in rooms:
         if room.id not in seen:
             violations.append(Violation(
@@ -165,5 +244,8 @@ def validate(
                 room_ids=[room.id],
                 message=f"{room.label} cannot be reached through any door",
             ))
+
+    # (e) privacy-chain check (workflow Phase 4.5) — see module docstring.
+    violations.extend(_through_room_access_violations(plan, adjacency, start, seen, requirements))
 
     return violations
