@@ -95,6 +95,9 @@ class SpaceRequest(BaseModel):
     size_hint: Literal["small", "medium", "large", "xlarge"] | None = None
     # Explicit user override beats any hint or catalog default.
     area_m2: float | None = Field(default=None, gt=1, lt=2000)
+    # Lower numbers are more important. None means the user did not authorize
+    # the engine to treat this space as expendable during fit negotiation.
+    priority: StrictInt | None = Field(default=None, ge=1, le=100)
 
 
 class AdjacencyPref(BaseModel):

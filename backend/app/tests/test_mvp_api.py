@@ -245,6 +245,8 @@ async def test_generate_returns_structured_plot_clarification_when_program_does_
     error = response.json()["error"]
     assert error["route"] == "conflict"
     assert "plot" in error["questions"][0].lower()
+    assert error["trade_offs"]
+    assert "increase the plot" in error["trade_offs"][0].lower()
     assert response.json()["code"] == "UNPROCESSABLE_ENTITY"
 
 

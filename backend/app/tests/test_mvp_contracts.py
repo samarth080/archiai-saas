@@ -70,6 +70,16 @@ def test_extra_keys_rejected():
         RequirementsSpec.model_validate({"rooms": [], "hallucinated_field": True})
 
 
+@pytest.mark.parametrize("priority", [0, 101, 1.0, "10"])
+def test_space_priority_is_a_strict_bounded_integer(priority):
+    with pytest.raises(ValidationError):
+        RequirementsSpec.model_validate({
+            "spaces": [
+                {"space_type": "bedroom", "count": 1, "priority": priority},
+            ],
+        })
+
+
 def test_plot_bounds_enforced():
     with pytest.raises(ValidationError):
         RequirementsSpec.model_validate({"plot": {"width_m": 150.0, "depth_m": 12.0}})
