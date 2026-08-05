@@ -87,6 +87,86 @@ def test_doors_reference_existing_walls():
         assert door.wall_ref in wall_ids
 
 
+# ── Connectivity: every genuinely adjacent pair gets a door, not just the
+# minimum spanning tree (user-reported: rooms visibly touching with no door
+# between them, forcing a detour through another room even though nothing
+# was technically "unreachable"). ────────────────────────────────────────
+
+
+def _shared_wall_pairs(plan: LayoutPlan) -> dict[frozenset, str]:
+    """room-id-pair -> the wall id of their shared edge, for every pair of
+    rooms in the plan whose rectangles actually touch."""
+    pairs: dict[frozenset, str] = {}
+    for i, a in enumerate(plan.rooms):
+        for b in plan.rooms[i + 1:]:
+            seg = _room_rect(a).shared_edge(_room_rect(b))
+            if seg is None:
+                continue
+            endpoints = {(round(seg.x1, 3), round(seg.y1, 3)), (round(seg.x2, 3), round(seg.y2, 3))}
+            for wall in plan.walls:
+                if {(wall.x1, wall.y1), (wall.x2, wall.y2)} == endpoints:
+                    pairs[frozenset((a.id, b.id))] = wall.id
+                    break
+    return pairs
+
+
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_every_adjacent_public_or_circulation_room_pair_gets_a_door(name):
+    spec = _load(name)
+    plan = generate_plan(spec)
+    doored_walls = {d.wall_ref for d in plan.doors}
+    labels_by_id = {r.id: r.label for r in plan.rooms}
+    circulation_or_public_labels = {
+        RoomType.entry.value, RoomType.living_room.value, RoomType.dining.value,
+    }
+
+    for pair, wall_id in _shared_wall_pairs(plan).items():
+        a, b = pair
+        if labels_by_id[a] in circulation_or_public_labels or labels_by_id[b] in circulation_or_public_labels:
+            assert wall_id in doored_walls, (
+                f"{labels_by_id[a]} and {labels_by_id[b]} share a wall but have no door "
+                f"between them in {name}"
+            )
+
+
+def test_two_adjacent_private_rooms_do_not_get_a_redundant_direct_door():
+    # 4bhk's real generated layout has multiple bedroom-bedroom /
+    # bedroom-bathroom adjacencies that are already reachable via the
+    # spanning tree — privacy says don't also punch a direct door there.
+    plan = generate_plan(_load("4bhk"))
+    private_types = {RoomType.bedroom.value, RoomType.master_bedroom.value, RoomType.bathroom.value}
+    doored_walls = {d.wall_ref for d in plan.doors}
+    types_by_id = {r.id: r.type for r in plan.rooms}
+
+    private_adjacent_pairs = [
+        pair for pair in _shared_wall_pairs(plan)
+        if all(types_by_id[k] in private_types for k in pair)
+    ]
+    assert private_adjacent_pairs, "fixture must actually exercise this case"
+    assert validate(plan) == []  # still fully valid/reachable without the extra doors
+
+
+def test_explicitly_avoided_adjacent_pair_gets_no_direct_door():
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "kitchen", "count": 1},
+            {"type": "bathroom", "count": 1},
+            {"type": "living_room", "count": 1},
+            {"type": "entry", "count": 1},
+        ],
+        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "bathroom"}],
+        "plot": {"width_m": 8.0, "depth_m": 8.0},
+    })
+    plan = generate_plan(spec)
+    types_by_id = {r.id: r.type for r in plan.rooms}
+    doored_walls = {d.wall_ref for d in plan.doors}
+
+    for pair, wall_id in _shared_wall_pairs(plan).items():
+        types = {types_by_id[k] for k in pair}
+        if types == {RoomType.kitchen.value, RoomType.bathroom.value}:
+            assert wall_id not in doored_walls
+
+
 def test_engine_is_deterministic():
     a = generate_plan(_load("3bhk_adjacencies"))
     b = generate_plan(_load("3bhk_adjacencies"))
@@ -162,6 +242,55 @@ def test_single_room_spec_works():
     spec = RequirementsSpec.model_validate({"rooms": [{"type": "living_room", "count": 1}]})
     plan = generate_plan(spec)
     assert validate(plan) == []
+
+
+# ── PlanRoom.type migration (engine generalization workflow, migration-order
+# item 4) — spec.spaces free-string programs now run end to end, not just
+# through archetypes.py unit tests. ───────────────────────────────────────
+
+
+def test_generate_plan_supports_a_non_residential_free_string_program():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {"space_type": "reception", "count": 1},
+            {"space_type": "waiting_room", "count": 1},
+            {"space_type": "consultation_room", "count": 3},
+            {"space_type": "bathroom", "count": 1},
+        ],
+        "plot": {"width_m": 12.0, "depth_m": 14.0},
+        "facing": "east",
+    })
+
+    plan = generate_plan(spec)
+
+    types = sorted(r.type for r in plan.rooms)
+    assert types.count("consultation_room") == 3
+    assert "reception" in types
+    assert "waiting_room" in types
+    assert validate(plan) == []  # zero hard violations, same bar as every residential fixture
+
+
+def test_generate_plan_rejects_an_unknown_space_type_as_a_structured_does_not_fit():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [{"space_type": "zzz_totally_unknown", "count": 1}],
+        "plot": {"width_m": 9.0, "depth_m": 9.0},
+    })
+
+    with pytest.raises(DoesNotFitError) as exc:
+        generate_plan(spec)
+    assert "zzz_totally_unknown" in str(exc.value)
+
+
+def test_rebuild_derived_geometry_handles_a_hand_edited_non_residential_room_type():
+    spec = RequirementsSpec.model_validate({"rooms": [{"type": "living_room", "count": 1}]})
+    plan = generate_plan(spec)
+    edited = plan.model_copy(update={
+        "rooms": [r.model_copy(update={"type": "consultation_room"}) for r in plan.rooms],
+    })
+
+    rebuilt = rebuild_derived_geometry(edited, spec)  # must not raise (e.g. KeyError)
+
+    assert rebuilt.rooms[0].type == "consultation_room"
 
 
 def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():

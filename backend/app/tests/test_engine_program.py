@@ -4,7 +4,10 @@ only pin the bridge and adapter themselves."""
 import json
 from pathlib import Path
 
+import pytest
+
 from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType, SpaceRequest
+from app.services import catalog
 from app.services.layout_engine.subdivision import RoomNeed
 from app.services.planning import Edge, Node, ProgramGraph, from_requirements, to_engine_program
 from app.services.planning.program_completion import ensure_entry
@@ -201,6 +204,16 @@ def test_from_requirements_prefers_spaces_when_populated():
     assert len(graph.buildable_nodes()) == 3
     assert len(graph.nodes_of_space_type("consultation_room")) == 3
     assert graph.nodes_of_space_type("bedroom") == []
+
+
+def test_from_requirements_rejects_an_unknown_space_type_eagerly():
+    # The real input boundary (PlanRoom.type migration, engine generalization
+    # workflow migration-order item 4): fail fast here with the catalog's
+    # nearest-match suggestion, rather than silently falling back to a
+    # made-up default size deep inside to_engine_program.
+    spec = RequirementsSpec(spaces=[SpaceRequest(space_type="zzz_totally_unknown", count=1)])
+    with pytest.raises(catalog.UnknownSpaceType):
+        from_requirements(spec)
 
 
 def test_from_requirements_does_not_auto_inject_entry():

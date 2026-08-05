@@ -138,5 +138,12 @@ class RequirementsSpec(BaseModel):
     avoid_adjacency: list[AvoidPair] = Field(default_factory=list)
     plot: PlotSpec = Field(default_factory=PlotSpec)
     facing: Facing | None = None
+    # Explicit archetype override (workflow Phase 3.2) — None lets the
+    # engine's graph-shape selector choose; closed to the archetypes the
+    # engine actually implements, same "reject, never invent" posture as
+    # every other enum in this file.
+    layout_style: Literal[
+        "zoned_bands", "double_loaded_corridor", "hub_and_spoke", "open_core"
+    ] | None = None
     # Field names / question topics the prompt genuinely did not state.
     missing_info: list[str] = Field(default_factory=list)

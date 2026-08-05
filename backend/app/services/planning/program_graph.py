@@ -389,6 +389,14 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
 
     if spec.spaces:
         for request in spec.spaces:
+            # Fail fast at the true input boundary, same "reject, never
+            # invent" posture as the closed RoomType enum — lets
+            # UnknownSpaceType's nearest-match suggestion reach the caller
+            # instead of silently falling back to a made-up default size
+            # deep inside `to_engine_program`'s `_resolve_sizing` (which
+            # stays lenient on purpose for hand-built/user-added graphs,
+            # not user-typed requests).
+            catalog.get(request.space_type)
             for i in range(1, request.count + 1):
                 add_requirements_node(
                     graph, nodes_by_key, request.space_type,

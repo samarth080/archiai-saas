@@ -25,12 +25,12 @@ from app.config.mvp_defaults import (
     DEFAULT_PLOT_WIDTH_M,
     DOOR_WIDTH_M,
     MAX_ROOMS_PER_LAYOUT,
-    ROOM_SIZING,
     WALL_THICKNESS_M,
 )
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
-from app.services.layout_engine.archetypes import select_archetype
+from app.services import catalog
+from app.services.layout_engine.archetypes import macro_zone, select_archetype
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
 from app.services.planning import EngineProgram, from_requirements, to_engine_program
@@ -76,7 +76,14 @@ def _build_program(spec: RequirementsSpec) -> EngineProgram:
     by diffing against a pre-refactor golden snapshot of all 5 fixtures
     before this key remap was added.
     """
-    graph = ensure_entry(from_requirements(spec))
+    try:
+        graph = ensure_entry(from_requirements(spec))
+    except catalog.UnknownSpaceType as exc:
+        # `spec.spaces`'s free-string boundary (from_requirements validates
+        # it eagerly) — translate into the existing clarification path
+        # rather than a raw 500; `spec.rooms`'s closed RoomType enum can
+        # never reach here (Pydantic already rejects an invalid value).
+        raise DoesNotFitError(str(exc)) from exc
     program = to_engine_program(graph)
     remap = {need.key: f"r{i}" for i, need in enumerate(program.needs, start=1)}
 
@@ -161,6 +168,7 @@ def _place_doors(
     wall_rooms: dict[str, tuple[str, str | None]],
     spec: RequirementsSpec,
     facing: Facing,
+    zone_of: dict[str, str],
     *,
     allow_disconnected: bool = False,
 ) -> list[Door]:
@@ -229,7 +237,30 @@ def _place_doors(
             f"no door-sized wall reaches: {', '.join(unreachable)} — increase plot size"
         )
 
-    # 3. Front door on the entry's facing-side boundary wall (best effort).
+    # 3. Direct doors between every remaining adjacent pair. Step 2 only adds
+    #    the minimum doors needed for bare reachability (a spanning tree) —
+    #    a room can be fully "reachable" while a wall it visibly shares with
+    #    its next-door neighbour stays solid, which reads as broken
+    #    connectivity even though nothing is technically unreachable (e.g. a
+    #    dining room right next to the entry with no door between them,
+    #    routed instead through the living room). Skip a pair only when
+    #    there's a real reason not to connect them directly: both rooms are
+    #    private/service-zoned (bedroom-bedroom, bedroom-bathroom — privacy,
+    #    not a defect) or the pair is explicitly avoided in the spec.
+    avoid_type_pairs = {frozenset((p.room_a.value, p.room_b.value)) for p in spec.avoid_adjacency}
+    for pair, pair_walls in by_pair.items():
+        pair_types = frozenset(types_by_key[k] for k in pair)
+        if pair_types in avoid_type_pairs:
+            continue
+        if all(macro_zone(zone_of.get(k, "semi_private")) == "private" for k in pair):
+            continue
+        best = max(pair_walls, key=_wall_length)
+        if _wall_length(best) >= _MIN_DOOR_EDGE:
+            add_door(best, DOOR_WIDTH_M)
+        elif _wall_length(best) >= _NARROW_DOOR_EDGE:
+            add_door(best, _NARROW_DOOR_WIDTH)
+
+    # 4. Front door on the entry's facing-side boundary wall (best effort).
     entry_key = next((n.key for n, _ in placed if n.type == RoomType.entry.value), None)
     if entry_key is not None:
         def on_facing(wall: Wall) -> bool:
@@ -273,16 +304,20 @@ def rebuild_derived_geometry(
 
     placed: list[tuple[RoomNeed, Rect]] = []
     for room in plan.rooms:
-        sizing = ROOM_SIZING[room.type]
+        # Lenient lookup (never raises): an edited room's type could be any
+        # catalog-known free string now, not just the 12 residential values
+        # ROOM_SIZING covers — see `catalog.min_dimensions`'s own docstring
+        # for why this stays permissive rather than rejecting the edit.
+        min_w, min_d = catalog.min_dimensions(room.type)
         placed.append(
             (
                 RoomNeed(
                     key=room.id,
-                    type=room.type.value,
+                    type=room.type,
                     label=room.label,
                     preferred_area=room.w * room.h,
-                    min_w=sizing.min_w,
-                    min_d=sizing.min_d,
+                    min_w=min_w,
+                    min_d=min_d,
                 ),
                 Rect(room.x, room.y, room.w, room.h),
             )
@@ -293,12 +328,14 @@ def rebuild_derived_geometry(
         plan.plot.width_m,
         plan.plot.depth_m,
     )
+    zone_of = {need.key: catalog.zone_for(need.type) for need, _ in placed}
     doors = _place_doors(
         placed,
         walls,
         wall_rooms,
         spec,
         plan.plot.facing,
+        zone_of,
         allow_disconnected=True,
     )
     return plan.model_copy(update={"walls": walls, "doors": doors})
@@ -326,7 +363,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
 
     placed: list[tuple[RoomNeed, Rect]] = []
     try:
-        _, archetype_fn, _ = select_archetype(program)
+        _, archetype_fn, _ = select_archetype(program, spec.layout_style)
         for band_rect, group in archetype_fn(program, plot_w, plot_d, facing).bands:
             placed.extend(subdivide(group, band_rect, facing))
     except SubdivisionError as exc:
@@ -343,7 +380,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             )
 
     walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by
@@ -351,7 +388,12 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
     rooms = [
         PlanRoom(
             id=need.key,
-            type=RoomType(need.type),
+            # `need.type` is already validated by this point — a raw RoomType
+            # value from `spec.rooms` (Pydantic-enforced closed enum) or a
+            # catalog-checked key from `spec.spaces` (`from_requirements`
+            # calls `catalog.get()` eagerly) — no cast needed, and casting
+            # via `RoomType(...)` would reject any non-residential type here.
+            type=need.type,
             label=need.label,
             x=_round(rect.x), y=_round(rect.y),
             w=round(_round(rect.x2) - _round(rect.x), 3),
