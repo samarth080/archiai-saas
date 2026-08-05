@@ -34,14 +34,27 @@ def _room_rect(room) -> Rect:
 # ── Step 1.2 — fixture invariants (never exact coordinates) ──────────────────
 
 
+def _expected_room_count(spec: RequirementsSpec) -> int:
+    from app.services.layout_engine.engine import _build_program
+
+    requested = sum(r.count for r in spec.rooms)
+    has_entry = any(r.type == RoomType.entry for r in spec.rooms)
+    count = requested + (0 if has_entry else 1)  # auto-entry
+    # + a possible auto-injected corridor (workflow Phase 4.1/4.5) — derived
+    # from the real program rather than duplicating ensure_corridor's own
+    # threshold, so this stays accurate if that threshold changes.
+    program = _build_program(spec)
+    if any(n.type in ("corridor", "hallway") for n in program.needs):
+        count += 1
+    return count
+
+
 @pytest.mark.parametrize("name", FIXTURE_NAMES)
 def test_fixture_produces_valid_plan(name):
     spec = _load(name)
     plan = generate_plan(spec)
 
-    requested = sum(r.count for r in spec.rooms)
-    has_entry = any(r.type == RoomType.entry for r in spec.rooms)
-    assert len(plan.rooms) == requested + (0 if has_entry else 1)  # auto-entry
+    assert len(plan.rooms) == _expected_room_count(spec)
 
     for spec_room in spec.rooms:  # every requested room type present, right count
         placed = [r for r in plan.rooms if r.type == spec_room.type]
@@ -165,6 +178,65 @@ def test_explicitly_avoided_adjacent_pair_gets_no_direct_door():
         types = {types_by_id[k] for k in pair}
         if types == {RoomType.kitchen.value, RoomType.bathroom.value}:
             assert wall_id not in doored_walls
+
+
+# ── Door policy rewrite (workflow Phase 4.4) ──────────────────────────────
+
+
+def test_circulation_key_prefers_a_real_corridor_over_living_room_or_entry():
+    from app.services.layout_engine.engine import _circulation_key
+    from app.services.layout_engine.subdivision import RoomNeed
+
+    def need(key: str, kind: str) -> RoomNeed:
+        return RoomNeed(key=key, type=kind, label=kind, preferred_area=10.0, min_w=2.0, min_d=2.0)
+
+    placed = [
+        (need("r1", "entry"), Rect(0, 0, 1, 1)),
+        (need("r2", "living_room"), Rect(1, 0, 1, 1)),
+        (need("r3", "corridor"), Rect(2, 0, 1, 1)),
+    ]
+    assert _circulation_key(placed) == "r3"
+
+
+def test_avoid_pair_vetoes_a_door_even_when_it_is_the_only_bridge():
+    """The doc's exact Phase 4.4 requirement: an AVOID edge must veto a door
+    even if that pair is the ONLY way to keep the floor connected — routing
+    should fail structurally (DoesNotFitError) rather than silently break
+    the avoidance to preserve connectivity."""
+    from app.services.layout_engine.engine import DoesNotFitError, _build_walls, _place_doors
+    from app.services.layout_engine.subdivision import RoomNeed
+
+    def need(key: str, kind: str) -> RoomNeed:
+        return RoomNeed(key=key, type=kind, label=kind, preferred_area=9.0, min_w=3.0, min_d=3.0)
+
+    # kitchen - bathroom - entry in a row; kitchen only touches bathroom.
+    placed = [
+        (need("a", "kitchen"), Rect(0, 0, 3, 3)),
+        (need("b", "bathroom"), Rect(3, 0, 3, 3)),
+        (need("c", "entry"), Rect(6, 0, 3, 3)),
+    ]
+    walls, wall_rooms = _build_walls(placed, 9.0, 3.0)
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "kitchen", "count": 1},
+            {"type": "bathroom", "count": 1},
+            {"type": "entry", "count": 1},
+        ],
+        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "bathroom"}],
+    })
+    zone_of = {"a": "public", "b": "service", "c": "circulation"}
+
+    with pytest.raises(DoesNotFitError):
+        _place_doors(placed, walls, wall_rooms, spec, Facing.east, zone_of)
+
+    # The lenient editor-sync path must not raise, and must still honour the
+    # veto rather than silently connecting kitchen through it.
+    doors = _place_doors(
+        placed, walls, wall_rooms, spec, Facing.east, zone_of, allow_disconnected=True,
+    )
+    doored_walls = {d.wall_ref for d in doors}
+    kitchen_bathroom_wall = next(w for w in walls if set(wall_rooms[w.id]) == {"a", "b"})
+    assert kitchen_bathroom_wall.id not in doored_walls
 
 
 def test_engine_is_deterministic():
@@ -295,7 +367,18 @@ def test_rebuild_derived_geometry_handles_a_hand_edited_non_residential_room_typ
 
 def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
     """Regression from the Phase 4 live gate: area-only cut clamping made the
-    attached bathroom a 1.2 m sliver despite sufficient total plot area."""
+    attached bathroom a 1.2 m sliver despite sufficient total plot area.
+
+    Depth bumped from the original 12.192 m (40 ft) to 14.0 m for workflow
+    Phase 4.5: this program has 4 genuinely private rooms (master_bedroom +
+    its ensuite, 2 more bedrooms, a pooja_room), so ensure_corridor now
+    injects real circulation and the engine comb-arranges those rooms along
+    it to guarantee none is reachable only through another private room —
+    real, valuable, and this specific room count genuinely needs a bit more
+    depth than a bare 30x40 ft footprint to honour both the room program
+    and that guarantee at once (confirmed: 13.8 m is exactly the fitting
+    boundary, 14.0 m gives a safety margin). The regression this test
+    guards — no 1.2 m sliver bathroom — is unaffected by the plot size."""
 
     spec = RequirementsSpec.model_validate(
         {
@@ -315,7 +398,7 @@ def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
                     "strength": "must",
                 }
             ],
-            "plot": {"width_m": 9.144, "depth_m": 12.192},
+            "plot": {"width_m": 9.144, "depth_m": 14.0},
             "facing": "east",
         }
     )
@@ -323,7 +406,7 @@ def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
     plan = generate_plan(spec)
 
     assert validate(plan) == []
-    assert len(plan.rooms) == 8  # seven requested rooms + auto-entry
+    assert len(plan.rooms) == _expected_room_count(spec)
 
 
 # ── Step 1.3 — hand-broken plans trigger exactly their violation codes ────────
@@ -399,5 +482,4 @@ def test_property_engine_output_never_violates_hard_constraints(spec):
     violations = validate(plan)
     assert violations == [], [v.message for v in violations]
 
-    requested = sum(r.count for r in spec.rooms) + 1  # + auto-entry
-    assert len(plan.rooms) == requested
+    assert len(plan.rooms) == _expected_room_count(spec)

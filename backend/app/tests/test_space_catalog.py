@@ -11,6 +11,7 @@ from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType
 from app.services.catalog import (
     CATALOG,
+    CIRCULATION_WIDTHS,
     SpaceType,
     UnknownSpaceType,
     get,
@@ -118,9 +119,24 @@ def test_register_extends_the_catalog_for_the_session():
 
 
 def test_derived_minimums_for_base_sizes_only_types_respect_the_absolute_floor():
+    # Circulation spine types (corridor/hallway) are excluded: workflow
+    # Phase 4.2 gives them an explicit, intentionally-narrower-than-1.2m
+    # width (CIRCULATION_WIDTHS["residential"] = 1.0m) instead of running
+    # through _derive_min_dimensions's generic near-square formula — this
+    # test's floor is about that formula's own absolute floor, not a claim
+    # every space type must be at least 1.2m wide.
     for space in CATALOG.values():
+        if space.key in ("corridor", "hallway"):
+            continue
         assert space.min_w >= 1.2
         assert space.min_d >= 1.2
+
+
+def test_corridor_and_hallway_get_the_residential_circulation_width():
+    for key in ("corridor", "hallway"):
+        space = get(key)
+        assert space.min_w == CIRCULATION_WIDTHS["residential"]
+        assert space.min_d >= 1.0  # a real, if modest, minimum length
 
 
 @pytest.mark.parametrize("name", ["1bhk", "2bhk", "3bhk_adjacencies", "4bhk", "clinic"])

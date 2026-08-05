@@ -82,6 +82,115 @@ MACRO_ZONE = {
 _MACRO_ORDER = ("public", "semi_private", "private")
 _MIN_BAND_SPAN = 1.5  # meters — same floor the old _bands() used
 
+# A spine-shaped circulation node — NOT the full program_graph.py
+# `_CIRCULATION_TYPES` set (which also includes entry/foyer/lobby/staircase;
+# see `select_archetype`'s own comment on why "any circulation node" is a
+# false-positive trap). Used both by `zoned_bands` (workflow 4.3: carve the
+# corridor as its own real band instead of folding it into "public" like
+# every other circulation type) and by `select_archetype`.
+_CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway"})
+
+# Matches quality.hard_constraints' own through_room_access threshold and
+# engine.py's door-policy alignment (workflow 4.4/4.5) — one canonical
+# "genuinely private" definition shared by placement, doors, and the check.
+_THROUGH_ROOM_PRIVACY_THRESHOLD = 2
+
+
+def _corridor_served_groups(
+    rooms: list[RoomNeed], must_adjacent: list[tuple[str, str]],
+) -> tuple[list[list[RoomNeed]], list[RoomNeed]]:
+    """Split ``rooms`` into (comb clusters that need guaranteed corridor
+    access, everything else). Only a genuinely private room
+    (``catalog.privacy_level_for >= 2``) needs the guarantee — a MUST-
+    attached service partner (an ensuite bathroom) travels with its private
+    anchor as ONE comb slot instead of getting its own, which is also the
+    doc's own stated exception ("except a MUST-attached service"). Anything
+    else (an unattached bathroom, utility, parking, ...) doesn't need comb
+    treatment at all — it isn't privacy-checked, and forcing it into the
+    comb wastes real space for no correctness benefit. Found live: combing
+    every non-public room (bathrooms, utility, parking alongside the actual
+    bedrooms) needed far more length than several real fixtures' plots had,
+    despite none of those extra rooms needing the guarantee."""
+    by_key = {n.key: n for n in rooms}
+    keys = set(by_key)
+    private_keys = {
+        k for k, n in by_key.items()
+        if catalog.privacy_level_for(n.type) >= _THROUGH_ROOM_PRIVACY_THRESHOLD
+    }
+    # At most ONE partner instance per TYPE per anchor: a type-level MUST
+    # preference ("master_bedroom MUST bathroom") expands to an id-level
+    # edge against EVERY bathroom instance, not just one — real, found live
+    # on 4bhk, where all 3 bathrooms got pulled into master_bedroom's
+    # cluster instead of just its actual ensuite, ballooning that one slot
+    # to 4 rooms. Mirrors `_place_doors`'s own established single-match
+    # precedent for the same underlying multi-instance MUST-edge shape.
+    partners: dict[str, list[str]] = {}
+    attached_types: dict[str, set[str]] = {}
+    for a, b in must_adjacent:
+        if a in private_keys and b in keys and b not in private_keys:
+            anchor, partner = a, b
+        elif b in private_keys and a in keys and a not in private_keys:
+            anchor, partner = b, a
+        else:
+            continue
+        partner_type = by_key[partner].type
+        if partner_type in attached_types.setdefault(anchor, set()):
+            continue
+        attached_types[anchor].add(partner_type)
+        partners.setdefault(anchor, []).append(partner)
+
+    claimed: set[str] = set()
+    clusters: list[list[RoomNeed]] = []
+    for n in rooms:
+        if n.key not in private_keys or n.key in claimed:
+            continue
+        group = [n] + [by_key[p] for p in partners.get(n.key, []) if p not in claimed]
+        claimed.update(m.key for m in group)
+        clusters.append(group)
+    flex = [n for n in rooms if n.key not in claimed]
+    return clusters, flex
+
+
+def _balance_two_ways(groups: list[list[RoomNeed]]) -> tuple[list[list[RoomNeed]], list[list[RoomNeed]]]:
+    """Split ``groups`` (e.g. corridor-served clusters) into two lists
+    balanced by total room area — a greedy largest-first bin-pack, not a
+    plain alternating-index split. Found live: alternating index put a
+    heavy multi-room cluster (master_bedroom + its ensuite) in the same
+    wing as two more clusters while the other wing got only two much
+    smaller ones, so the heavier wing needed more depth than the plot's
+    constrained span had, while the lighter wing had spare room to give."""
+    ordered = sorted(groups, key=lambda g: -sum(n.preferred_area for n in g))
+    wing_a: list[list[RoomNeed]] = []
+    wing_b: list[list[RoomNeed]] = []
+    area_a = area_b = 0.0
+    for g in ordered:
+        g_area = sum(n.preferred_area for n in g)
+        if area_a <= area_b:
+            wing_a.append(g)
+            area_a += g_area
+        else:
+            wing_b.append(g)
+            area_b += g_area
+    return wing_a, wing_b
+
+
+def _flatten_cluster_band(rect: Rect, cluster: list[RoomNeed]) -> list[tuple[Rect, list[RoomNeed]]]:
+    """A comb-arranged cluster's rect (from ``_split_rect``'s floor+slack
+    allocation, sized for the cluster's aggregate area) doesn't always have
+    a workable aspect ratio for the general recursive ``subdivide()`` —
+    found live: a master_bedroom+bathroom cluster got a 4.2x4.1m rect with
+    plenty of AREA for both (11 + 3.15 m² needed), but no valid guillotine
+    cut of that specific shape satisfied both rooms' own minimum SIDES.
+    Split multi-room clusters here too, with the same reliable
+    floor-guaranteeing tool used everywhere else in this module, instead of
+    handing them to a different algorithm with different guarantees. A
+    single-room cluster is returned unchanged."""
+    if len(cluster) <= 1:
+        return [(rect, cluster)]
+    axis = "w" if rect.w >= rect.d else "d"
+    rects = _split_rect(rect, axis, [[n] for n in cluster])
+    return list(zip(rects, [[n] for n in cluster]))
+
 
 @dataclass(frozen=True)
 class BandPlan:
@@ -148,9 +257,25 @@ def _band_floor(rooms: list[RoomNeed], other: float) -> float:
     term a band can pass the aggregate-area check while still being too
     narrow for its single widest room (the same class of bug the Phase 4
     live-gate note above documents for cut clamping generally); mirrors
-    ``subdivision.clamped_cut``'s own ``min_span_a``/``min_span_b`` guard."""
+    ``subdivision.clamped_cut``'s own ``min_span_a``/``min_span_b`` guard.
+
+    A single-room group skips the ``_MIN_BAND_SPAN`` floor and uses just
+    that room's own real minimum instead (workflow 4.5's comb-arranged
+    rooms, one per "band"): ``_MIN_BAND_SPAN`` exists to protect a band that
+    might hold SEVERAL rooms from being squeezed thinner than sensible even
+    when the aggregate-area check alone would allow it — a single
+    already-fully-specified room doesn't need it inflated further. Found
+    live: forcing every comb slot to at least 1.5m regardless of a smaller
+    room's actual minimum (a 1.2m-wide balcony, say) compounds badly across
+    N rooms in one row and made several real fixtures stop fitting their
+    existing plot sizes for no geometric reason."""
     if not rooms:
         return _MIN_BAND_SPAN
+    if len(rooms) == 1:
+        need = rooms[0]
+        min_span = min(need.min_w, need.min_d)
+        area_floor = need.min_area * 1.02 / other
+        return max(min_span, area_floor)
     min_span = max(min(n.min_w, n.min_d) for n in rooms)
     area_floor = sum(n.min_area for n in rooms) * 1.02 / other
     return max(_MIN_BAND_SPAN, min_span, area_floor)
@@ -232,13 +357,37 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
     """Ordered zone progression, facing-anchored — public/circulation
     leads, then semi_private, then private/service (see ``MACRO_ZONE``).
     Raises ``SubdivisionError`` (same type ``subdivide`` raises, so
-    ``engine.py``'s existing handler converts it) when bands can't fit."""
+    ``engine.py``'s existing handler converts it) when bands can't fit.
+
+    Workflow 4.3 (carving): a corridor-spine node (``program_completion.
+    ensure_corridor`` injects one when warranted) is pulled OUT of the
+    "public" macro-band it would otherwise fold into and given its own real
+    band instead — right after "public", at the public/private seam, same
+    intent as the doc's "strip along the band seam". This makes the
+    corridor an actual ``PlanRoom`` with real geometry (recorded in
+    ``corridor_rects`` too), not just another room-need competing for space
+    in the general pool.
+
+    Workflow 4.5 (privacy-chain guarantee): when a corridor exists, the
+    semi_private+private rooms it serves are NOT left as one combined band
+    for the general recursive guillotine tree to subdivide however it
+    likes — a 2-level-deep tree can nest a room so its only neighbours are
+    OTHER private rooms (a real Hypothesis counterexample: 3 bedrooms in
+    one band, the middle one flanked only by the other two). Instead they
+    are comb-arranged: one flat, single-level row along the corridor's
+    edge, so EVERY served room shares a real wall with the corridor
+    directly, by construction — not "probably, depending on how the cuts
+    happened to fall". A program with no corridor node behaves exactly as
+    before — this whole block is a no-op when ``corridor`` is ``None``."""
     if not program.needs:
         return BandPlan(bands=[])
 
     zone_of = _redistribute_service(program)
+    corridor = next((n for n in program.needs if n.type in _CORRIDOR_SPINE_TYPES), None)
     groups: dict[str, list[RoomNeed]] = {}
     for need in program.needs:
+        if corridor is not None and need.key == corridor.key:
+            continue  # carved as its own band below, not grouped with public
         macro = macro_zone(zone_of.get(need.key, "semi_private"))
         groups.setdefault(macro, []).append(need)
     for zone, rooms in groups.items():
@@ -246,46 +395,158 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
 
     ordered_zones = [z for z in _MACRO_ORDER if z in groups]
     ordered_groups = [groups[z] for z in ordered_zones]
-    return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, ordered_groups))
+
+    if corridor is None:
+        return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, ordered_groups))
+
+    served_zones = [z for z in ("semi_private", "private") if z in groups]
+    served_group = [n for z in served_zones for n in groups[z]]
+    lead_zones = [z for z in ordered_zones if z not in served_zones]
+    lead_groups = [groups[z] for z in lead_zones]
+    insert_at = 1 if lead_zones[:1] == ["public"] else 0
+
+    # Only genuinely private rooms (+ their MUST-attached service partners)
+    # need the comb guarantee; everything else (an unattached bathroom,
+    # utility, parking, ...) is "flex" — no privacy-chain requirement, so it
+    # gets its own ordinary band (appended after the comb) instead of
+    # wasting comb length on rooms that never needed it.
+    clusters, flex = _corridor_served_groups(served_group, program.must_adjacent)
+
+    if not clusters:
+        # No genuinely private room at all — nothing needs the guarantee;
+        # ensure_corridor's own trigger still injected a corridor (it counts
+        # semi_private too), so give it a plain band like any other zone.
+        all_groups = lead_groups[:insert_at] + [[corridor]] + lead_groups[insert_at:]
+        if flex:
+            all_groups = all_groups + [flex]
+        bands = _facing_progression_bands(plot_w, plot_d, facing, all_groups)
+        return BandPlan(bands=bands, corridor_rects=[(corridor.key, bands[insert_at][0])])
+
+    served_footprint = [n for cluster in clusters for n in cluster]
+    tail_groups = lead_groups[insert_at:] + ([flex] if flex else [])
+    skeleton = lead_groups[:insert_at] + [[corridor], served_footprint] + tail_groups
+    bands = _facing_progression_bands(plot_w, plot_d, facing, skeleton)
+    corridor_rect = bands[insert_at][0]
+    served_rect = bands[insert_at + 1][0]
+
+    perp_axis = "d" if facing in (Facing.east, Facing.west) else "w"
+    cluster_rects = _split_rect(served_rect, perp_axis, clusters)
+    comb_bands = [
+        flat for rect, cluster in zip(cluster_rects, clusters) for flat in _flatten_cluster_band(rect, cluster)
+    ]
+
+    final_bands = bands[:insert_at] + [bands[insert_at]] + comb_bands + bands[insert_at + 2:]
+    return BandPlan(bands=final_bands, corridor_rects=[(corridor.key, corridor_rect)])
 
 
 def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float, facing: Facing) -> BandPlan:
     """Public/circulation group at the facing edge; everyone else split into
     two parallel wings (the perpendicular axis) instead of one deep private
-    band — see the module docstring for why there is no literal carved
-    corridor here yet. Degrades to a single facing-anchored band (same shape
+    band. Degrades to a single facing-anchored band (same shape
     ``zoned_bands`` uses for one zone) when there's no public anchor or
-    fewer than two rooms to split into wings."""
+    fewer than two rooms to split into wings.
+
+    Workflow 4.5: when a corridor-spine node exists (this archetype's own
+    ``select_archetype`` trigger requires one), it is pulled out of the
+    "public" group it would otherwise fold into and carved as the literal
+    spine BETWEEN the two wings — a real double-loaded-corridor floor plan,
+    not just a name. Each wing's rooms are then comb-arranged along that
+    spine's length (single-level split, same tool and same privacy-chain
+    rationale as ``zoned_bands``'s own comb — a plain recursive subdivision
+    of a multi-room wing can land one room with no neighbour but another
+    room in the same wing), so every served room shares a real wall with
+    the corridor directly. A program with no corridor node takes the exact
+    pre-4.5 code path, unchanged."""
     if not program.needs:
         return BandPlan(bands=[])
     if len(program.needs) == 1:
         return BandPlan(bands=[(Rect(0.0, 0.0, plot_w, plot_d), list(program.needs))])
 
     zone_of = _redistribute_service(program)
+    corridor = next((n for n in program.needs if n.type in _CORRIDOR_SPINE_TYPES), None)
+    corridor_key = corridor.key if corridor is not None else None
     public = _pull_must_adjacent(
-        [n for n in program.needs if macro_zone(zone_of.get(n.key, "semi_private")) == "public"],
+        [
+            n for n in program.needs
+            if n.key != corridor_key and macro_zone(zone_of.get(n.key, "semi_private")) == "public"
+        ],
         program.must_adjacent,
     )
     public_keys = {n.key for n in public}
     repeat = _pull_must_adjacent(
-        [n for n in program.needs if n.key not in public_keys],
+        [n for n in program.needs if n.key not in public_keys and n.key != corridor_key],
         program.must_adjacent,
     )
 
     if not public or len(repeat) < 2:
-        groups = [g for g in (public, repeat) if g]
+        groups = [g for g in (public, repeat, [corridor] if corridor is not None else []) if g]
         return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, groups))
 
-    public_band, (wings_rect, _) = _facing_progression_bands(plot_w, plot_d, facing, [public, repeat])
-
-    wing_a, wing_b = repeat[0::2], repeat[1::2]
-    wing_groups = [g for g in (wing_a, wing_b) if g]
-    if len(wing_groups) < 2:
-        return BandPlan(bands=[public_band, (wings_rect, repeat)])
-
     perp_axis = "d" if facing in (Facing.east, Facing.west) else "w"
-    wing_rects = _split_rect(wings_rect, perp_axis, wing_groups)
-    return BandPlan(bands=[public_band] + list(zip(wing_rects, wing_groups)))
+
+    if corridor is None:
+        public_band, (wings_rect, _) = _facing_progression_bands(plot_w, plot_d, facing, [public, repeat])
+        wing_a, wing_b = repeat[0::2], repeat[1::2]
+        wing_groups = [g for g in (wing_a, wing_b) if g]
+        if len(wing_groups) < 2:
+            return BandPlan(bands=[public_band, (wings_rect, repeat)])
+        wing_rects = _split_rect(wings_rect, perp_axis, wing_groups)
+        return BandPlan(bands=[public_band] + list(zip(wing_rects, wing_groups)))
+
+    # A corridor exists: only genuinely private clusters (a private room +
+    # its MUST-attached service partners, workflow 4.5) need the guaranteed
+    # spine touch — an unattached bathroom/utility/parking is "flex" and
+    # gets an ordinary trailing band instead of wasting wing length on rooms
+    # that never needed the guarantee (found live: combing every non-public
+    # room made several real fixtures stop fitting their existing plots).
+    clusters, flex = _corridor_served_groups(repeat, program.must_adjacent)
+    if len(clusters) < 2:
+        # Not enough clusters to form two wings around a spine — no literal
+        # spine to carve either; one combined band, corridor included.
+        groups = [public, repeat, [corridor]]
+        return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, groups))
+
+    # flex has no positional requirement of its own (workflow 4.5) — fold it
+    # into the public group's area rather than giving it a separate trailing
+    # band, so it doesn't pay a second band's own floor overhead on top of
+    # the wings' (found live: a separate flex band left too little depth for
+    # the wings to comb-arrange their clusters in on several real fixtures).
+    clusters_footprint = [n for cluster in clusters for n in cluster]
+    public_and_flex = public + flex
+    skeleton = [public_and_flex, clusters_footprint]
+    progression_bands = _facing_progression_bands(plot_w, plot_d, facing, skeleton)
+    public_rect, _ = progression_bands[0]
+    public_band = (public_rect, public_and_flex)
+    wings_rect = progression_bands[1][0]
+    trailing_bands: list[tuple[Rect, list[RoomNeed]]] = []
+
+    wing_a, wing_b = _balance_two_ways(clusters)
+    if not wing_b:
+        # Degenerate: every cluster landed in one wing, nothing to spine
+        # against on the other side.
+        return BandPlan(bands=[public_band, (wings_rect, clusters_footprint)] + trailing_bands)
+
+    # wing_a/wing_b are lists of CLUSTERS (each cluster itself a list of
+    # rooms) — the outer wing-vs-corridor-vs-wing split needs each wing's
+    # flat room footprint for sizing; the inner per-wing comb split (below)
+    # needs the cluster structure itself.
+    wing_a_footprint = [n for cluster in wing_a for n in cluster]
+    wing_b_footprint = [n for cluster in wing_b for n in cluster]
+    wing_a_rect, corridor_rect, wing_b_rect = _split_rect(
+        wings_rect, perp_axis, [wing_a_footprint, [corridor], wing_b_footprint]
+    )
+    along_axis = "w" if perp_axis == "d" else "d"
+    comb_a = [
+        flat for rect, cluster in zip(_split_rect(wing_a_rect, along_axis, wing_a), wing_a)
+        for flat in _flatten_cluster_band(rect, cluster)
+    ]
+    comb_b = [
+        flat for rect, cluster in zip(_split_rect(wing_b_rect, along_axis, wing_b), wing_b)
+        for flat in _flatten_cluster_band(rect, cluster)
+    ]
+
+    bands = [public_band] + comb_a + [(corridor_rect, [corridor])] + comb_b + trailing_bands
+    return BandPlan(bands=bands, corridor_rects=[(corridor.key, corridor_rect)])
 
 
 def hub_and_spoke(program: EngineProgram, plot_w: float, plot_d: float, facing: Facing) -> BandPlan:
@@ -356,7 +617,8 @@ _MIN_DOMINANT_SHARE = 0.5  # "one node ≥50% of area" (3.1.d)
 # entry, and would otherwise have flipped). A double-loaded corridor is
 # specifically a hallway/corridor SPINE with rooms on both sides, so it
 # should require one of those, not just "the program has an entry."
-_CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway"})
+# (`_CORRIDOR_SPINE_TYPES` itself now lives near the top of the module,
+# workflow 4.3 — `zoned_bands` needs it too.)
 
 
 def select_archetype(

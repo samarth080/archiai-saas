@@ -45,6 +45,22 @@ def _room_polygon(room):
     return polygon_mod.rect_to_polygon(Rect(room.x, room.y, room.w, room.h))
 
 
+def _expected_room_count(spec: RequirementsSpec) -> int:
+    """Mirrors test_mvp_engine.py's own helper: a bare count formula went
+    stale the moment Phase 4.1 (ensure_corridor) started sometimes injecting
+    a corridor node — derive the expectation from the real program instead
+    of duplicating ensure_corridor's own threshold here."""
+    from app.services.layout_engine.engine import _build_program
+
+    requested = sum(r.count for r in spec.rooms)
+    has_entry = any(r.type == RoomType.entry for r in spec.rooms)
+    count = requested + (0 if has_entry else 1)  # auto-entry
+    program = _build_program(spec)
+    if any(n.type in ("corridor", "hallway") for n in program.needs):
+        count += 1
+    return count
+
+
 def _assert_polygon_plan_is_sound(plan):
     """Real polygon-vs-polygon checks (not bbox), independent of the
     not-yet-polygon-aware `services.quality.validate`: no true overlaps,
@@ -69,8 +85,9 @@ def _assert_polygon_plan_is_sound(plan):
 
 
 def test_trapezoidal_plot_produces_a_sound_plan():
-    plan = generate_plan(_spec(_TRAPEZOID))
-    assert len(plan.rooms) == 6  # living_room + 2 bedroom + bathroom + kitchen + auto-entry
+    spec = _spec(_TRAPEZOID)
+    plan = generate_plan(spec)
+    assert len(plan.rooms) == _expected_room_count(spec)
     _assert_polygon_plan_is_sound(plan)
 
 
@@ -195,5 +212,4 @@ def test_property_polygon_engine_never_produces_broken_geometry(spec):
         return  # honest refusal is a valid outcome for an undersized plot
 
     _assert_polygon_plan_is_sound(plan)
-    requested = sum(r.count for r in spec.rooms) + 1  # + auto-entry
-    assert len(plan.rooms) == requested
+    assert len(plan.rooms) == _expected_room_count(spec)
