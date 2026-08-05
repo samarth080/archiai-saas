@@ -485,6 +485,107 @@ def rebuild_derived_geometry(
     return plan.model_copy(update={"walls": walls, "doors": doors})
 
 
+def plan_from_program(
+    spec: RequirementsSpec, program: EngineProgram, plot_w: float, plot_d: float, facing: Facing,
+) -> LayoutPlan:
+    """The placement -> doors -> PlanRoom-assembly tail of ``generate_plan``,
+    parameterized by an already-built ``EngineProgram`` instead of deriving
+    one from ``spec`` internally. ``generate_plan`` itself is just this
+    function fed its own freshly-built program (see below) — pulled out so
+    workflow Phase 5's candidate search (``layout_engine/search.py``) can
+    run the exact same proven placement/door/assembly pipeline over
+    DIFFERENT room orderings of the SAME program without reimplementing it,
+    carrying the identical zero-overlap/zero-gap/reachability guarantees a
+    single-shot plan already has. The polygon-boundary path (workflow Phase
+    8, ``_generate_plan_polygon`` below) does not go through this function —
+    it has no archetype/band concept to vary an ordering over, so Phase 5
+    search is rect-path only for now."""
+    needs = program.needs
+    if not needs:
+        raise DoesNotFitError("no rooms requested")
+    if len(needs) > MAX_ROOMS_PER_LAYOUT:
+        raise DoesNotFitError(f"more than {MAX_ROOMS_PER_LAYOUT} rooms requested")
+
+    plot_area = plot_w * plot_d
+    required = sum(n.min_area for n in needs)
+    if required * 1.05 > plot_area:
+        raise DoesNotFitError(
+            f"rooms need at least {required:.0f} m^2 but the plot is {plot_area:.0f} m^2 — increase plot size",
+            required_area=required, plot_area=plot_area,
+        )
+
+    def _place(prog: EngineProgram, archetype_fn) -> list[tuple[RoomNeed, Rect]]:
+        result: list[tuple[RoomNeed, Rect]] = []
+        for band_rect, group in archetype_fn(prog, plot_w, plot_d, facing).bands:
+            result.extend(subdivide(group, band_rect, facing))
+        return result
+
+    archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
+    try:
+        placed = _place(program, archetype_fn)
+    except SubdivisionError as exc:
+        if archetype_key == "zoned_bands":
+            raise DoesNotFitError(f"{exc} — increase plot size") from exc
+        # A more specific archetype (e.g. double_loaded_corridor's two
+        # wings) can need more room along one axis than zoned_bands' single
+        # progression does for the same program, purely from splitting into
+        # more separate bands — found live on the clinic fixture, which
+        # double_loaded_corridor's own selection criteria correctly match
+        # but couldn't actually fit, while zoned_bands (the general-purpose
+        # default every archetype falls back to) fit it fine. Try that
+        # proven fallback once before giving up. Deliberately NOT a further
+        # fallback to no-corridor placement: that would let generate_plan
+        # return a plan with a real through_room_access violation on a
+        # tight plot, silently breaking the exact guarantee workflow 4.5
+        # exists for — an honest DoesNotFitError is the correct outcome
+        # when even the general-purpose archetype can't fit the program
+        # AND keep every private room genuinely reachable.
+        try:
+            placed = _place(program, zoned_bands)
+        except SubdivisionError:
+            raise DoesNotFitError(f"{exc} — increase plot size") from exc
+
+    for need, rect in placed:  # leaf min-size gate (swap-tolerant)
+        fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
+            rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
+        )
+        if not fits:
+            raise DoesNotFitError(
+                f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its minimum "
+                f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
+            )
+
+    walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
+
+    # Round EDGES (not x/w independently) so adjacent rooms share the exact
+    # same rounded coordinate — independent rounding lets edges drift apart by
+    # >1 mm and register as phantom overlaps (caught by the property gate).
+    rooms = [
+        PlanRoom(
+            id=need.key,
+            # `need.type` is already validated by this point — a raw RoomType
+            # value from `spec.rooms` (Pydantic-enforced closed enum) or a
+            # catalog-checked key from `spec.spaces` (`from_requirements`
+            # calls `catalog.get()` eagerly) — no cast needed, and casting
+            # via `RoomType(...)` would reject any non-residential type here.
+            type=need.type,
+            label=need.label,
+            x=_round(rect.x), y=_round(rect.y),
+            w=round(_round(rect.x2) - _round(rect.x), 3),
+            h=round(_round(rect.y2) - _round(rect.y), 3),
+            rotation=0,
+        )
+        for need, rect in placed
+    ]
+    return LayoutPlan(
+        plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
+        rooms=rooms,
+        walls=walls,
+        doors=doors,
+    )
+
+
 def _generate_plan_polygon(spec: RequirementsSpec) -> LayoutPlan:
     """Polygon counterpart of `generate_plan`'s tail — same validation order,
     same error types, no zone/archetype banding (Phase 8 scope: `zoned_bands`
@@ -569,90 +670,5 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
     plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
     plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
     facing = spec.facing or DEFAULT_FACING
-
     program = _build_program(spec)
-    needs = program.needs
-    if not needs:
-        raise DoesNotFitError("no rooms requested")
-    if len(needs) > MAX_ROOMS_PER_LAYOUT:
-        raise DoesNotFitError(f"more than {MAX_ROOMS_PER_LAYOUT} rooms requested")
-
-    plot_area = plot_w * plot_d
-    required = sum(n.min_area for n in needs)
-    if required * 1.05 > plot_area:
-        raise DoesNotFitError(
-            f"rooms need at least {required:.0f} m^2 but the plot is {plot_area:.0f} m^2 — increase plot size",
-            required_area=required, plot_area=plot_area,
-        )
-
-    def _place(prog: EngineProgram, archetype_fn) -> list[tuple[RoomNeed, Rect]]:
-        result: list[tuple[RoomNeed, Rect]] = []
-        for band_rect, group in archetype_fn(prog, plot_w, plot_d, facing).bands:
-            result.extend(subdivide(group, band_rect, facing))
-        return result
-
-    archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
-    active_program = program
-    try:
-        placed = _place(program, archetype_fn)
-    except SubdivisionError as exc:
-        if archetype_key == "zoned_bands":
-            raise DoesNotFitError(f"{exc} — increase plot size") from exc
-        # A more specific archetype (e.g. double_loaded_corridor's two
-        # wings) can need more room along one axis than zoned_bands' single
-        # progression does for the same program, purely from splitting into
-        # more separate bands — found live on the clinic fixture, which
-        # double_loaded_corridor's own selection criteria correctly match
-        # but couldn't actually fit, while zoned_bands (the general-purpose
-        # default every archetype falls back to) fit it fine. Try that
-        # proven fallback once before giving up. Deliberately NOT a further
-        # fallback to no-corridor placement: that would let generate_plan
-        # return a plan with a real through_room_access violation on a
-        # tight plot, silently breaking the exact guarantee workflow 4.5
-        # exists for — an honest DoesNotFitError is the correct outcome
-        # when even the general-purpose archetype can't fit the program
-        # AND keep every private room genuinely reachable.
-        try:
-            placed = _place(program, zoned_bands)
-        except SubdivisionError:
-            raise DoesNotFitError(f"{exc} — increase plot size") from exc
-
-    for need, rect in placed:  # leaf min-size gate (swap-tolerant)
-        fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
-            rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
-        )
-        if not fits:
-            raise DoesNotFitError(
-                f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its minimum "
-                f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
-            )
-
-    walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing, active_program.zone_of)
-
-    # Round EDGES (not x/w independently) so adjacent rooms share the exact
-    # same rounded coordinate — independent rounding lets edges drift apart by
-    # >1 mm and register as phantom overlaps (caught by the property gate).
-    rooms = [
-        PlanRoom(
-            id=need.key,
-            # `need.type` is already validated by this point — a raw RoomType
-            # value from `spec.rooms` (Pydantic-enforced closed enum) or a
-            # catalog-checked key from `spec.spaces` (`from_requirements`
-            # calls `catalog.get()` eagerly) — no cast needed, and casting
-            # via `RoomType(...)` would reject any non-residential type here.
-            type=need.type,
-            label=need.label,
-            x=_round(rect.x), y=_round(rect.y),
-            w=round(_round(rect.x2) - _round(rect.x), 3),
-            h=round(_round(rect.y2) - _round(rect.y), 3),
-            rotation=0,
-        )
-        for need, rect in placed
-    ]
-    return LayoutPlan(
-        plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
-        rooms=rooms,
-        walls=walls,
-        doors=doors,
-    )
+    return plan_from_program(spec, program, plot_w, plot_d, facing)
