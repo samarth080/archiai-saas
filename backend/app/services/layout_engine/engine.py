@@ -154,12 +154,35 @@ def _wall_length(w: Wall) -> float:
 
 
 def _circulation_key(placed: list[tuple[RoomNeed, Rect]]) -> str:
+    """The room the door graph roots at. Workflow Phase 4.4: a real
+    corridor/hallway spine (`program_completion.ensure_corridor`) wins when
+    one exists — routing "through the living room" was always a fiction for
+    circulation, just a tolerable one while no program ever had a real
+    corridor node. Falls back to the pre-4.4 behavior otherwise, so nothing
+    changes for a program without one."""
     by_type = {n.type: n.key for n, _ in placed}
+    for spine_type in ("corridor", "hallway"):
+        if spine_type in by_type:
+            return by_type[spine_type]
     if RoomType.living_room.value in by_type:
         return by_type[RoomType.living_room.value]
     if RoomType.entry.value in by_type:
         return by_type[RoomType.entry.value]
     return placed[0][0].key
+
+
+def _pair_priority(pair: frozenset, zone_of: dict[str, str]) -> int:
+    """Workflow Phase 4.4's connecting-wall preference order: circulation-to-
+    room first, then public-to-public, everything else (routing through an
+    arbitrary room) last. Used only to break ties in which pair the BFS
+    spanning tree grows through next — connectivity itself is unaffected,
+    only which walls end up hosting the doors that provide it."""
+    zones = {zone_of.get(k, "semi_private") for k in pair}
+    if "circulation" in zones:
+        return 0
+    if zones == {"public"}:
+        return 1
+    return 2
 
 
 def _place_doors(
@@ -189,6 +212,16 @@ def _place_doors(
         by_pair.setdefault(frozenset((a, b)), []).append(wall)
 
     types_by_key = {n.key: n.type for n, _ in placed}
+    # Workflow Phase 4.4: a `separated`/AVOID pair is vetoed from ever
+    # getting a direct door, even when it would be the shortest way to
+    # connect two otherwise-disconnected parts of the floor — connectivity
+    # must route AROUND an explicit avoidance, not through it. Computed once,
+    # used by both the spanning tree (step 2) and the "door every remaining
+    # adjacent pair" pass (step 3, which already respected this).
+    avoid_type_pairs = {frozenset((p.room_a.value, p.room_b.value)) for p in spec.avoid_adjacency}
+
+    def is_avoided(pair: frozenset) -> bool:
+        return frozenset(types_by_key[k] for k in pair) in avoid_type_pairs
 
     # 1. `must`-adjacency doors (attached bathroom onto its bedroom, etc.).
     for pref in spec.adjacency:
@@ -217,9 +250,15 @@ def _place_doors(
     changed = True
     while changed:
         changed = False
-        for pair, pair_walls in sorted(by_pair.items(), key=lambda kv: sorted(kv[0])):
+        ranked_pairs = sorted(
+            by_pair.items(),
+            key=lambda kv: (_pair_priority(kv[0], zone_of), sorted(kv[0])),
+        )
+        for pair, pair_walls in ranked_pairs:
             a, b = sorted(pair)
             if (a in connected) == (b in connected):
+                continue
+            if is_avoided(pair):
                 continue
             best = max(pair_walls, key=_wall_length)
             if _wall_length(best) >= _MIN_DOOR_EDGE:
@@ -247,10 +286,8 @@ def _place_doors(
     #    there's a real reason not to connect them directly: both rooms are
     #    private/service-zoned (bedroom-bedroom, bedroom-bathroom — privacy,
     #    not a defect) or the pair is explicitly avoided in the spec.
-    avoid_type_pairs = {frozenset((p.room_a.value, p.room_b.value)) for p in spec.avoid_adjacency}
     for pair, pair_walls in by_pair.items():
-        pair_types = frozenset(types_by_key[k] for k in pair)
-        if pair_types in avoid_type_pairs:
+        if is_avoided(pair):
             continue
         if all(macro_zone(zone_of.get(k, "semi_private")) == "private" for k in pair):
             continue

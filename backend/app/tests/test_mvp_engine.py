@@ -167,6 +167,65 @@ def test_explicitly_avoided_adjacent_pair_gets_no_direct_door():
             assert wall_id not in doored_walls
 
 
+# ── Door policy rewrite (workflow Phase 4.4) ──────────────────────────────
+
+
+def test_circulation_key_prefers_a_real_corridor_over_living_room_or_entry():
+    from app.services.layout_engine.engine import _circulation_key
+    from app.services.layout_engine.subdivision import RoomNeed
+
+    def need(key: str, kind: str) -> RoomNeed:
+        return RoomNeed(key=key, type=kind, label=kind, preferred_area=10.0, min_w=2.0, min_d=2.0)
+
+    placed = [
+        (need("r1", "entry"), Rect(0, 0, 1, 1)),
+        (need("r2", "living_room"), Rect(1, 0, 1, 1)),
+        (need("r3", "corridor"), Rect(2, 0, 1, 1)),
+    ]
+    assert _circulation_key(placed) == "r3"
+
+
+def test_avoid_pair_vetoes_a_door_even_when_it_is_the_only_bridge():
+    """The doc's exact Phase 4.4 requirement: an AVOID edge must veto a door
+    even if that pair is the ONLY way to keep the floor connected — routing
+    should fail structurally (DoesNotFitError) rather than silently break
+    the avoidance to preserve connectivity."""
+    from app.services.layout_engine.engine import DoesNotFitError, _build_walls, _place_doors
+    from app.services.layout_engine.subdivision import RoomNeed
+
+    def need(key: str, kind: str) -> RoomNeed:
+        return RoomNeed(key=key, type=kind, label=kind, preferred_area=9.0, min_w=3.0, min_d=3.0)
+
+    # kitchen - bathroom - entry in a row; kitchen only touches bathroom.
+    placed = [
+        (need("a", "kitchen"), Rect(0, 0, 3, 3)),
+        (need("b", "bathroom"), Rect(3, 0, 3, 3)),
+        (need("c", "entry"), Rect(6, 0, 3, 3)),
+    ]
+    walls, wall_rooms = _build_walls(placed, 9.0, 3.0)
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "kitchen", "count": 1},
+            {"type": "bathroom", "count": 1},
+            {"type": "entry", "count": 1},
+        ],
+        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "bathroom"}],
+    })
+    zone_of = {"a": "public", "b": "service", "c": "circulation"}
+
+    with pytest.raises(DoesNotFitError):
+        _place_doors(placed, walls, wall_rooms, spec, Facing.east, zone_of)
+
+    # The lenient editor-sync path must not raise, and must still honour the
+    # veto rather than silently connecting kitchen through it.
+    doors = _place_doors(
+        placed, walls, wall_rooms, spec, Facing.east, zone_of, allow_disconnected=True,
+    )
+    doored_walls = {d.wall_ref for d in doors}
+    kitchen_bathroom_wall = next(w for w in walls if set(wall_rooms[w.id]) == {"a", "b"})
+    assert kitchen_bathroom_wall.id not in doored_walls
+
+
 def test_engine_is_deterministic():
     a = generate_plan(_load("3bhk_adjacencies"))
     b = generate_plan(_load("3bhk_adjacencies"))
