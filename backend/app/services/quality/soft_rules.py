@@ -24,7 +24,7 @@ def _rect(room: PlanRoom) -> Rect:
     return Rect(room.x, room.y, room.w, room.h)
 
 
-def _share_wall(a: PlanRoom, b: PlanRoom) -> bool:
+def rooms_share_wall(a: PlanRoom, b: PlanRoom) -> bool:
     return _rect(a).shared_edge(_rect(b)) is not None
 
 
@@ -38,7 +38,7 @@ def _rooms_by_type(plan: LayoutPlan) -> dict[RoomType, list[PlanRoom]]:
 def _pair_is_adjacent(a_rooms: list[PlanRoom], b_rooms: list[PlanRoom]) -> bool:
     for a in a_rooms:
         for b in b_rooms:
-            if a.id != b.id and _share_wall(a, b):
+            if a.id != b.id and rooms_share_wall(a, b):
                 return True
     return False
 
@@ -106,7 +106,7 @@ def privacy_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRuleR
     warnings: list[QualityWarning] = []
     protected = 0
     for room in private_rooms:
-        if any(_share_wall(entry, room) for entry in entries):
+        if any(rooms_share_wall(entry, room) for entry in entries):
             warnings.append(
                 QualityWarning(
                     code="generic.privacy_entry",
@@ -173,7 +173,7 @@ def bath_kitchen_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Soft
         (kitchen, bathroom)
         for kitchen in kitchens
         for bathroom in bathrooms
-        if _share_wall(kitchen, bathroom)
+        if rooms_share_wall(kitchen, bathroom)
     ]
     warnings = [
         QualityWarning(

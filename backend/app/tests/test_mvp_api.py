@@ -185,20 +185,23 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         assert design is not None
         assert version is not None
         # `spaces` (Phase 1 SpaceCatalog migration), `plot.boundary` (Phase 8
-        # polygon-boundary engine), and `layout_style` (Phase 3.2 archetype
+        # polygon-boundary engine), `layout_style` (Phase 3.2 archetype
+        # selector), and `rule_packs` (generalization Phase 6)
         # selector) are new additive fields with None/empty-list defaults;
         # the fixture predates all three, so the persisted, fully-validated
         # model legitimately has more keys than the raw input fixture — not
         # a round-trip fidelity loss.
         assert version.requirements_json == {
-            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+            "layout_style": None, "rule_packs": None,
         }
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
         assert design.layout_json["metadata"]["pipeline"] == "mvp"
         assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
         assert design.layout_json["metadata"]["mvpRequirements"] == {
-            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+            "layout_style": None, "rule_packs": None,
         }
         assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
         assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
@@ -212,7 +215,8 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert latest.status_code == 200
     assert latest.json()["designId"] == body["designId"]
     assert latest.json()["metadata"]["mvpRequirements"] == {
-        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+        "layout_style": None, "rule_packs": None,
     }
     assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
     assert latest.json()["metadata"]["mvpVastuEnabled"] is False
@@ -224,7 +228,8 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert fetched.status_code == 200
     assert fetched.json()["layout"] == body["layout"]
     assert fetched.json()["requirements"] == {
-        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+        "layout_style": None, "rule_packs": None,
     }
 
 

@@ -59,6 +59,16 @@ class Facing(str, Enum):
     west = "west"
 
 
+RulePackName = Literal[
+    "generic",
+    "residential",
+    "healthcare",
+    "workplace",
+    "hospitality_edu",
+    "vastu",
+]
+
+
 def _reject_string_number(value: object) -> object:
     """Dimensions must arrive as numbers, not numeric strings — the schema is the
     type gate for LLM output (workflow Risk #4)."""
@@ -166,5 +176,8 @@ class RequirementsSpec(BaseModel):
     layout_style: Literal[
         "zoned_bands", "double_loaded_corridor", "hub_and_spoke", "open_core"
     ] | None = None
+    # None selects packs from the building/program shape. A populated list is
+    # an explicit override; Vastu still also requires the caller's opt-in.
+    rule_packs: list[RulePackName] | None = None
     # Field names / question topics the prompt genuinely did not state.
     missing_info: list[str] = Field(default_factory=list)

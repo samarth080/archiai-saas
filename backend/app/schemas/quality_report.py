@@ -27,7 +27,7 @@ class QualityWarning(BaseModel):
     code: str
     message: str
     severity: Literal["info", "warn"] = "warn"
-    rule: Literal["generic", "vastu"] = "generic"
+    rule: str = Field(default="generic", min_length=1, max_length=64)
 
 
 class QualityReport(BaseModel):
