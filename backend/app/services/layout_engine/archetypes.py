@@ -82,6 +82,14 @@ MACRO_ZONE = {
 _MACRO_ORDER = ("public", "semi_private", "private")
 _MIN_BAND_SPAN = 1.5  # meters — same floor the old _bands() used
 
+# A spine-shaped circulation node — NOT the full program_graph.py
+# `_CIRCULATION_TYPES` set (which also includes entry/foyer/lobby/staircase;
+# see `select_archetype`'s own comment on why "any circulation node" is a
+# false-positive trap). Used both by `zoned_bands` (workflow 4.3: carve the
+# corridor as its own real band instead of folding it into "public" like
+# every other circulation type) and by `select_archetype`.
+_CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway"})
+
 
 @dataclass(frozen=True)
 class BandPlan:
@@ -232,13 +240,26 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
     """Ordered zone progression, facing-anchored — public/circulation
     leads, then semi_private, then private/service (see ``MACRO_ZONE``).
     Raises ``SubdivisionError`` (same type ``subdivide`` raises, so
-    ``engine.py``'s existing handler converts it) when bands can't fit."""
+    ``engine.py``'s existing handler converts it) when bands can't fit.
+
+    Workflow 4.3 (carving): a corridor-spine node (``program_completion.
+    ensure_corridor`` injects one when warranted) is pulled OUT of the
+    "public" macro-band it would otherwise fold into and given its own real
+    band instead — right after "public", at the public/private seam, same
+    intent as the doc's "strip along the band seam". This makes the
+    corridor an actual ``PlanRoom`` with real geometry (recorded in
+    ``corridor_rects`` too), not just another room-need competing for space
+    in the general pool. A program with no corridor node behaves exactly as
+    before — this whole block is a no-op when ``corridor`` is ``None``."""
     if not program.needs:
         return BandPlan(bands=[])
 
     zone_of = _redistribute_service(program)
+    corridor = next((n for n in program.needs if n.type in _CORRIDOR_SPINE_TYPES), None)
     groups: dict[str, list[RoomNeed]] = {}
     for need in program.needs:
+        if corridor is not None and need.key == corridor.key:
+            continue  # carved as its own band below, not grouped with public
         macro = macro_zone(zone_of.get(need.key, "semi_private"))
         groups.setdefault(macro, []).append(need)
     for zone, rooms in groups.items():
@@ -246,7 +267,15 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
 
     ordered_zones = [z for z in _MACRO_ORDER if z in groups]
     ordered_groups = [groups[z] for z in ordered_zones]
-    return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, ordered_groups))
+
+    if corridor is None:
+        return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, ordered_groups))
+
+    insert_at = 1 if ordered_zones[:1] == ["public"] else 0
+    all_groups = ordered_groups[:insert_at] + [[corridor]] + ordered_groups[insert_at:]
+    bands = _facing_progression_bands(plot_w, plot_d, facing, all_groups)
+    corridor_rect = bands[insert_at][0]
+    return BandPlan(bands=bands, corridor_rects=[(corridor.key, corridor_rect)])
 
 
 def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float, facing: Facing) -> BandPlan:
@@ -356,7 +385,8 @@ _MIN_DOMINANT_SHARE = 0.5  # "one node ≥50% of area" (3.1.d)
 # entry, and would otherwise have flipped). A double-loaded corridor is
 # specifically a hallway/corridor SPINE with rooms on both sides, so it
 # should require one of those, not just "the program has an entry."
-_CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway"})
+# (`_CORRIDOR_SPINE_TYPES` itself now lives near the top of the module,
+# workflow 4.3 — `zoned_bands` needs it too.)
 
 
 def select_archetype(

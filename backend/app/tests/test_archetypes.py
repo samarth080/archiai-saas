@@ -158,6 +158,75 @@ def test_empty_program_returns_no_bands():
     assert zoned_bands(_program([], {}), 9.0, 12.0, Facing.east) == BandPlan(bands=[])
 
 
+# ── corridor carving (workflow 4.3) ───────────────────────────────────────
+
+
+def _corridor_program():
+    needs = [
+        _need("entry", "entry", 3.0, 1.2, 1.5),
+        _need("corr", "corridor", 8.0, 1.0, 1.5),
+        _need("living", "living_room", 16.0, 3.3, 3.6),
+        _need("b1", "bedroom", 12.0, 3.0, 3.0),
+        _need("b2", "bedroom", 12.0, 3.0, 3.0),
+        _need("b3", "bedroom", 12.0, 3.0, 3.0),
+    ]
+    zone_of = {
+        "entry": "circulation", "corr": "circulation", "living": "public",
+        "b1": "private", "b2": "private", "b3": "private",
+    }
+    return _program(needs, zone_of)
+
+
+def test_corridor_becomes_its_own_band_not_folded_into_public():
+    plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
+
+    corridor_bands = [(r, g) for r, g in plan.bands if any(n.key == "corr" for n in g)]
+    assert len(corridor_bands) == 1
+    rect, group = corridor_bands[0]
+    assert [n.key for n in group] == ["corr"]  # alone, not grouped with entry/living
+
+
+def test_corridor_band_sits_between_public_and_private():
+    plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
+
+    def band_x(key: str) -> float:
+        return next(rect.x for rect, group in plan.bands if any(n.key == key for n in group))
+
+    public_x, corridor_x, private_x = band_x("living"), band_x("corr"), band_x("b1")
+    # facing east: public is highest-x (touches the facing edge), private is
+    # lowest-x — the corridor's band must sit strictly between them.
+    assert private_x < corridor_x < public_x
+
+
+def test_corridor_rects_is_populated_with_real_geometry():
+    plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
+
+    assert len(plan.corridor_rects) == 1
+    key, rect = plan.corridor_rects[0]
+    assert key == "corr"
+    assert rect.d == pytest.approx(14.0)  # spans the full plot depth
+    assert rect.w >= 1.0  # at least its catalog minimum width
+
+
+def test_corridor_carving_tiles_the_whole_plot_with_zero_gaps():
+    plan = zoned_bands(_corridor_program(), 12.0, 14.0, Facing.east)
+    assert sum(rect.area for rect, _ in plan.bands) == pytest.approx(12.0 * 14.0)
+    rects = sorted((rect for rect, _ in plan.bands), key=lambda r: r.x)
+    for a, b in zip(rects, rects[1:]):
+        assert a.x2 == pytest.approx(b.x)
+        assert not a.overlaps(b)
+
+
+def test_no_corridor_node_means_unchanged_behavior():
+    # Regression pin: a program with no corridor node must produce the exact
+    # same bands as before this feature existed (the whole carving block is
+    # a documented no-op in that case).
+    needs = [_need("entry", "entry", 3.0, 1.2, 1.5), _need("bed", "bedroom", 12.0, 3.0, 3.0)]
+    program = _program(needs, {"entry": "circulation", "bed": "private"})
+    plan = zoned_bands(program, 9.0, 12.0, Facing.east)
+    assert plan.corridor_rects == []
+
+
 def test_select_archetype_returns_zoned_bands_with_a_reason():
     key, fn, reason = select_archetype(_program([], {}))
     assert key == "zoned_bands"
