@@ -1,8 +1,8 @@
 """layout_engine/search.py — workflow Phase 5.1: generate-and-score
 candidate search.
 
-Additive only: nothing in ``generate_plan()`` calls this yet. Every
-candidate flows through the exact same proven ``engine.plan_from_program``
+The production MVP API uses :func:`best_candidate` for rectangular plots.
+Every candidate flows through the exact same proven ``engine.plan_from_program``
 pipeline ``generate_plan()`` itself uses, parameterized by a room-order-
 shuffled copy of the same ``EngineProgram`` — so a candidate carries the
 identical zero-overlap/zero-gap/reachability guarantees a single-shot plan
@@ -25,7 +25,12 @@ from app.config.mvp_defaults import DEFAULT_FACING, DEFAULT_PLOT_DEPTH_M, DEFAUL
 from app.schemas.layout_plan import LayoutPlan
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_adapter import layout_plan_to_canvas
-from app.services.layout_engine.engine import DoesNotFitError, _build_program, plan_from_program
+from app.services.layout_engine.engine import (
+    DoesNotFitError,
+    _build_program,
+    generate_plan,
+    plan_from_program,
+)
 from app.services.planning import EngineProgram, ProgramGraph, from_requirements
 from app.services.planning.graph_scoring import score_graph_satisfaction
 from app.services.planning.program_completion import ensure_corridor, ensure_entry
@@ -104,6 +109,11 @@ def generate_candidates(spec: RequirementsSpec, *, n: int = 64, seed: int = 0) -
 
 
 def best_candidate(spec: RequirementsSpec, *, n: int = 64, seed: int = 0) -> LayoutPlan:
+    # Polygon subdivision has its own proven geometry path and no band/order
+    # search surface yet. Never discard the supplied boundary by treating its
+    # bounding box as a rectangular search plot.
+    if spec.plot.boundary is not None:
+        return generate_plan(spec)
     candidates = generate_candidates(spec, n=n, seed=seed)
     if not candidates:
         raise DoesNotFitError("no candidate could be generated")

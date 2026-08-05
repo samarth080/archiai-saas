@@ -1,7 +1,7 @@
 """Workflow Phase 5.1 — candidate search (layout_engine/search.py).
 
-Additive: generate_plan() itself is untouched (verified by the plan_from_program
-extraction's own test run) and does not call any of this.
+Production generation uses best_candidate(); generate_plan() remains the
+single-shot baseline and the polygon fallback.
 """
 import json
 import time
@@ -111,3 +111,19 @@ def test_search_finds_a_meaningfully_better_layout_than_single_shot():
     assert single_shot_score == 72
     assert best_score == 91
     assert best_score - single_shot_score >= 15
+
+
+def test_best_candidate_preserves_the_polygon_generation_path():
+    spec = RequirementsSpec.model_validate({
+        "rooms": [{"type": "bedroom", "count": 1}],
+        "plot": {
+            "boundary": [
+                {"x": 0, "y": 0},
+                {"x": 8, "y": 0},
+                {"x": 7, "y": 6},
+                {"x": 0, "y": 6},
+            ],
+        },
+    })
+
+    assert best_candidate(spec) == generate_plan(spec)
