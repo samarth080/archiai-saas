@@ -742,6 +742,14 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Verification: golden snapshot diff (5 fixtures), every test_mvp_engine.py test rerun directly (valid-plan, fills-plot, determinism, entry-facing, attached-bathroom, wall-dedup, doors, DoesNotFitError, rebuild_derived_geometry), the real 200-example derandomized Hypothesis go/no-go gate (0 failures), plus test_engine_program.py/test_program_graph.py/test_space_catalog.py/test_mvp_contracts.py via direct reflection. test_mvp_api.py/test_mvp_clarification.py need the blocked DB fixture — import clean, assertions not rerun, flagged as residual risk.
 - [ ] Not done, on purpose: `_order_group` still matches `spec.adjacency` by type, not `program.must_adjacent` by id — doing that id-level fix now would change which bathroom gets attached in 3bhk_adjacencies (2 bathrooms, 1 must-pair), breaking byte-identical output. Needs its own slice with its own acceptance test.
 
+### Engine generalization workflow — current merged/stacked status
+
+- [x] Phases 1–3: SpaceCatalog/contract migration, ProgramGraph engine input, and layout archetypes are merged to `main`.
+- [x] Phase 4: real corridor geometry, circulation-rooted doors, AVOID vetoes, and the `through_room_access` hard rule are merged to `main`.
+- [x] Phase 5.1: deterministic best-of-64 candidate search is merged to `main`.
+- [x] Phase 5.3 continuation (`codex/phase5-refinement-negotiation`): production MVP generation now uses candidate search and fit errors return concrete trade-offs. Full backend gate: 905 passed, 3 expected live-model skips.
+- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated; Phase 6 rule packs is next on its own branch.
+
 ---
 
 ## Development Rules
