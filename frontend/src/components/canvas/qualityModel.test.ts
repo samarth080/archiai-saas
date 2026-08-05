@@ -18,6 +18,22 @@ describe('parseMvpQuality', () => {
     })).toBeNull()
   })
 
+  it('accepts a non-residential rule-pack key', () => {
+    expect(parseMvpQuality({
+      mvpQuality: {
+        valid: true,
+        score: 80,
+        hard_violations: [],
+        warnings: [{
+          code: 'healthcare.consultation_privacy',
+          message: 'Add a privacy buffer.',
+          severity: 'warn',
+          rule: 'healthcare',
+        }],
+      },
+    })?.warnings[0].rule).toBe('healthcare')
+  })
+
   it('collects unique room ids implicated by hard violations', () => {
     const roomIds = hardViolationRoomIds({
       hard_violations: [

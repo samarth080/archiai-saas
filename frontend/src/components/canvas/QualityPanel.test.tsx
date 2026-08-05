@@ -24,6 +24,12 @@ describe('QualityPanel', () => {
               severity: 'warn',
               rule: 'vastu',
             },
+            {
+              code: 'healthcare.consultation_privacy',
+              message: 'Consultation Room directly adjoins the waiting area.',
+              severity: 'warn',
+              rule: 'healthcare',
+            },
           ],
         }}
       />,
@@ -32,6 +38,7 @@ describe('QualityPanel', () => {
     expect(screen.getByTestId('quality-panel')).toHaveTextContent('82')
     expect(screen.getByTestId('quality-panel')).toHaveTextContent('Concept quality')
     expect(screen.getByTestId('quality-panel')).toHaveTextContent('Layout guidance')
+    expect(screen.getByTestId('quality-panel')).toHaveTextContent('Healthcare guidance')
     expect(screen.getByTestId('quality-panel')).toHaveTextContent('Vastu guidance')
   })
 

@@ -64,7 +64,7 @@ export interface QualityWarning {
   code: string
   message: string
   severity: 'info' | 'warn'
-  rule: 'generic' | 'vastu'
+  rule: string
 }
 export interface QualityReport {
   score: number
