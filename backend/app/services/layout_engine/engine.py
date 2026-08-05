@@ -430,12 +430,18 @@ def rebuild_derived_geometry(
     return plan.model_copy(update={"walls": walls, "doors": doors})
 
 
-def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
-    plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
-    plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
-    facing = spec.facing or DEFAULT_FACING
-
-    program = _build_program(spec)
+def plan_from_program(
+    spec: RequirementsSpec, program: EngineProgram, plot_w: float, plot_d: float, facing: Facing,
+) -> LayoutPlan:
+    """The placement -> doors -> PlanRoom-assembly tail of ``generate_plan``,
+    parameterized by an already-built ``EngineProgram`` instead of deriving
+    one from ``spec`` internally. ``generate_plan`` itself is just this
+    function fed its own freshly-built program (see below) — pulled out so
+    workflow Phase 5's candidate search (``layout_engine/search.py``) can
+    run the exact same proven placement/door/assembly pipeline over
+    DIFFERENT room orderings of the SAME program without reimplementing it,
+    carrying the identical zero-overlap/zero-gap/reachability guarantees a
+    single-shot plan already has."""
     needs = program.needs
     if not needs:
         raise DoesNotFitError("no rooms requested")
@@ -457,7 +463,6 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
         return result
 
     archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
-    active_program = program
     try:
         placed = _place(program, archetype_fn)
     except SubdivisionError as exc:
@@ -493,7 +498,7 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
             )
 
     walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing, active_program.zone_of)
+    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by
@@ -521,3 +526,11 @@ def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
         walls=walls,
         doors=doors,
     )
+
+
+def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
+    plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
+    plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
+    facing = spec.facing or DEFAULT_FACING
+    program = _build_program(spec)
+    return plan_from_program(spec, program, plot_w, plot_d, facing)
