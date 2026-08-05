@@ -148,7 +148,7 @@ def _band_floor(rooms: list[RoomNeed], other: float) -> float:
     term a band can pass the aggregate-area check while still being too
     narrow for its single widest room (the same class of bug the Phase 4
     live-gate note above documents for cut clamping generally); mirrors
-    ``subdivision._clamped_cut``'s own ``min_span_a``/``min_span_b`` guard."""
+    ``subdivision.clamped_cut``'s own ``min_span_a``/``min_span_b`` guard."""
     if not rooms:
         return _MIN_BAND_SPAN
     min_span = max(min(n.min_w, n.min_d) for n in rooms)

@@ -43,7 +43,7 @@ class RoomNeed:
         return self.min_w * self.min_d
 
 
-def _split_index(needs: list[RoomNeed]) -> int:
+def split_index(needs: list[RoomNeed]) -> int:
     """Index that halves the list by cumulative preferred area (order kept)."""
     total = sum(n.preferred_area for n in needs)
     running = 0.0
@@ -56,7 +56,7 @@ def _split_index(needs: list[RoomNeed]) -> int:
     return best_i
 
 
-def _clamped_cut(span: float, other_span: float, group_a: list[RoomNeed], group_b: list[RoomNeed]) -> float | None:
+def clamped_cut(span: float, other_span: float, group_a: list[RoomNeed], group_b: list[RoomNeed]) -> float | None:
     """Cut position along `span` giving A its area share, clamped so both sides
     can still host their groups' minimum areas. None if no valid cut exists."""
     area_a = sum(n.preferred_area for n in group_a)
@@ -84,7 +84,7 @@ def _clamped_cut(span: float, other_span: float, group_a: list[RoomNeed], group_
     return min(max(t, floor_a), span - floor_b)
 
 
-def _facing_first(axis: str, facing: Facing) -> bool:
+def facing_first(axis: str, facing: Facing) -> bool:
     """Should group A take the high-coordinate child (east/south side)?"""
     if axis == "x":
         return facing == Facing.east
@@ -97,7 +97,7 @@ def subdivide(needs: list[RoomNeed], rect: Rect, facing: Facing) -> list[tuple[R
     if len(needs) == 1:
         return [(needs[0], rect)]
 
-    i = _split_index(needs)
+    i = split_index(needs)
     group_a, group_b = needs[:i], needs[i:]
 
     # Prefer cutting the longer side (keeps cells square-ish); fall back to the
@@ -105,10 +105,10 @@ def subdivide(needs: list[RoomNeed], rect: Rect, facing: Facing) -> list[tuple[R
     axes = ("x", "y") if rect.w >= rect.d else ("y", "x")
     for axis in axes:
         span, other = (rect.w, rect.d) if axis == "x" else (rect.d, rect.w)
-        t = _clamped_cut(span, other, group_a, group_b)
+        t = clamped_cut(span, other, group_a, group_b)
         if t is None:
             continue
-        a_high = _facing_first(axis, facing)
+        a_high = facing_first(axis, facing)
         if axis == "x":
             low = Rect(rect.x, rect.y, t, rect.d)
             high = Rect(rect.x + t, rect.y, rect.w - t, rect.d)
