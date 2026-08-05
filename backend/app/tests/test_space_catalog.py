@@ -7,12 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType
 from app.services.catalog import (
     CATALOG,
     SpaceType,
     UnknownSpaceType,
     get,
+    min_dimensions,
     register,
     resolve_alias,
     spaces_from_rooms,
@@ -46,6 +48,29 @@ def test_conflicting_area_resolves_to_base_sizes_not_room_sizing():
     space = get("bathroom")
     assert space.preferred_area_m2 == 6.0
     assert (space.min_w, space.min_d) == (1.5, 2.1)
+
+
+# ── min_dimensions (PlanRoom.type migration, engine generalization workflow
+# migration-order item 4) — lenient, never-raises sizing lookup used by
+# hard_constraints.validate and engine.rebuild_derived_geometry. ───────────
+
+
+@pytest.mark.parametrize("room_type", list(RoomType))
+def test_min_dimensions_matches_room_sizing_exactly_for_every_residential_type(room_type):
+    # Byte-identical parity is what makes the PlanRoom.type migration a
+    # zero-behavior-change swap for every existing residential validation
+    # path — not just "close enough".
+    sizing = ROOM_SIZING[room_type]
+    assert min_dimensions(room_type.value) == (sizing.min_w, sizing.min_d)
+
+
+def test_min_dimensions_covers_non_residential_catalog_types_too():
+    assert min_dimensions("consultation_room") == (get("consultation_room").min_w, get("consultation_room").min_d)
+
+
+def test_min_dimensions_falls_back_to_the_default_for_a_truly_unknown_type():
+    assert min_dimensions("zzz_totally_unknown") == (1.2, 1.2)
+    assert min_dimensions("zzz_totally_unknown", default=(2.0, 3.0)) == (2.0, 3.0)
 
 
 @pytest.mark.parametrize(

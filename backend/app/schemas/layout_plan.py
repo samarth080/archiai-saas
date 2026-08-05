@@ -24,12 +24,23 @@ boundary engine), in which case ``x/y/w/h`` is the bounding box only and
 is None for a plain rectangular plot; when set, ``width_m``/``depth_m`` are the
 boundary's bounding box. Curves are out of scope — a vertex list cannot encode
 one, so there is nothing further to validate for that constraint.
+
+``PlanRoom.type`` (engine generalization workflow, migration-order item 4):
+a free string, not the closed ``RoomType`` enum — same bound as
+``requirements.SpaceRequest.space_type`` (min/max length only), validated
+against ``services.catalog.SpaceCatalog`` at the service boundary rather than
+here, matching that field's own established precedent. The wire format is
+unaffected for every existing residential value: Pydantic normalizes a
+``RoomType`` member passed in (e.g. ``RoomType.bedroom``) to its plain string
+(``"bedroom"``) either way, so this is additive, not a breaking rename — the
+field name stays ``type``, not ``space_type``, so persisted layouts and the
+frontend contract keep reading the same key.
 """
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.requirements import Facing, RoomType, Vertex, _reject_string_number
+from app.schemas.requirements import Facing, Vertex, _reject_string_number
 
 Meters = Annotated[float, Field(gt=0, lt=200)]
 Coord = Annotated[float, Field(ge=-200, le=200)]
@@ -48,7 +59,7 @@ class PlanRoom(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    type: RoomType
+    type: str = Field(min_length=1, max_length=64)
     label: str
     x: Coord
     y: Coord

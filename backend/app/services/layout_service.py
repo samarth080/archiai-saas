@@ -738,6 +738,14 @@ _DOOR_WIDTH = 0.9     # metres
 _DOOR_HEIGHT = 2.1    # metres
 _DOOR_THICKNESS = 0.12  # metres — matches the existing window/entry-door markers
 _MIN_DOORWAY_SPAN = 1.2  # metres — shorter shared walls don't get a door opening
+_NARROW_DOORWAY_SPAN = 0.7  # metres — fallback for a room whose EVERY shared
+# boundary falls under _MIN_DOORWAY_SPAN (common for a narrow bathroom tucked
+# into a corner): confirmed root cause of a room ending up with zero doors
+# despite genuinely sharing real walls — steps 2/3 below only ever drew from
+# the >=1.2m `doorable` set, so such a room was invisible to the entire
+# door-placement pass, not just under-prioritised. Mirrors the MVP engine's
+# own established narrow-door fallback (`layout_engine/engine.py`'s
+# `_NARROW_DOOR_WIDTH`/`_NARROW_DOOR_EDGE`) rather than inventing a new number.
 
 
 _MIN_WALL_SPAN = 0.3  # metres — corner-touching slivers don't get a wall
@@ -863,6 +871,7 @@ def _generate_partition_walls(
         return _wall_category(room.get("roomType"))
 
     doorable = [b for b in boundaries if b["span"] >= _MIN_DOORWAY_SPAN]
+    narrow_doorable = [b for b in boundaries if b["span"] >= _NARROW_DOORWAY_SPAN]
     doored_pairs: set[frozenset] = set()
     door_count: dict[str, int] = {room["id"]: 0 for room in room_only}
 
@@ -895,7 +904,10 @@ def _generate_partition_walls(
         if "corridor" in (cat_a, cat_b) or (cat_a == "front" and cat_b == "front"):
             add_door(boundary)
 
-    # 2. Access guarantee — one door for every room still sealed off.
+    # 2. Access guarantee — one door for every room still sealed off. Prefer
+    #    a comfortable (>= _MIN_DOORWAY_SPAN) boundary; fall back to a
+    #    narrower-but-real one rather than leaving the room with zero doors
+    #    when that's genuinely all it has.
     for room in room_only:
         if door_count[room["id"]] > 0:
             continue
@@ -904,7 +916,12 @@ def _generate_partition_walls(
             if room["id"] in (b["a"]["id"], b["b"]["id"])
         ]
         if not candidates:
-            continue  # no boundary long enough — surfaced by the reachability check
+            candidates = [
+                b for b in narrow_doorable
+                if room["id"] in (b["a"]["id"], b["b"]["id"])
+            ]
+        if not candidates:
+            continue  # no boundary long enough even for a narrow door — surfaced by the reachability check
         priority = (
             _SERVICE_DOOR_PRIORITY
             if category(room) == "service"
@@ -939,6 +956,15 @@ def _generate_partition_walls(
         first, second = tuple(pair)
         union(first, second)
     for boundary in sorted(doorable, key=lambda b: -b["span"]):
+        a_id, b_id = boundary["a"]["id"], boundary["b"]["id"]
+        if find(a_id) != find(b_id):
+            add_door(boundary)
+            union(a_id, b_id)
+    # A component whose only boundary to the rest of the floor is narrow
+    # (below _MIN_DOORWAY_SPAN) would otherwise stay a permanent island here
+    # too, same root cause as step 2 — finish the spanning tree with
+    # narrower-but-real boundaries rather than leaving it disconnected.
+    for boundary in sorted(narrow_doorable, key=lambda b: -b["span"]):
         a_id, b_id = boundary["a"]["id"], boundary["b"]["id"]
         if find(a_id) != find(b_id):
             add_door(boundary)

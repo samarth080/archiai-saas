@@ -166,6 +166,31 @@ def test_validate_without_requirements_stays_geometry_only():
     assert validate(plan, None) == []
 
 
+def test_validate_flags_below_min_size_for_a_non_residential_room_type():
+    # consultation_room's catalog minimum is well above 1x1m — before the
+    # PlanRoom.type migration this raised KeyError (ROOM_SIZING only covers
+    # the 12 residential types); now it's a real, catalog-backed check.
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=6, depth_m=6),
+        rooms=[_room("c1", "consultation_room", "Consultation Room", 0, 0, 1, 1)],
+    )
+
+    violations = validate(plan)
+
+    assert any(v.code == "below_min_size" and v.room_ids == ["c1"] for v in violations)
+
+
+def test_validate_stays_lenient_not_a_crash_for_a_truly_unknown_room_type():
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=6, depth_m=6),
+        rooms=[_room("x1", "zzz_totally_unknown", "Mystery Room", 0, 0, 5, 5)],
+    )
+
+    violations = validate(plan)  # must not raise; 5x5 clears the (1.2, 1.2) default floor
+
+    assert not any(v.code == "below_min_size" for v in violations)
+
+
 def test_kitchen_scores_better_in_southeast_than_northeast():
     plot = PlanPlot(width_m=9, depth_m=12, facing="east")
     northeast = _room("k", RoomType.kitchen, "Kitchen", 6, 0, 3, 3)

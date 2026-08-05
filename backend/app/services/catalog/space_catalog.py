@@ -222,6 +222,35 @@ def register(space: SpaceType) -> None:
     CATALOG[space.key] = space
 
 
+def min_dimensions(key: str, default: tuple[float, float] = (1.2, 1.2)) -> tuple[float, float]:
+    """(min_w, min_d) for a lenient, best-effort lookup — never raises.
+
+    For editor-sync / validation paths (``rebuild_derived_geometry``,
+    ``hard_constraints.validate``) that must keep working even for a room
+    type nobody templated, matching ``EngineProgram._resolve_sizing``'s own
+    established leniency for hand-built/user-added graphs. A caller that
+    needs to REJECT an unknown type outright (the actual generation-request
+    boundary) should call :func:`get` directly instead — see
+    ``program_graph.from_requirements``.
+    """
+    try:
+        space = get(key)
+    except UnknownSpaceType:
+        return default
+    return space.min_w, space.min_d
+
+
+def zone_for(key: str, default: str = "semi_private") -> str:
+    """Lenient, never-raises zone lookup — same rationale/fallback pattern as
+    :func:`min_dimensions`, used by ``engine.rebuild_derived_geometry`` so an
+    edited/unknown room type still gets a reasonable door-placement zone
+    instead of crashing."""
+    try:
+        return get(key).zone
+    except UnknownSpaceType:
+        return default
+
+
 def with_overrides(key: str, **overrides: object) -> SpaceType:
     """Convenience for a caller that wants a variant of a known type (e.g. an
     explicit area override) without mutating the shared catalog entry."""

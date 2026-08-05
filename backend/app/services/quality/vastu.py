@@ -82,7 +82,7 @@ def evaluate_vastu(plan: LayoutPlan) -> VastuEvaluation:
     warnings: list[QualityWarning] = []
 
     for room in plan.rooms:
-        rule = rules.get(room.type.value)
+        rule = rules.get(room.type)
         if rule is None:
             continue
         sector = sector_for_room(room, plan.plot)
@@ -100,7 +100,7 @@ def evaluate_vastu(plan: LayoutPlan) -> VastuEvaluation:
         earned += rule.weight * credit
         warnings.append(
             QualityWarning(
-                code=f"vastu.{room.type.value}_{sector}",
+                code=f"vastu.{room.type}_{sector}",
                 message=rule.message_violation.format(
                     label=room.label,
                     sector=sector.replace("_", " "),
