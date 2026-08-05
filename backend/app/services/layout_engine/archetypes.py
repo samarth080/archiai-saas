@@ -257,7 +257,7 @@ def _band_floor(rooms: list[RoomNeed], other: float) -> float:
     term a band can pass the aggregate-area check while still being too
     narrow for its single widest room (the same class of bug the Phase 4
     live-gate note above documents for cut clamping generally); mirrors
-    ``subdivision._clamped_cut``'s own ``min_span_a``/``min_span_b`` guard.
+    ``subdivision.clamped_cut``'s own ``min_span_a``/``min_span_b`` guard.
 
     A single-room group skips the ``_MIN_BAND_SPAN`` floor and uses just
     that room's own real minimum instead (workflow 4.5's comb-arranged

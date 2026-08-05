@@ -18,6 +18,13 @@ to the existing canvas objects (center-based x/z) so the current 3D editor keeps
 working. Walls/doors are DERIVED artifacts — regenerated deterministically from
 rooms after every edit, never hand-maintained state.
 
+Rooms are rectangles UNLESS ``vertices`` is set (workflow Phase 8, polygon
+boundary engine), in which case ``x/y/w/h`` is the bounding box only and
+``vertices`` is the actual straight-edge outline. Likewise ``PlanPlot.boundary``
+is None for a plain rectangular plot; when set, ``width_m``/``depth_m`` are the
+boundary's bounding box. Curves are out of scope — a vertex list cannot encode
+one, so there is nothing further to validate for that constraint.
+
 ``PlanRoom.type`` (engine generalization workflow, migration-order item 4):
 a free string, not the closed ``RoomType`` enum — same bound as
 ``requirements.SpaceRequest.space_type`` (min/max length only), validated
@@ -31,9 +38,9 @@ frontend contract keep reading the same key.
 """
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.schemas.requirements import Facing, _reject_string_number
+from app.schemas.requirements import Facing, Vertex, _reject_string_number
 
 Meters = Annotated[float, Field(gt=0, lt=200)]
 Coord = Annotated[float, Field(ge=-200, le=200)]
@@ -45,6 +52,7 @@ class PlanPlot(BaseModel):
     width_m: Meters
     depth_m: Meters
     facing: Facing = Facing.east
+    boundary: list[Vertex] | None = None
 
 
 class PlanRoom(BaseModel):
@@ -58,11 +66,18 @@ class PlanRoom(BaseModel):
     w: Meters
     h: Meters
     rotation: Literal[0, 90, 180, 270] = 0
+    vertices: list[Vertex] | None = None
 
     @field_validator("x", "y", "w", "h", mode="before")
     @classmethod
     def _no_string_dims(cls, value: object) -> object:
         return _reject_string_number(value)
+
+    @model_validator(mode="after")
+    def _no_rotation_with_vertices(self) -> "PlanRoom":
+        if self.vertices is not None and self.rotation != 0:
+            raise ValueError("rotation must be 0 for a polygon room (vertices set)")
+        return self
 
 
 class Wall(BaseModel):
