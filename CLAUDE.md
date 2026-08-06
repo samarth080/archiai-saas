@@ -946,6 +946,16 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** backend **944 passed, 3 expected live-model skips**; frontend **273 passed across 54 files**; `tsc --noEmit` and the 1,167-module production build passed. No dependency or migration was added.
 - [ ] **Deliberate limits:** Phase 5.2 simulated annealing remains benchmark-gated and unbuilt; multi-floor generation uses the proven direct path rather than candidate permutations; wet stacking is scored, not forced; polygon-boundary multi-floor support needs its own geometry proof.
 
+### Phase 8 — Arbitrary requirements extraction ✅ (`codex/phase8-requirements-extraction`)
+
+- [x] **Catalog-native contract:** `SpaceRequest` carries optional `zone_guess`, `size_guess_m2`, and bounded confidence metadata. Adjacency and avoidance endpoints are free strings. Known aliases resolve to catalog keys; a self-describing high-confidence unknown can register at the engine boundary, while incomplete or low-confidence unknowns become explicit clarification conflicts.
+- [x] **Extraction targets real spaces:** the structured prompt lists current catalog keys and all seven zones, forbids coordinates, and instructs the model to emit non-residential/custom programs through `spaces`. Deterministic normalization promotes legacy non-residential `rooms`, preserves BHK behavior, recovers explicit catalog spaces from the existing parser, maps unsupported building labels to `other`, and never invents absent plot/facing values.
+- [x] **General relationships:** parser vocabulary includes catalog-only types. Phrases such as “consultation rooms off the waiting area” become MUST relationships and “keep storage away from dining” becomes AVOID. The same alias canonicalization reaches graph matching, hard requested-space validation, and door policy.
+- [x] **Clarification and frontend integration:** residential `spaces` programs receive a space-native bathroom question/default; non-residential programs do not inherit residential bathroom assumptions. “AI understood” summaries prefer the active canonical program, and any non-empty `spaces` program routes through canonical MVP generation even when `building_type=other`.
+- [x] **Acceptance matrix:** `golden_prompts.json` now contains 24 briefs, including 15 non-residential cases spanning clinic, café, coworking, gym, boutique, hostel, preschool, veterinary, studio, warehouse, school, hotel, restaurant, retail, and library programs. All 15 extract their expected fields without model help and generate zero-hard-violation layouts on a fit 20×30 m plot. The opt-in live-model harness now measures field-level accuracy with an 80% gate instead of a hard-coded 8/10 prompt count.
+- [x] **Verification:** backend **970 passed, 3 expected live-model skips**; frontend **274 passed across 54 files**; `tsc --noEmit` and the 1,167-module production build passed. No dependency, migration, or AI-provider change was added.
+- [ ] **Deliberate limits:** live provider accuracy remains opt-in through `RUN_LLM_TESTS=1`; runtime registration of a custom space is process-local; low-confidence unknown semantics require a human answer; the extractor never emits geometry; multi-floor polygon boundaries remain unsupported.
+
 ---
 
 ## Development Rules
