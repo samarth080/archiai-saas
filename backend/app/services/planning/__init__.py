@@ -28,6 +28,11 @@ from app.services.planning.program_validation import (
     build_program_metadata,
     validate_program,
 )
+from app.services.planning.floor_assignment import (
+    FloorAssignment,
+    FloorAssignmentReason,
+    assign_floors,
+)
 
 __all__ = [
     "Node",
@@ -50,4 +55,7 @@ __all__ = [
     "graph_satisfaction_dict",
     "build_program_metadata",
     "validate_program",
+    "FloorAssignment",
+    "FloorAssignmentReason",
+    "assign_floors",
 ]
