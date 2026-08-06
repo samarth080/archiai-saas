@@ -24,6 +24,7 @@ BASE_SIZES: dict[str, float] = {
     "bar":               20.0,
     "mudroom":            5.0,
     "staircase":          6.0,
+    "lift":               3.24,
     "hallway":            6.0,
     "corridor":           8.0,
     "balcony":            8.0,

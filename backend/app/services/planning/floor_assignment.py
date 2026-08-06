@@ -109,6 +109,26 @@ def _group_preference(group: list[Node], floors: int) -> tuple[str, str]:
     return "any", "balanced by target area"
 
 
+def _fixed_floor(group: list[Node], floors: int) -> tuple[int | None, str | None]:
+    pinned = [node for node in group if node.floor_index is not None]
+    for node in pinned:
+        if node.floor_index < 0 or node.floor_index >= floors:
+            raise ValueError(
+                f"node {node.id!r} is pinned to floor {node.floor_index}, "
+                f"outside 0..{floors - 1}"
+            )
+    if not pinned:
+        return None, None
+
+    area_by_floor: dict[int, float] = {}
+    for node in pinned:
+        area_by_floor[node.floor_index] = area_by_floor.get(node.floor_index, 0.0) + _area(node)
+    floor = min(area_by_floor, key=lambda index: (-area_by_floor[index], index))
+    if len(area_by_floor) == 1:
+        return floor, "exact floor assignment"
+    return floor, "conflicting exact floors; kept MUST-linked group on its heaviest pinned floor"
+
+
 def assign_floors(graph: ProgramGraph, floors: int) -> FloorAssignment:
     """Assign every buildable node to a zero-based floor.
 
@@ -121,11 +141,19 @@ def assign_floors(graph: ProgramGraph, floors: int) -> FloorAssignment:
 
     components = []
     for group in _must_components(graph):
+        fixed_floor, fixed_reason = _fixed_floor(group, floors)
         preference, reason = _group_preference(group, floors)
-        components.append((group, preference, reason, sum(_area(node) for node in group)))
+        components.append((
+            group,
+            preference,
+            fixed_reason or reason,
+            sum(_area(node) for node in group),
+            fixed_floor,
+        ))
     components.sort(
         key=lambda item: (
-            {"ground": 0, "upper": 1, "any": 2}[item[1]],
+            -1 if item[4] is not None else {"ground": 0, "upper": 1, "any": 2}[item[1]],
+            item[4] if item[4] is not None else 0,
             -item[3],
             item[0][0].id,
         )
@@ -134,8 +162,10 @@ def assign_floors(graph: ProgramGraph, floors: int) -> FloorAssignment:
     loads = [0.0] * floors
     floor_of: dict[str, int] = {}
     reasons: list[FloorAssignmentReason] = []
-    for group, preference, reason, area in components:
-        if preference == "ground":
+    for group, preference, reason, area, fixed_floor in components:
+        if fixed_floor is not None:
+            floor = fixed_floor
+        elif preference == "ground":
             floor = 0
         elif preference == "upper":
             floor = min(range(1, floors), key=lambda index: (loads[index], index))

@@ -114,3 +114,25 @@ def test_stacked_above_is_not_collapsed_into_one_floor():
 def test_rejects_an_impossible_floor_count():
     with pytest.raises(ValueError, match="at least 1"):
         assign_floors(ProgramGraph(), 0)
+
+
+def test_exact_floor_beats_a_general_floor_preference():
+    graph = _graph(Node(
+        id="pinned",
+        space_type="bedroom",
+        floor_preference="upper",
+        floor_index=2,
+        target_area_sqm=12,
+    ))
+
+    result = assign_floors(graph, 3)
+
+    assert result.floor_of == {"pinned": 2}
+    assert result.reasons[0].reason == "exact floor assignment"
+
+
+def test_rejects_an_exact_floor_outside_the_building():
+    graph = _graph(Node(id="bad", space_type="staircase", floor_index=2))
+
+    with pytest.raises(ValueError, match="outside 0..1"):
+        assign_floors(graph, 2)

@@ -37,6 +37,7 @@ Zone = str          # public | private | semi_private | service | circulation | 
 
 _CIRCULATION_TYPES = frozenset({
     "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "lift", "elevator",
     "passage", "passageway", "landing", "atrium",
 })
 _SERVICE_TYPES = frozenset({
@@ -117,6 +118,7 @@ class Node:
     min_depth_m: Optional[float] = None
     preferred_aspect_ratio: Optional[float] = None
     floor_preference: str = "any"  # ground | upper | basement | any
+    floor_index: Optional[int] = None  # exact zero-based floor when structurally pinned
     privacy_level: int = 0  # 0 public … 3 most private
     daylight_need: str = "none"  # none | low | medium | high
     acoustic_need: str = "none"
@@ -683,7 +685,11 @@ def to_engine_program(graph: ProgramGraph) -> EngineProgram:
             min_d=min_d,
         ))
         zone_of[node.id] = node.zone
-        floor_of[node.id] = _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+        floor_of[node.id] = (
+            node.floor_index
+            if node.floor_index is not None
+            else _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+        )
 
     must_adjacent, should_adjacent, avoid = _edge_buckets(graph.edges)
     circulation_nodes = [n.id for n in buildable if n.type == "circulation"]

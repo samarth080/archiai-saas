@@ -12,7 +12,7 @@ loading-dock-adjacent entry for a warehouse) stays unstarted.
 """
 from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.requirements import RoomType
-from app.services.planning.program_graph import ProgramGraph, add_requirements_node
+from app.services.planning.program_graph import Edge, Node, ProgramGraph, add_requirements_node
 
 # A program may carry either spelling depending on where its nodes came from:
 # "entry" (raw RoomType.value, from_requirements' spec.rooms branch — the one
@@ -87,4 +87,124 @@ def ensure_corridor(graph: ProgramGraph) -> ProgramGraph:
         min_width_m=space.min_w,
         min_depth_m=space.min_d,
     )
+    return graph
+
+
+_STAIR_TYPES = ("staircase", "stairs")
+_LIFT_TYPES = ("lift", "elevator")
+_LANDING_TYPES = ("corridor", "hallway")
+
+
+def _ensure_one_per_floor(
+    graph: ProgramGraph,
+    aliases: tuple[str, ...],
+    floors: int,
+    *,
+    canonical_type: str,
+    label: str,
+    min_width_m: float,
+    min_depth_m: float,
+) -> list[Node]:
+    existing = [node for node in graph.nodes if node.space_type in aliases]
+    by_floor = {
+        node.floor_index: node
+        for node in existing
+        if node.floor_index is not None and 0 <= node.floor_index < floors
+    }
+    unpinned = [node for node in existing if node.floor_index is None]
+    result: list[Node] = []
+    for floor in range(floors):
+        node = by_floor.get(floor)
+        if node is None and unpinned:
+            node = unpinned.pop(0)
+            node.floor_index = floor
+        if node is None:
+            node = graph.add_node(Node(
+                type="circulation",
+                space_type=canonical_type,
+                label=f"{label} {floor + 1}",
+                zone="circulation",
+                target_area_sqm=round(min_width_m * min_depth_m, 2),
+                min_width_m=min_width_m,
+                min_depth_m=min_depth_m,
+                floor_index=floor,
+                source="inferred_rule",
+            ))
+        result.append(node)
+    return result
+
+
+def _ensure_stacked_edges(graph: ProgramGraph, nodes: list[Node], label: str) -> None:
+    existing = {
+        (edge.node_a, edge.node_b, edge.relation_type)
+        for edge in graph.edges
+    }
+    for lower, upper in zip(nodes, nodes[1:]):
+        key = (lower.id, upper.id, "stacked_above")
+        reverse = (upper.id, lower.id, "stacked_above")
+        if key in existing or reverse in existing:
+            continue
+        graph.add_edge(Edge(
+            node_a=lower.id,
+            node_b=upper.id,
+            relation_type="stacked_above",
+            strength="MUST",
+            reason=f"{label} must align across consecutive floors",
+        ))
+        existing.add(key)
+
+
+def ensure_vertical_circulation(
+    graph: ProgramGraph,
+    floors: int,
+    *,
+    commercial: bool = False,
+    accessibility: bool = False,
+) -> ProgramGraph:
+    """Add one pinned stair and landing per floor, plus a lift when required.
+
+    Existing unpinned nodes are reused before anything is injected. Repeated
+    calls are idempotent. Stacked-above edges deliberately stay out of the
+    floor assignment's same-floor MUST components.
+    """
+    if floors < 1:
+        raise ValueError("floors must be at least 1")
+    if floors == 1:
+        return graph
+
+    stair_width = 1.5 if commercial else 1.2
+    stairs = _ensure_one_per_floor(
+        graph,
+        _STAIR_TYPES,
+        floors,
+        canonical_type="staircase",
+        label="Staircase",
+        min_width_m=2.4,
+        min_depth_m=stair_width,
+    )
+    _ensure_stacked_edges(graph, stairs, "staircase")
+
+    # Every level needs a circulation root; upper floors cannot route from
+    # the ground-floor corridor or entry.
+    _ensure_one_per_floor(
+        graph,
+        _LANDING_TYPES,
+        floors,
+        canonical_type="corridor",
+        label="Landing",
+        min_width_m=stair_width,
+        min_depth_m=1.5,
+    )
+
+    if floors >= 3 or accessibility:
+        lifts = _ensure_one_per_floor(
+            graph,
+            _LIFT_TYPES,
+            floors,
+            canonical_type="lift",
+            label="Lift",
+            min_width_m=1.8,
+            min_depth_m=1.8,
+        )
+        _ensure_stacked_edges(graph, lifts, "lift")
     return graph

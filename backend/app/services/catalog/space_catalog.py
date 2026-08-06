@@ -41,6 +41,7 @@ _ENUM_ALIAS_OF = {
 
 _CIRCULATION_TYPES = frozenset({
     "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "lift", "elevator",
     "passage", "passageway", "landing", "atrium",
 })
 _SERVICE_TYPES = frozenset({
@@ -183,6 +184,8 @@ def _build_catalog() -> dict[str, SpaceType]:
     # something meant to be a thin strip).
     for spine_key in ("corridor", "hallway"):
         room_sizing_by_free_key[spine_key] = (CIRCULATION_WIDTHS["residential"], _CIRCULATION_MIN_LENGTH_M)
+    room_sizing_by_free_key["staircase"] = (2.4, 1.2)
+    room_sizing_by_free_key["lift"] = (1.8, 1.8)
 
     catalog: dict[str, SpaceType] = {}
     for key, area in BASE_SIZES.items():
@@ -209,6 +212,7 @@ CATALOG: dict[str, SpaceType] = _build_catalog()
 # Enum-name aliases ("dining" -> "dining_room") resolve through the same
 # lookup as any other alias text.
 _ALIAS_TO_CANONICAL: dict[str, str] = dict(_ENUM_ALIAS_OF)
+_ALIAS_TO_CANONICAL.update({"stairs": "staircase", "elevator": "lift"})
 
 
 def resolve_alias(text: str) -> str | None:
