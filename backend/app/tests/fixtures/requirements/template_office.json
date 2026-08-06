@@ -1,0 +1,14 @@
+{
+  "building_type": "office",
+  "floors": 1,
+  "spaces": [
+    {"space_type": "reception", "count": 1, "size_hint": "medium"},
+    {"space_type": "workspace", "count": 1, "size_hint": "xlarge"},
+    {"space_type": "meeting_room", "count": 2, "size_hint": "medium"},
+    {"space_type": "office", "count": 1, "size_hint": "small"},
+    {"space_type": "kitchen", "count": 1, "size_hint": "small"},
+    {"space_type": "bathroom", "count": 2, "size_hint": "small"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}

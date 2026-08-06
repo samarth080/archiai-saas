@@ -1,0 +1,13 @@
+{
+  "building_type": "other",
+  "floors": 2,
+  "spaces": [
+    {"space_type": "classroom", "count": 4, "size_hint": "large"},
+    {"space_type": "hallway", "count": 1, "size_hint": "large"},
+    {"space_type": "office", "count": 1, "size_hint": "medium"},
+    {"space_type": "bathroom", "count": 2, "size_hint": "small"},
+    {"space_type": "storage", "count": 1, "size_hint": "small"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}
