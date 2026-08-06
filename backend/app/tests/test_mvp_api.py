@@ -193,7 +193,7 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         # a round-trip fidelity loss.
         assert version.requirements_json == {
             **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
-            "layout_style": None, "rule_packs": None,
+            "layout_style": None, "rule_packs": None, "accessibility_mode": False,
         }
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
@@ -201,7 +201,7 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
         assert design.layout_json["metadata"]["mvpRequirements"] == {
             **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
-            "layout_style": None, "rule_packs": None,
+            "layout_style": None, "rule_packs": None, "accessibility_mode": False,
         }
         assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
         assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
@@ -216,7 +216,7 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert latest.json()["designId"] == body["designId"]
     assert latest.json()["metadata"]["mvpRequirements"] == {
         **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
-        "layout_style": None, "rule_packs": None,
+        "layout_style": None, "rule_packs": None, "accessibility_mode": False,
     }
     assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
     assert latest.json()["metadata"]["mvpVastuEnabled"] is False
@@ -229,8 +229,46 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert fetched.json()["layout"] == body["layout"]
     assert fetched.json()["requirements"] == {
         **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
-        "layout_style": None, "rule_packs": None,
+        "layout_style": None, "rule_packs": None, "accessibility_mode": False,
     }
+
+
+async def test_generate_returns_multi_floor_canonical_and_canvas_geometry(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-multifloor@example.com")
+    spec = {
+        "building_type": "duplex",
+        "floors": 2,
+        "rooms": [
+            {"type": "living_room", "count": 1},
+            {"type": "kitchen", "count": 1},
+            {"type": "bedroom", "count": 3},
+            {"type": "bathroom", "count": 2},
+        ],
+        "plot": {"width_m": 12, "depth_m": 14},
+        "facing": "east",
+    }
+
+    response = await client.post(
+        "/api/generate",
+        json={"requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["quality"]["valid"] is True
+    assert {room["floor"] for room in body["layout"]["rooms"]} == {0, 1}
+    stairs = [
+        room for room in body["layout"]["rooms"]
+        if room["type"] == "staircase"
+    ]
+    assert len(stairs) == 2
+    assert {
+        (room["x"], room["y"], room["w"], room["h"])
+        for room in stairs
+    } == {(0.0, 0.0, 1.2, 2.4)}
 
 
 async def test_generate_returns_structured_plot_clarification_when_program_does_not_fit(

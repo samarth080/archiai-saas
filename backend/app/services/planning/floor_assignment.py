@@ -13,6 +13,7 @@ _GROUND_TYPES = {
     "living_room",
     "kitchen",
     "dining",
+    "dining_room",
     "parking",
     "garage",
     "loading_dock",

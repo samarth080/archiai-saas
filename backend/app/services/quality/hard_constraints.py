@@ -6,12 +6,15 @@ Rect math. Used three ways: engine self-check (Phase 1 tests), the
 must stay fast), and the reject tier of the scorer (Phase 6).
 
 Violation codes (stable API): overlap, out_of_bounds, below_min_size,
-unreachable, missing_requested_room, through_room_access.
+unreachable, missing_requested_room, through_room_access,
+staircase_alignment.
 
 Reachability walks the access graph derived from doors: each door's midpoint
 connects every room whose boundary touches that point (interior doors connect
 two rooms; the front door touches one and adds no edge). The walk starts from
 the entry room, or the first room if no entry exists (hand-built plans).
+Aligned stair/lift instances connect consecutive floors; geometry on different
+floors otherwise remains independent.
 
 ``through_room_access`` (workflow Phase 4.5, the privacy-chain check): a
 room with ``privacy_level >= 2`` (bedrooms, offices, ... — see
@@ -78,11 +81,29 @@ def _door_adjacency(plan: LayoutPlan) -> dict[str, set[str]]:
         if wall is None:
             continue
         x, y = _door_point(door, wall)
-        touching = [room.id for room in plan.rooms if _touches(room, x, y)]
+        touching = [
+            room.id for room in plan.rooms
+            if room.floor == door.floor == wall.floor and _touches(room, x, y)
+        ]
         for a in touching:
             for b in touching:
                 if a != b:
                     adjacency[a].add(b)
+    vertical_types = {"staircase", "stairs", "lift", "elevator"}
+    vertical_rooms = [room for room in plan.rooms if room.type in vertical_types]
+    for room in vertical_rooms:
+        for other in vertical_rooms:
+            aligned = (
+                room.type == other.type
+                and other.floor == room.floor + 1
+                and abs(room.x - other.x) <= EPS
+                and abs(room.y - other.y) <= EPS
+                and abs(room.w - other.w) <= EPS
+                and abs(room.h - other.h) <= EPS
+            )
+            if aligned:
+                adjacency[room.id].add(other.id)
+                adjacency[other.id].add(room.id)
     return adjacency
 
 
@@ -183,6 +204,54 @@ def _missing_requested_rooms(
     return violations
 
 
+def _staircase_alignment_violations(
+    rooms: list[PlanRoom], expected_floors: int | None = None
+) -> list[Violation]:
+    floor_count = max(
+        expected_floors or 0,
+        max((room.floor for room in rooms), default=-1) + 1,
+    )
+    floors = list(range(floor_count))
+    if len(floors) <= 1:
+        return []
+    stairs = {
+        floor: sorted(
+            (
+                room for room in rooms
+                if room.floor == floor and room.type in {"staircase", "stairs"}
+            ),
+            key=lambda room: room.id,
+        )
+        for floor in floors
+    }
+    if any(not floor_stairs for floor_stairs in stairs.values()):
+        return [Violation(
+            code="staircase_alignment",
+            room_ids=[room.id for floor_stairs in stairs.values() for room in floor_stairs],
+            message="Every floor must have an aligned staircase",
+        )]
+
+    reference = stairs[floors[0]][0]
+    misaligned = [
+        floor_stairs[0]
+        for floor, floor_stairs in stairs.items()
+        if floor != floors[0]
+        and (
+            abs(floor_stairs[0].x - reference.x) > EPS
+            or abs(floor_stairs[0].y - reference.y) > EPS
+            or abs(floor_stairs[0].w - reference.w) > EPS
+            or abs(floor_stairs[0].h - reference.h) > EPS
+        )
+    ]
+    if not misaligned:
+        return []
+    return [Violation(
+        code="staircase_alignment",
+        room_ids=[reference.id, *(room.id for room in misaligned)],
+        message="Staircases must occupy the same footprint on every floor",
+    )]
+
+
 def validate(
     plan: LayoutPlan, requirements: RequirementsSpec | None = None
 ) -> list[Violation]:
@@ -192,13 +261,17 @@ def validate(
         violations.extend(_missing_requested_rooms(rooms, requirements))
     if not rooms:
         return violations
+    violations.extend(_staircase_alignment_violations(
+        rooms,
+        requirements.floors if requirements is not None else None,
+    ))
 
     plot = Rect(0.0, 0.0, plan.plot.width_m, plan.plot.depth_m)
 
     # (a) pairwise overlap, epsilon-aware
     for i, a in enumerate(rooms):
         for b in rooms[i + 1:]:
-            if _rect(a).overlaps(_rect(b)):
+            if a.floor == b.floor and _rect(a).overlaps(_rect(b)):
                 violations.append(Violation(
                     code="overlap",
                     room_ids=[a.id, b.id],

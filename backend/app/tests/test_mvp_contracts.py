@@ -121,6 +121,22 @@ def test_door_requires_wall_ref():
         Door.model_validate({"id": "d1", "offset": 1.0})
 
 
+@pytest.mark.parametrize("model", [PlanRoom, Wall, Door])
+def test_geometry_floor_is_a_strict_non_negative_integer(model):
+    payloads = {
+        PlanRoom: {
+            "id": "r", "type": "bedroom", "label": "Bedroom",
+            "x": 0, "y": 0, "w": 3, "h": 3,
+        },
+        Wall: {"id": "w", "x1": 0, "y1": 0, "x2": 3, "y2": 0},
+        Door: {"id": "d", "wall_ref": "w", "offset": 1},
+    }
+    with pytest.raises(ValidationError):
+        model.model_validate({**payloads[model], "floor": "1"})
+    with pytest.raises(ValidationError):
+        model.model_validate({**payloads[model], "floor": -1})
+
+
 # ── Step 0.3 — QualityReport contract ────────────────────────────────────────
 
 

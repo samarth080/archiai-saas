@@ -45,11 +45,11 @@ def _wall_object(wall: Wall, index: int) -> dict:
         "label": f"Wall {index}",
         "roomType": "wall",
         "objectType": "wall",
-        "floorId": "floor_0",
-        "floorLevel": 0,
+        "floorId": f"floor_{wall.floor}",
+        "floorLevel": wall.floor,
         "position": {
             "x": round((wall.x1 + wall.x2) / 2, 3),
-            "y": WALL_HEIGHT_M / 2,
+            "y": wall.floor * WALL_HEIGHT_M + WALL_HEIGHT_M / 2,
             "z": round((wall.y1 + wall.y2) / 2, 3),
         },
         "size": {
@@ -76,12 +76,12 @@ def _door_object(door: Door, wall: Wall, index: int) -> dict:
         "label": f"Door {index}",
         "roomType": "door",
         "objectType": "door",
-        "floorId": "floor_0",
-        "floorLevel": 0,
+        "floorId": f"floor_{door.floor}",
+        "floorLevel": door.floor,
         "hostWallId": wall.id,
         "position": {
             "x": round(wall.x1 + unit_x * at, 3),
-            "y": 1.05,
+            "y": door.floor * WALL_HEIGHT_M + 1.05,
             "z": round(wall.y1 + unit_y * at, 3),
         },
         "size": {
@@ -109,12 +109,14 @@ def layout_plan_to_canvas(
             "id": room.id,
             "label": room.label,
             "roomType": room.type,
-            "objectType": "room",
-            "floorId": "floor_0",
-            "floorLevel": 0,
+            "objectType": (
+                "stair" if room.type in {"staircase", "stairs"} else "room"
+            ),
+            "floorId": f"floor_{room.floor}",
+            "floorLevel": room.floor,
             "position": {
                 "x": _bounded_center(room.x, room.w, plan.plot.width_m),
-                "y": WALL_HEIGHT_M / 2,
+                "y": room.floor * WALL_HEIGHT_M + WALL_HEIGHT_M / 2,
                 "z": _bounded_center(room.y, room.h, plan.plot.depth_m),
             },
             "size": {"w": room.w, "h": WALL_HEIGHT_M, "d": room.h},
@@ -134,6 +136,7 @@ def layout_plan_to_canvas(
         if door.wall_ref in walls_by_id
     ]
     objects = [*room_objects, *wall_objects, *door_objects]
+    total_floors = max((room.floor for room in plan.rooms), default=0) + 1
     footprint = {
         # Existing canvas footprints store their minimum X/Z corner, not their
         # centre. The canonical plan already starts at the NW origin (0, 0).
@@ -150,7 +153,7 @@ def layout_plan_to_canvas(
         "buildingType": building_type,
         "style": "concept",
         "room_count": len(room_objects),
-        "totalFloors": 1,
+        "totalFloors": total_floors,
         "totalRooms": len(room_objects),
         "totalObjects": len(objects),
         "totalAreaSqm": total_area,
@@ -174,13 +177,21 @@ def layout_plan_to_canvas(
         },
         "floors": [
             {
-                "id": "floor_0",
-                "name": "Ground Floor",
-                "level": 0,
-                "elevation": 0.0,
+                "id": f"floor_{floor}",
+                "name": (
+                    "Ground Floor"
+                    if floor == 0
+                    else ("First Floor" if floor == 1 else f"Floor {floor}")
+                ),
+                "level": floor,
+                "elevation": floor * WALL_HEIGHT_M,
                 "footprint": footprint,
-                "rooms": objects,
+                "rooms": [
+                    item for item in objects
+                    if item["floorLevel"] == floor
+                ],
             }
+            for floor in range(total_floors)
         ],
         "rooms": objects,
     }

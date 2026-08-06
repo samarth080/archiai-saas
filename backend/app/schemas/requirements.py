@@ -21,7 +21,7 @@ Changing this file is a mini-migration, not a casual edit (workflow Step 0.3).
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 
 class BuildingType(str, Enum):
@@ -160,10 +160,12 @@ class RequirementsSpec(BaseModel):
 
     building_type: BuildingType = BuildingType.house
     floors: StrictInt = Field(default=1, ge=1, le=5)
+    # Requests an accessible-width core and lift even below the normal
+    # three-floor lift threshold.
+    accessibility_mode: StrictBool = False
     rooms: list[RoomRequest] = Field(default_factory=list)
-    # Superset of `rooms` (Phase 1.2) — free-string SpaceRequest entries.
-    # Nothing populates or reads this yet; it exists so the migration can
-    # proceed one call site at a time instead of a single breaking cutover.
+    # Superset of `rooms` (Phase 1.2) — free-string SpaceRequest entries used
+    # by the canonical graph/engine path for non-residential programs.
     spaces: list[SpaceRequest] = Field(default_factory=list)
     adjacency: list[AdjacencyPref] = Field(default_factory=list)
     avoid_adjacency: list[AvoidPair] = Field(default_factory=list)

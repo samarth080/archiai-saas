@@ -12,6 +12,10 @@ free angles are explicitly out of MVP scope (workflow Step 7.2).
 Walls are deduplicated segments (one wall per shared edge, never two overlapping
 ones). Doors reference their host wall by id — a door cannot float.
 
+Rooms, walls, and doors carry a zero-based ``floor`` (default 0 for backward
+compatibility). Coordinates are local to that floor; derived geometry never
+connects objects merely because their 2D coordinates overlap on other levels.
+
 Relationship to the legacy canvas JSON (archiai-saas in-place rework): this is
 the new canonical contract for the MVP pipeline; converters map LayoutPlan.rooms
 to the existing canvas objects (center-based x/z) so the current 3D editor keeps
@@ -38,7 +42,7 @@ frontend contract keep reading the same key.
 """
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from app.schemas.requirements import Facing, Vertex, _reject_string_number
 
@@ -67,6 +71,7 @@ class PlanRoom(BaseModel):
     h: Meters
     rotation: Literal[0, 90, 180, 270] = 0
     vertices: list[Vertex] | None = None
+    floor: StrictInt = Field(default=0, ge=0, le=20)
 
     @field_validator("x", "y", "w", "h", mode="before")
     @classmethod
@@ -89,6 +94,7 @@ class Wall(BaseModel):
     x2: Coord
     y2: Coord
     thickness: float = Field(default=0.115, gt=0, lt=1)
+    floor: StrictInt = Field(default=0, ge=0, le=20)
 
 
 class Door(BaseModel):
@@ -98,6 +104,7 @@ class Door(BaseModel):
     wall_ref: str  # Wall.id hosting this door — doors never float
     offset: float = Field(ge=0)  # meters from the wall's (x1, y1) end
     width: float = Field(default=0.9, gt=0, lt=3)
+    floor: StrictInt = Field(default=0, ge=0, le=20)
 
 
 class LayoutPlan(BaseModel):

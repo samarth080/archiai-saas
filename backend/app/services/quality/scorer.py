@@ -16,7 +16,9 @@ _RESULT_ORDER = {
     "consultation_privacy": 4,
     "meeting_access": 5,
     "repeat_unit_uniformity": 6,
-    "vastu": 7,
+    "wet_stack": 7,
+    "floor_area_balance": 8,
+    "vastu": 9,
 }
 
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from app.schemas.layout_plan import LayoutPlan, PlanRoom
 from app.schemas.quality_report import QualityWarning
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services import catalog
 from app.services.layout_engine.geometry import EPS, Rect
 
 
@@ -25,7 +26,7 @@ def _rect(room: PlanRoom) -> Rect:
 
 
 def rooms_share_wall(a: PlanRoom, b: PlanRoom) -> bool:
-    return _rect(a).shared_edge(_rect(b)) is not None
+    return a.floor == b.floor and _rect(a).shared_edge(_rect(b)) is not None
 
 
 def _rooms_by_type(plan: LayoutPlan) -> dict[RoomType, list[PlanRoom]]:
@@ -186,6 +187,71 @@ def bath_kitchen_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Soft
     return SoftRuleResult(
         name="bath_kitchen",
         score=(possible - len(touching)) / possible,
+        warnings=warnings,
+    )
+
+
+def wet_stack_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRuleResult:
+    def is_wet(room: PlanRoom) -> bool:
+        try:
+            return catalog.get(room.type).wet_room
+        except catalog.UnknownSpaceType:
+            return False
+
+    wet_rooms = [
+        room for room in plan.rooms
+        if is_wet(room)
+    ]
+    upper_wet = [room for room in wet_rooms if room.floor > 0]
+    if not upper_wet:
+        return SoftRuleResult(name="wet_stack", score=1.0)
+
+    def overlaps_below(room: PlanRoom) -> bool:
+        rect = _rect(room)
+        return any(
+            below.floor == room.floor - 1
+            and min(rect.x2, _rect(below).x2) - max(rect.x, _rect(below).x) > EPS
+            and min(rect.y2, _rect(below).y2) - max(rect.y, _rect(below).y) > EPS
+            for below in wet_rooms
+        )
+
+    unstacked = [room for room in upper_wet if not overlaps_below(room)]
+    return SoftRuleResult(
+        name="wet_stack",
+        score=(len(upper_wet) - len(unstacked)) / len(upper_wet),
+        warnings=[
+            QualityWarning(
+                code="generic.wet_stack",
+                message=f"{room.label} is not stacked over a wet room on the floor below.",
+                severity="info",
+            )
+            for room in unstacked
+        ],
+    )
+
+
+def floor_area_balance_rule(
+    plan: LayoutPlan,
+    _requirements: RequirementsSpec,
+) -> SoftRuleResult:
+    floors = sorted({room.floor for room in plan.rooms})
+    if len(floors) <= 1:
+        return SoftRuleResult(name="floor_area_balance", score=1.0)
+    areas = [
+        sum(room.w * room.h for room in plan.rooms if room.floor == floor)
+        for floor in floors
+    ]
+    score = min(areas) / max(areas) if max(areas) else 1.0
+    warnings = []
+    if score < 0.8:
+        warnings.append(QualityWarning(
+            code="generic.floor_area_balance",
+            message="Floor areas differ by more than 20%; rebalance the level programs.",
+            severity="info",
+        ))
+    return SoftRuleResult(
+        name="floor_area_balance",
+        score=score,
         warnings=warnings,
     )
 

@@ -13,12 +13,14 @@ edge) -> place doors (must-adjacency first, then a BFS spanning tree from the
 circulation room so the access graph is connected by construction, plus the
 front door on the entry's facing wall).
 
-v0 limitations (documented, deliberate): single storey — `floors > 1` places
-every room on one plot (the duplex case is an extraction/clarification concern,
-not an engine one, until Section 17 work); rooms are emitted with rotation=0.
+For `floors > 1`, the graph is partitioned without splitting MUST components,
+an aligned stair/lift core is pre-carved, and this same placement/door pipeline
+runs independently per level. Coordinates remain floor-local and every emitted
+room, wall, and door carries its zero-based floor. Rooms use rotation=0.
 
-Polygon boundary path (workflow Phase 8): when `spec.plot.boundary` is set,
-`generate_plan` dispatches to `_generate_plan_polygon` instead — a parallel
+Polygon boundary path (workflow Phase 8): when `spec.plot.boundary` is set on a
+single-floor brief, `generate_plan` dispatches to `_generate_plan_polygon`
+instead — a parallel
 pipeline (own subdivider, own wall builder) that mirrors this one structurally
 but operates on a general straight-edge polygon rather than plot_w x plot_d.
 It is deliberately NOT unified with the rect path: GEOS/shapely floating-point
@@ -44,15 +46,30 @@ from app.config.mvp_defaults import (
     WALL_THICKNESS_M,
 )
 from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Vertex, Wall
-from app.schemas.requirements import Facing, RequirementsSpec, RoomType
+from app.schemas.requirements import BuildingType, Facing, RequirementsSpec, RoomType
 from app.services import catalog
 from app.services.layout_engine import polygon
-from app.services.layout_engine.archetypes import macro_zone, select_archetype, zoned_bands
+from app.services.layout_engine.archetypes import (
+    BandPlan,
+    macro_zone,
+    select_archetype,
+    vertical_core_bands,
+    zoned_bands,
+)
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.polygon_subdivision import subdivide_polygon
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
-from app.services.planning import EngineProgram, from_requirements, to_engine_program
-from app.services.planning.program_completion import ensure_corridor, ensure_entry
+from app.services.planning import (
+    EngineProgram,
+    assign_floors,
+    from_requirements,
+    to_engine_program,
+)
+from app.services.planning.program_completion import (
+    ensure_corridor,
+    ensure_entry,
+    ensure_vertical_circulation,
+)
 
 _MIN_DOOR_EDGE = DOOR_WIDTH_M + 0.1     # a door needs this much shared wall
 _NARROW_DOOR_WIDTH = 0.7                # connectivity fallback on tight edges
@@ -71,6 +88,28 @@ class DoesNotFitError(ValueError):
 
 
 # ── Expansion + zoning ────────────────────────────────────────────────────────
+
+
+def _remap_program(program: EngineProgram, prefix: str = "r") -> EngineProgram:
+    remap = {
+        need.key: f"{prefix}{index}"
+        for index, need in enumerate(program.needs, start=1)
+    }
+
+    def _pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return [(remap[a], remap[b]) for a, b in pairs if a in remap and b in remap]
+
+    return dataclasses.replace(
+        program,
+        needs=[dataclasses.replace(need, key=remap[need.key]) for need in program.needs],
+        zone_of={remap[key]: value for key, value in program.zone_of.items() if key in remap},
+        must_adjacent=_pairs(program.must_adjacent),
+        should_adjacent=_pairs(program.should_adjacent),
+        avoid=_pairs(program.avoid),
+        circulation_nodes=[remap[key] for key in program.circulation_nodes if key in remap],
+        floor_of={remap[key]: value for key, value in program.floor_of.items() if key in remap},
+        entry_node=remap.get(program.entry_node),
+    )
 
 
 def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> EngineProgram:
@@ -105,23 +144,46 @@ def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> E
         # rather than a raw 500; `spec.rooms`'s closed RoomType enum can
         # never reach here (Pydantic already rejects an invalid value).
         raise DoesNotFitError(str(exc)) from exc
-    program = to_engine_program(graph)
-    remap = {need.key: f"r{i}" for i, need in enumerate(program.needs, start=1)}
+    return _remap_program(to_engine_program(graph))
 
-    def _pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
-        return [(remap[a], remap[b]) for a, b in pairs if a in remap and b in remap]
 
-    return dataclasses.replace(
-        program,
-        needs=[dataclasses.replace(need, key=remap[need.key]) for need in program.needs],
-        zone_of={remap[k]: v for k, v in program.zone_of.items() if k in remap},
-        must_adjacent=_pairs(program.must_adjacent),
-        should_adjacent=_pairs(program.should_adjacent),
-        avoid=_pairs(program.avoid),
-        circulation_nodes=[remap[k] for k in program.circulation_nodes if k in remap],
-        floor_of={remap[k]: v for k, v in program.floor_of.items() if k in remap},
-        entry_node=remap.get(program.entry_node),
-    )
+def _programs_by_floor(spec: RequirementsSpec) -> list[EngineProgram]:
+    try:
+        graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+        graph = ensure_vertical_circulation(
+            graph,
+            spec.floors,
+            commercial=spec.building_type in {BuildingType.clinic, BuildingType.office},
+            accessibility=spec.accessibility_mode,
+        )
+    except catalog.UnknownSpaceType as exc:
+        raise DoesNotFitError(str(exc)) from exc
+
+    assignment = assign_floors(graph, spec.floors)
+    full = dataclasses.replace(to_engine_program(graph), floor_of=assignment.floor_of)
+    programs: list[EngineProgram] = []
+    for floor in range(spec.floors):
+        keys = {
+            key for key, assigned_floor in assignment.floor_of.items()
+            if assigned_floor == floor
+        }
+
+        def _floor_pairs(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+            return [(a, b) for a, b in pairs if a in keys and b in keys]
+
+        program = dataclasses.replace(
+            full,
+            needs=[need for need in full.needs if need.key in keys],
+            zone_of={key: value for key, value in full.zone_of.items() if key in keys},
+            must_adjacent=_floor_pairs(full.must_adjacent),
+            should_adjacent=_floor_pairs(full.should_adjacent),
+            avoid=_floor_pairs(full.avoid),
+            circulation_nodes=[key for key in full.circulation_nodes if key in keys],
+            floor_of={key: floor for key in keys},
+            entry_node=full.entry_node if full.entry_node in keys else None,
+        )
+        programs.append(_remap_program(program, prefix=f"f{floor}-r"))
+    return programs
 
 
 # ── Walls (deduplicated) + doors ─────────────────────────────────────────────
@@ -131,7 +193,14 @@ def _round(v: float) -> float:
     return round(v, 3)
 
 
-def _build_walls(placed: list[tuple[RoomNeed, Rect]], plot_w: float, plot_d: float):
+def _build_walls(
+    placed: list[tuple[RoomNeed, Rect]],
+    plot_w: float,
+    plot_d: float,
+    *,
+    floor: int = 0,
+    id_prefix: str = "",
+):
     """One wall per shared edge (never two overlapping ones) + boundary walls.
 
     Returns (walls, wall_rooms) where wall_rooms maps wall id -> (key_a, key_b)
@@ -142,12 +211,13 @@ def _build_walls(placed: list[tuple[RoomNeed, Rect]], plot_w: float, plot_d: flo
     wall_rooms: dict[str, tuple[str, str | None]] = {}
 
     def add(seg: Segment, a: str, b: str | None) -> str:
-        wall_id = f"w{len(walls) + 1}"
+        wall_id = f"{id_prefix}w{len(walls) + 1}"
         walls.append(Wall(
             id=wall_id,
             x1=_round(seg.x1), y1=_round(seg.y1),
             x2=_round(seg.x2), y2=_round(seg.y2),
             thickness=WALL_THICKNESS_M,
+            floor=floor,
         ))
         wall_rooms[wall_id] = (a, b)
         return wall_id
@@ -179,7 +249,13 @@ def _wall_length(w: Wall) -> float:
     return math.hypot(w.x2 - w.x1, w.y2 - w.y1)
 
 
-def _build_walls_polygon(placed: list[tuple[RoomNeed, "polygon.Polygon"]], plot_polygon: "polygon.Polygon"):
+def _build_walls_polygon(
+    placed: list[tuple[RoomNeed, "polygon.Polygon"]],
+    plot_polygon: "polygon.Polygon",
+    *,
+    floor: int = 0,
+    id_prefix: str = "",
+):
     """Polygon counterpart of `_build_walls` — same one-wall-per-shared-edge
     contract, computed via `polygon.shared_edges`/`polygon.is_on_boundary`
     instead of `Rect.shared_edge`/coordinate-vs-plot-span comparisons."""
@@ -187,12 +263,13 @@ def _build_walls_polygon(placed: list[tuple[RoomNeed, "polygon.Polygon"]], plot_
     wall_rooms: dict[str, tuple[str, str | None]] = {}
 
     def add(seg: Segment, a: str, b: str | None) -> str:
-        wall_id = f"w{len(walls) + 1}"
+        wall_id = f"{id_prefix}w{len(walls) + 1}"
         walls.append(Wall(
             id=wall_id,
             x1=_round(seg.x1), y1=_round(seg.y1),
             x2=_round(seg.x2), y2=_round(seg.y2),
             thickness=WALL_THICKNESS_M,
+            floor=floor,
         ))
         wall_rooms[wall_id] = (a, b)
         return wall_id
@@ -219,7 +296,7 @@ def _circulation_key(placed: list[tuple[RoomNeed, Rect]]) -> str:
     corridor node. Falls back to the pre-4.4 behavior otherwise, so nothing
     changes for a program without one."""
     by_type = {n.type: n.key for n, _ in placed}
-    for spine_type in ("corridor", "hallway"):
+    for spine_type in ("corridor", "hallway", "staircase", "stairs", "lift", "elevator"):
         if spine_type in by_type:
             return by_type[spine_type]
     if RoomType.living_room.value in by_type:
@@ -252,6 +329,7 @@ def _place_doors(
     zone_of: dict[str, str],
     *,
     allow_disconnected: bool = False,
+    id_prefix: str = "",
 ) -> list[Door]:
     doors: list[Door] = []
     doored_walls: set[str] = set()
@@ -261,7 +339,13 @@ def _place_doors(
             return
         doored_walls.add(wall.id)
         offset = max(0.0, (_wall_length(wall) - width) / 2)
-        doors.append(Door(id=f"d{len(doors) + 1}", wall_ref=wall.id, offset=_round(offset), width=width))
+        doors.append(Door(
+            id=f"{id_prefix}d{len(doors) + 1}",
+            wall_ref=wall.id,
+            offset=_round(offset),
+            width=width,
+            floor=wall.floor,
+        ))
 
     interior = [w for w in walls if wall_rooms[w.id][1] is not None]
     by_pair: dict[frozenset, list[Wall]] = {}
@@ -446,47 +530,60 @@ def rebuild_derived_geometry(
     if not plan.rooms:
         return plan.model_copy(update={"walls": [], "doors": []})
 
-    placed: list[tuple[RoomNeed, Rect]] = []
-    for room in plan.rooms:
-        # Lenient lookup (never raises): an edited room's type could be any
-        # catalog-known free string now, not just the 12 residential values
-        # ROOM_SIZING covers — see `catalog.min_dimensions`'s own docstring
-        # for why this stays permissive rather than rejecting the edit.
-        min_w, min_d = catalog.min_dimensions(room.type)
-        placed.append(
-            (
-                RoomNeed(
-                    key=room.id,
-                    type=room.type,
-                    label=room.label,
-                    preferred_area=room.w * room.h,
-                    min_w=min_w,
-                    min_d=min_d,
-                ),
-                Rect(room.x, room.y, room.w, room.h),
+    floors = sorted({room.floor for room in plan.rooms})
+    multi_floor = len(floors) > 1 or floors != [0]
+    all_walls: list[Wall] = []
+    all_doors: list[Door] = []
+    for floor in floors:
+        placed: list[tuple[RoomNeed, Rect]] = []
+        for room in plan.rooms:
+            if room.floor != floor:
+                continue
+            min_w, min_d = catalog.min_dimensions(room.type)
+            placed.append(
+                (
+                    RoomNeed(
+                        key=room.id,
+                        type=room.type,
+                        label=room.label,
+                        preferred_area=room.w * room.h,
+                        min_w=min_w,
+                        min_d=min_d,
+                    ),
+                    Rect(room.x, room.y, room.w, room.h),
+                )
             )
-        )
 
-    walls, wall_rooms = _build_walls(
-        placed,
-        plan.plot.width_m,
-        plan.plot.depth_m,
-    )
-    zone_of = {need.key: catalog.zone_for(need.type) for need, _ in placed}
-    doors = _place_doors(
-        placed,
-        walls,
-        wall_rooms,
-        spec,
-        plan.plot.facing,
-        zone_of,
-        allow_disconnected=True,
-    )
-    return plan.model_copy(update={"walls": walls, "doors": doors})
+        prefix = f"f{floor}-" if multi_floor else ""
+        walls, wall_rooms = _build_walls(
+            placed,
+            plan.plot.width_m,
+            plan.plot.depth_m,
+            floor=floor,
+            id_prefix=prefix,
+        )
+        zone_of = {need.key: catalog.zone_for(need.type) for need, _ in placed}
+        doors = _place_doors(
+            placed,
+            walls,
+            wall_rooms,
+            spec,
+            plan.plot.facing,
+            zone_of,
+            allow_disconnected=True,
+            id_prefix=prefix,
+        )
+        all_walls.extend(walls)
+        all_doors.extend(doors)
+    return plan.model_copy(update={"walls": all_walls, "doors": all_doors})
 
 
 def plan_from_program(
     spec: RequirementsSpec, program: EngineProgram, plot_w: float, plot_d: float, facing: Facing,
+    *,
+    band_plan: BandPlan | None = None,
+    floor: int = 0,
+    id_prefix: str = "",
 ) -> LayoutPlan:
     """The placement -> doors -> PlanRoom-assembly tail of ``generate_plan``,
     parameterized by an already-built ``EngineProgram`` instead of deriving
@@ -520,11 +617,15 @@ def plan_from_program(
             result.extend(subdivide(group, band_rect, facing))
         return result
 
-    archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
+    if band_plan is None:
+        archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
+    else:
+        archetype_key = "vertical_core"
+        archetype_fn = lambda _program, _w, _d, _facing: band_plan
     try:
         placed = _place(program, archetype_fn)
     except SubdivisionError as exc:
-        if archetype_key == "zoned_bands":
+        if archetype_key in {"zoned_bands", "vertical_core"}:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
         # A more specific archetype (e.g. double_loaded_corridor's two
         # wings) can need more room along one axis than zoned_bands' single
@@ -555,8 +656,22 @@ def plan_from_program(
                 f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
             )
 
-    walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
+    walls, wall_rooms = _build_walls(
+        placed,
+        plot_w,
+        plot_d,
+        floor=floor,
+        id_prefix=id_prefix,
+    )
+    doors = _place_doors(
+        placed,
+        walls,
+        wall_rooms,
+        spec,
+        facing,
+        program.zone_of,
+        id_prefix=id_prefix,
+    )
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by
@@ -575,9 +690,49 @@ def plan_from_program(
             w=round(_round(rect.x2) - _round(rect.x), 3),
             h=round(_round(rect.y2) - _round(rect.y), 3),
             rotation=0,
+            floor=floor,
         )
         for need, rect in placed
     ]
+    return LayoutPlan(
+        plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
+        rooms=rooms,
+        walls=walls,
+        doors=doors,
+    )
+
+
+def _generate_plan_multifloor(spec: RequirementsSpec) -> LayoutPlan:
+    if spec.plot.boundary is not None:
+        raise DoesNotFitError("multi-floor polygon boundaries are not supported yet")
+
+    plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
+    plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
+    facing = spec.facing or DEFAULT_FACING
+    rooms: list[PlanRoom] = []
+    walls: list[Wall] = []
+    doors: list[Door] = []
+    for floor, program in enumerate(_programs_by_floor(spec)):
+        try:
+            bands = vertical_core_bands(program, plot_w, plot_d, facing)
+        except SubdivisionError as exc:
+            raise DoesNotFitError(
+                f"floor {floor + 1}: {exc} - increase plot size"
+            ) from exc
+        floor_plan = plan_from_program(
+            spec,
+            program,
+            plot_w,
+            plot_d,
+            facing,
+            band_plan=bands,
+            floor=floor,
+            id_prefix=f"f{floor}-",
+        )
+        rooms.extend(floor_plan.rooms)
+        walls.extend(floor_plan.walls)
+        doors.extend(floor_plan.doors)
+
     return LayoutPlan(
         plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
         rooms=rooms,
@@ -664,6 +819,8 @@ def _generate_plan_polygon(spec: RequirementsSpec) -> LayoutPlan:
 
 
 def generate_plan(spec: RequirementsSpec) -> LayoutPlan:
+    if spec.floors > 1:
+        return _generate_plan_multifloor(spec)
     if spec.plot.boundary is not None:
         return _generate_plan_polygon(spec)
 

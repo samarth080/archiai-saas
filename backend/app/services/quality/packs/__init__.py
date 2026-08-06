@@ -12,8 +12,10 @@ from app.services.quality.soft_rules import (
     SoftRuleResult,
     adjacency_rule,
     bath_kitchen_rule,
+    floor_area_balance_rule,
     natural_light_rule,
     privacy_rule,
+    wet_stack_rule,
 )
 from app.services.quality.vastu import evaluate_vastu
 
@@ -28,10 +30,16 @@ def _types(plan: LayoutPlan) -> set[str]:
 
 
 def _generic(plan: LayoutPlan, requirements: RequirementsSpec) -> list[SoftRuleResult]:
-    return [
+    results = [
         adjacency_rule(plan, requirements),
         natural_light_rule(plan, requirements),
     ]
+    if requirements.floors > 1:
+        results.extend([
+            wet_stack_rule(plan, requirements),
+            floor_area_balance_rule(plan, requirements),
+        ])
+    return results
 
 
 def _residential(plan: LayoutPlan, requirements: RequirementsSpec) -> list[SoftRuleResult]:
@@ -61,7 +69,12 @@ def _vastu(plan: LayoutPlan, _requirements: RequirementsSpec) -> list[SoftRuleRe
 REGISTRY: dict[str, RulePack] = {
     "generic": RulePack(
         key="generic",
-        weights={"adjacency": 0.35, "natural_light": 0.20},
+        weights={
+            "adjacency": 0.35,
+            "natural_light": 0.20,
+            "wet_stack": 0.10,
+            "floor_area_balance": 0.10,
+        },
         evaluate=_generic,
         applies_to=lambda _plan, _requirements: True,
     ),

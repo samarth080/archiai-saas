@@ -112,7 +112,7 @@ def best_candidate(spec: RequirementsSpec, *, n: int = 64, seed: int = 0) -> Lay
     # Polygon subdivision has its own proven geometry path and no band/order
     # search surface yet. Never discard the supplied boundary by treating its
     # bounding box as a rectangular search plot.
-    if spec.plot.boundary is not None:
+    if spec.plot.boundary is not None or spec.floors > 1:
         return generate_plan(spec)
     candidates = generate_candidates(spec, n=n, seed=seed)
     if not candidates:
