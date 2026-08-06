@@ -1,0 +1,18 @@
+{
+  "building_type": "other",
+  "floors": 1,
+  "spaces": [
+    {"space_type": "classroom", "count": 4, "size_hint": "large"},
+    {"space_type": "hallway", "count": 1, "size_hint": "large"},
+    {"space_type": "gym", "count": 1, "area_m2": 120.0},
+    {"space_type": "office", "count": 1, "size_hint": "medium"},
+    {"space_type": "dining_area", "count": 1, "size_hint": "large"},
+    {"space_type": "bathroom", "count": 2, "size_hint": "small"},
+    {"space_type": "storage", "count": 1, "size_hint": "small"}
+  ],
+  "adjacency": [
+    {"room_a": "gym", "room_b": "storage", "strength": "must"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}

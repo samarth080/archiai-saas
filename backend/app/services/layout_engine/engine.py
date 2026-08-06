@@ -45,12 +45,22 @@ from app.config.mvp_defaults import (
     MAX_ROOMS_PER_LAYOUT,
     WALL_THICKNESS_M,
 )
-from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Vertex, Wall
+from app.schemas.layout_plan import (
+    ArchetypeReason,
+    Door,
+    LayoutPlan,
+    PlanPlot,
+    PlanRoom,
+    PlanZoneSpan,
+    Vertex,
+    Wall,
+)
 from app.schemas.requirements import BuildingType, Facing, RequirementsSpec, RoomType
 from app.services import catalog
 from app.services.layout_engine import polygon
 from app.services.layout_engine.archetypes import (
     BandPlan,
+    hierarchical_bands,
     macro_zone,
     select_archetype,
     vertical_core_bands,
@@ -329,6 +339,7 @@ def _place_doors(
     zone_of: dict[str, str],
     *,
     allow_disconnected: bool = False,
+    add_convenience_doors: bool = True,
     id_prefix: str = "",
 ) -> list[Door]:
     doors: list[Door] = []
@@ -488,7 +499,8 @@ def _place_doors(
     #    through the bedroom). A bathroom at catalog privacy_level 1 is not
     #    "private" by the same definition the new check uses, so it must be
     #    allowed to bridge a private room to the rest of the house.
-    for pair, pair_walls in by_pair.items():
+    convenience_pairs = by_pair.items() if add_convenience_doors else ()
+    for pair, pair_walls in convenience_pairs:
         if is_avoided(pair):
             continue
         if all(catalog.privacy_level_for(types_by_key[k]) >= _PRIVACY_THRESHOLD for k in pair):
@@ -622,19 +634,35 @@ def plan_from_program(
             required_area=required, plot_area=plot_area,
         )
 
-    def _place(prog: EngineProgram, archetype_fn) -> list[tuple[RoomNeed, Rect]]:
+    def _place(
+        prog: EngineProgram,
+        archetype_fn,
+    ) -> tuple[list[tuple[RoomNeed, Rect]], BandPlan]:
+        used_band_plan = archetype_fn(prog, plot_w, plot_d, facing)
         result: list[tuple[RoomNeed, Rect]] = []
-        for band_rect, group in archetype_fn(prog, plot_w, plot_d, facing).bands:
+        for band_rect, group in used_band_plan.bands:
             result.extend(subdivide(group, band_rect, facing))
-        return result
+        return result, used_band_plan
 
     if band_plan is None:
-        archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
+        composed = None
+        if spec.layout_style is None:
+            try:
+                composed = hierarchical_bands(program, plot_w, plot_d, facing)
+            except SubdivisionError:
+                # Hierarchy is an enhancement, never a new fit requirement:
+                # tight plots retain the proven global-archetype path.
+                composed = None
+        if composed is not None:
+            archetype_key = "hierarchical"
+            archetype_fn = lambda _program, _w, _d, _facing: composed
+        else:
+            archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
     else:
         archetype_key = "vertical_core"
         archetype_fn = lambda _program, _w, _d, _facing: band_plan
     try:
-        placed = _place(program, archetype_fn)
+        placed, used_band_plan = _place(program, archetype_fn)
     except SubdivisionError as exc:
         if archetype_key in {"zoned_bands", "vertical_core"}:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
@@ -653,7 +681,7 @@ def plan_from_program(
         # when even the general-purpose archetype can't fit the program
         # AND keep every private room genuinely reachable.
         try:
-            placed = _place(program, zoned_bands)
+            placed, used_band_plan = _place(program, zoned_bands)
         except SubdivisionError:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
 
@@ -681,12 +709,22 @@ def plan_from_program(
         spec,
         facing,
         program.zone_of,
+        add_convenience_doors=not used_band_plan.regions,
         id_prefix=id_prefix,
     )
 
     # Round EDGES (not x/w independently) so adjacent rooms share the exact
     # same rounded coordinate — independent rounding lets edges drift apart by
     # >1 mm and register as phantom overlaps (caught by the property gate).
+    zone_by_key = (
+        {
+            need.key: band.zone_id
+            for band in used_band_plan.bands
+            for need in band.rooms
+        }
+        if used_band_plan.regions
+        else {}
+    )
     rooms = [
         PlanRoom(
             id=need.key,
@@ -702,6 +740,7 @@ def plan_from_program(
             h=round(_round(rect.y2) - _round(rect.y), 3),
             rotation=0,
             floor=floor,
+            zone_id=zone_by_key.get(need.key),
         )
         for need, rect in placed
     ]
@@ -710,6 +749,27 @@ def plan_from_program(
         rooms=rooms,
         walls=walls,
         doors=doors,
+        archetype_reasons=(
+            [
+                ArchetypeReason(
+                    zone_id=region.zone_id,
+                    archetype=region.archetype,
+                    reason=region.reason,
+                    room_ids=list(region.room_ids),
+                    spans=[
+                        PlanZoneSpan(
+                            x=span.x,
+                            y=span.y,
+                            w=span.w,
+                            h=span.d,
+                        )
+                        for span in region.spans
+                    ],
+                )
+                for region in used_band_plan.regions
+            ]
+            or None
+        ),
     )
     # A selected archetype is never allowed to weaken the engine's hard
     # guarantees. Specific styles can produce a geometrically valid partition

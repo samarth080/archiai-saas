@@ -42,7 +42,15 @@ frontend contract keep reading the same key.
 """
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from app.schemas.requirements import Facing, Vertex, _reject_string_number
 
@@ -59,6 +67,25 @@ class PlanPlot(BaseModel):
     boundary: list[Vertex] | None = None
 
 
+class PlanZoneSpan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: Coord
+    y: Coord
+    w: Meters
+    h: Meters
+
+
+class ArchetypeReason(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zone_id: str = Field(min_length=1, max_length=96)
+    archetype: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=1, max_length=500)
+    room_ids: list[str] = Field(min_length=1)
+    spans: list[PlanZoneSpan] = Field(min_length=1)
+
+
 class PlanRoom(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -72,6 +99,7 @@ class PlanRoom(BaseModel):
     rotation: Literal[0, 90, 180, 270] = 0
     vertices: list[Vertex] | None = None
     floor: StrictInt = Field(default=0, ge=0, le=20)
+    zone_id: str | None = Field(default=None, min_length=1, max_length=96)
 
     @field_validator("x", "y", "w", "h", mode="before")
     @classmethod
@@ -83,6 +111,13 @@ class PlanRoom(BaseModel):
         if self.vertices is not None and self.rotation != 0:
             raise ValueError("rotation must be 0 for a polygon room (vertices set)")
         return self
+
+    @model_serializer(mode="wrap")
+    def _omit_legacy_zone_id(self, handler):
+        payload = handler(self)
+        if self.zone_id is None:
+            payload.pop("zone_id", None)
+        return payload
 
 
 class Wall(BaseModel):
@@ -114,3 +149,11 @@ class LayoutPlan(BaseModel):
     rooms: list[PlanRoom] = Field(default_factory=list)
     walls: list[Wall] = Field(default_factory=list)
     doors: list[Door] = Field(default_factory=list)
+    archetype_reasons: list[ArchetypeReason] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_legacy_archetype_reasons(self, handler):
+        payload = handler(self)
+        if self.archetype_reasons is None:
+            payload.pop("archetype_reasons", None)
+        return payload
