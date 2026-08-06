@@ -8,6 +8,7 @@ import pytest
 
 from app.schemas.requirements import Facing
 from app.services.layout_engine.archetypes import (
+    BandEntry,
     BandPlan,
     double_loaded_corridor,
     hub_and_spoke,
@@ -158,6 +159,19 @@ def test_bands_that_cannot_fit_raise_subdivision_error():
 
 def test_empty_program_returns_no_bands():
     assert zoned_bands(_program([], {}), 9.0, 12.0, Facing.east) == BandPlan(bands=[])
+
+
+def test_band_entries_add_zone_identity_without_breaking_tuple_consumers():
+    room = _need("room", "office", 12.0, 3.0, 3.0)
+    rect = Rect(0.0, 0.0, 4.0, 5.0)
+
+    default = BandPlan(bands=[(rect, [room])]).bands[0]
+    explicit = BandPlan(bands=[BandEntry(rect, [room], "zone-office")]).bands[0]
+
+    unpacked_rect, unpacked_rooms = default
+    assert (unpacked_rect, unpacked_rooms) == (rect, [room])
+    assert default.zone_id == "global"
+    assert explicit.zone_id == "zone-office"
 
 
 # ── corridor carving (workflow 4.3) ───────────────────────────────────────

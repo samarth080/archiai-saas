@@ -227,9 +227,39 @@ def _flatten_cluster_band(
 
 
 @dataclass(frozen=True)
+class BandEntry:
+    """One placement band plus its hierarchical-zone ownership.
+
+    Iteration intentionally exposes only ``(rect, rooms)`` so every Phase
+    3–9 consumer keeps its established two-value unpacking. ``zone_id`` is
+    additive metadata for Phase 10 composition, not another geometry axis.
+    """
+
+    rect: Rect
+    rooms: list[RoomNeed]
+    zone_id: str = "global"
+
+    def __iter__(self):
+        return iter((self.rect, self.rooms))
+
+    def __getitem__(self, index: int):
+        return (self.rect, self.rooms)[index]
+
+
+@dataclass(frozen=True)
 class BandPlan:
-    bands: list[tuple[Rect, list[RoomNeed]]]
+    bands: list[BandEntry | tuple[Rect, list[RoomNeed]]]
     corridor_rects: list[tuple[str, Rect]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "bands",
+            [
+                band if isinstance(band, BandEntry) else BandEntry(*band)
+                for band in self.bands
+            ],
+        )
 
 
 def macro_zone(zone: str) -> str:
