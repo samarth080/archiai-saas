@@ -749,7 +749,10 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Phase 5.1: deterministic best-of-64 candidate search is merged to `main`.
 - [x] Phase 5.3 continuation (`codex/phase5-refinement-negotiation`): production MVP generation now uses candidate search and fit errors return concrete trade-offs. Full backend gate: 905 passed, 3 expected live-model skips.
 - [x] Phase 6 (`codex/phase6-rule-packs`, stacked on Phase 5): `services/quality/packs/` owns pack activation and weights; generic, residential, healthcare, workplace, hospitality/education, and opt-in Vastu packs are live. Frontend quality guidance groups arbitrary pack keys. Full gates: backend 914 passed/3 skipped; frontend 272 passed, typecheck and production build clean.
-- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated. Phase 7 multi-floor is next on its own branch.
+- [x] Phase 7 (`codex/phase7-multi-floor`, stacked on Phase 6): graph-aware floor assignment, aligned pre-carved stair/lift cores, per-floor canonical geometry, vertical reachability, wet-stack/floor-balance scoring, and existing `LevelMenu` canvas integration are complete. The named two-storey, three-floor hotel-style, and `4bhk.json` acceptance programs pass.
+- [x] Phase 7 gates: backend 944 passed/3 expected skips; frontend 273 passed across 54 files; typecheck and production build clean; 300 deterministic randomized 2–3-floor briefs returned 262 valid plans and 38 honest fit refusals with zero invalid plans.
+- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated; do not add it until best-of-64 misses a measured quality target.
+- [ ] Phase 8 requirements extraction is next and must use its own branch. Multi-floor polygon boundaries remain an explicit unsupported combination, not a silent bounding-box fallback.
 
 ---
 

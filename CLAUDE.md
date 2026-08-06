@@ -935,6 +935,17 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Verification:** backend **914 passed, 3 expected live-model skips**; frontend **272 passed / 54 files**; `tsc --noEmit` and production build passed. No dependency added.
 - [ ] **Deliberately deferred depth:** the first pack-specific rule per domain establishes the registry and acceptance path. Add healthcare accessibility/reception rules, workplace desk-distance rules, and corridor load-balance only when their required context is represented reliably; do not pile shallow proxies into this phase.
 
+### Phase 7 — Canonical multi-floor generation ✅ (`codex/phase7-multi-floor`)
+
+- [x] **Graph-aware floor assignment:** `planning/floor_assignment.py` assigns indivisible MUST-adjacency components, honors exact/ground/upper preferences, records deterministic reasons, and balances residual target area. Day spaces stay on ground while bedrooms/private offices prefer upper floors.
+- [x] **Vertical circulation is program geometry:** `ensure_vertical_circulation` injects one pinned staircase plus landing on every floor, a lift for 3+ floors or `accessibility_mode`, and `stacked_above` MUST edges. `vertical_core_bands` pre-carves identical stair/lift footprints before subdividing the remaining wing.
+- [x] **Per-floor canonical contract:** `PlanRoom`, `Wall`, and `Door` carry strict zero-based `floor` fields with backward-compatible defaults. Generation, derived-geometry rebuilding, door IDs, overlap checks, reachability, API persistence, and both backend/frontend canvas adapters are floor-aware. Polygon multi-floor is rejected explicitly instead of flattening or discarding its boundary.
+- [x] **Connectivity and quality:** aligned stair/lift instances connect consecutive floor door graphs; `staircase_alignment` is hard and also catches a deleted intermediate level. Generic multi-floor scoring adds wet-room stacking and floor-area balance without changing single-floor scores.
+- [x] **Existing editor integration:** supported house/apartment/villa/duplex/clinic/office briefs now use canonical generation at any allowed floor count. Converted rooms, walls, doors, and stairs land on the existing `floor_N` canvas levels with correct vertical elevations; unsupported building types retain the established option-gallery path.
+- [x] **Workflow acceptance pinned:** the two-storey day/night case, a three-floor hotel-style free-string `spaces` program with aligned stairs/lifts, and the real `4bhk.json` fixture overridden to two floors all generate with zero hard violations. A deterministic 300-case 2–3-floor sweep produced 262 valid layouts and 38 honest `DoesNotFitError` refusals, never an invalid plan.
+- [x] **Verification:** backend **944 passed, 3 expected live-model skips**; frontend **273 passed across 54 files**; `tsc --noEmit` and the 1,167-module production build passed. No dependency or migration was added.
+- [ ] **Deliberate limits:** Phase 5.2 simulated annealing remains benchmark-gated and unbuilt; multi-floor generation uses the proven direct path rather than candidate permutations; wet stacking is scored, not forced; polygon-boundary multi-floor support needs its own geometry proof.
+
 ---
 
 ## Development Rules
