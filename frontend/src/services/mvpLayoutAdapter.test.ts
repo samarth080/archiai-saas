@@ -31,6 +31,7 @@ const layout: LayoutPlan = {
       w: 4.5,
       h: 12,
       rotation: 0,
+      floor: 0,
     },
     {
       id: 'room-2',
@@ -41,13 +42,14 @@ const layout: LayoutPlan = {
       w: 4.5,
       h: 12,
       rotation: 90,
+      floor: 0,
     },
   ],
   walls: [
-    { id: 'wall-1', x1: 4.5, y1: 0, x2: 4.5, y2: 12, thickness: 0.115 },
+    { id: 'wall-1', x1: 4.5, y1: 0, x2: 4.5, y2: 12, thickness: 0.115, floor: 0 },
   ],
   doors: [
-    { id: 'door-1', wall_ref: 'wall-1', offset: 2, width: 0.9 },
+    { id: 'door-1', wall_ref: 'wall-1', offset: 2, width: 0.9, floor: 0 },
   ],
 }
 
@@ -179,6 +181,59 @@ describe('canonical MVP layout adapter', () => {
     expect(result.find((object) => object.id === 'door-1')).toMatchObject({
       hostWallId: 'wall-1',
     })
+  })
+
+  it('preserves canonical floor levels through the existing canvas model', () => {
+    const multi: LayoutPlan = {
+      plot: layout.plot,
+      rooms: [
+        { ...layout.rooms[0], id: 'ground-room', floor: 0 },
+        { ...layout.rooms[0], id: 'upper-room', floor: 1 },
+        {
+          id: 'upper-stair',
+          type: 'staircase',
+          label: 'Staircase 2',
+          x: 0,
+          y: 0,
+          w: 1.2,
+          h: 2.4,
+          rotation: 0,
+          floor: 1,
+        },
+      ],
+      walls: [
+        { ...layout.walls[0], id: 'upper-wall', floor: 1 },
+      ],
+      doors: [
+        {
+          ...layout.doors[0],
+          id: 'upper-door',
+          wall_ref: 'upper-wall',
+          floor: 1,
+        },
+      ],
+    }
+
+    const canvas = layoutPlanToCanvas(multi)
+
+    expect(canvas.metadata?.totalFloors).toBe(2)
+    expect(canvas.floors?.map((floor) => floor.level)).toEqual([0, 1])
+    expect(
+      canvas.rooms.find((room) => room.id === 'upper-room')?.position.y,
+    ).toBe(4.5)
+    expect(
+      canvas.rooms.find((room) => room.id === 'upper-stair')?.objectType,
+    ).toBe('stair')
+
+    const restored = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 9, d: 12 },
+      'east',
+    )
+    expect(restored.rooms.find((room) => room.id === 'upper-room')?.floor).toBe(1)
+    expect(restored.rooms.find((room) => room.id === 'upper-stair')?.floor).toBe(1)
+    expect(restored.walls[0].floor).toBe(1)
+    expect(restored.doors[0].floor).toBe(1)
   })
 
   it('carries generation identity and produces deterministic canvas JSON', () => {

@@ -276,7 +276,7 @@ describe('ProjectPage refine flow', () => {
     expect(refineButton).toBeDisabled()
   })
 
-  it('sends designParams when plot width / floors / orientation are filled in', async () => {
+  it('sends reviewed overrides to canonical multi-floor generation', async () => {
     const extracted = {
       requirements: {
         building_type: 'apartment',
@@ -294,17 +294,26 @@ describe('ProjectPage refine flow', () => {
       understood_summary: ['Building: Apartment', '1 floor', '1 bedroom'],
     }
     const generated = {
-      version: '1.0',
+      requirements: {
+        ...extracted.requirements,
+        floors: 2,
+        plot: { width_m: 10, depth_m: null },
+        facing: 'north',
+      },
+      layout: {
+        plot: { width_m: 10, depth_m: 12, facing: 'north' },
+        rooms: [],
+        walls: [],
+        doors: [],
+      },
+      quality: { valid: true, score: 100, hard_violations: [], warnings: [] },
+      defaults_applied: [],
       designId: 'd1',
       designVersionId: 'v1',
-      metadata: { prompt: 'studio', building_type: 'apartment', room_count: 1 },
-      building: { floorHeight: 3.2 },
-      floors: [{ id: 'floor_0', name: 'Ground', level: 0, elevation: 0, rooms: [] }],
-      rooms: [],
     }
     vi.mocked(api.post).mockImplementation(async (url: string) => {
       if (url === '/api/extract') return { data: extracted }
-      if (url === '/api/design/generate') return { data: generated }
+      if (url === '/api/generate') return { data: generated }
       throw new Error('unexpected POST ' + url)
     })
 
@@ -321,10 +330,16 @@ describe('ProjectPage refine flow', () => {
     await user.click(screen.getByRole('button', { name: 'Generate layout' }))
 
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith('/api/design/generate', {
+      expect(api.post).toHaveBeenCalledWith('/api/generate', {
+        requirements: {
+          ...extracted.requirements,
+          floors: 2,
+          plot: { width_m: 10, depth_m: null },
+          facing: 'north',
+        },
+        useDefaults: false,
         prompt: 'studio apartment',
         projectId: 'p1',
-        designParams: { plotWidthM: 10, floors: 2, orientation: 'N' },
       }),
     )
   })
@@ -332,7 +347,7 @@ describe('ProjectPage refine flow', () => {
   it('shows the option gallery after generating and lets the user pick an alternative', async () => {
     const extracted = {
       requirements: {
-        building_type: 'office',
+        building_type: 'school',
         floors: 1,
         rooms: [{ type: 'study', count: 1 }],
         adjacency: [],
@@ -344,7 +359,7 @@ describe('ProjectPage refine flow', () => {
       route: 'generate',
       questions: [],
       optional_missing: [],
-      understood_summary: ['Building: Office', '1 floor', '1 study'],
+      understood_summary: ['Building: School', '1 floor', '1 study'],
     }
     const winner = {
       version: '1.0',

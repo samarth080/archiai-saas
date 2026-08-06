@@ -26,6 +26,7 @@ export interface PlotSpec { width_m: number | null; depth_m: number | null }
 export interface RequirementsSpec {
   building_type: BuildingType
   floors: number
+  accessibility_mode?: boolean
   rooms: RoomRequest[]
   adjacency: AdjacencyPref[]
   avoid_adjacency: AvoidPair[]
@@ -40,17 +41,32 @@ export interface PlanPlot { width_m: number; depth_m: number; facing: Facing }
 
 export interface PlanRoom {
   id: string
-  type: RoomType
+  type: string
   label: string
   x: number
   y: number
   w: number
   h: number
   rotation: Rotation
+  floor?: number
 }
 
-export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; thickness: number }
-export interface Door { id: string; wall_ref: string; offset: number; width: number }
+export interface Wall {
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  thickness: number
+  floor?: number
+}
+export interface Door {
+  id: string
+  wall_ref: string
+  offset: number
+  width: number
+  floor?: number
+}
 
 export interface LayoutPlan {
   plot: PlanPlot

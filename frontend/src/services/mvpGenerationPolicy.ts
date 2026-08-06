@@ -12,7 +12,14 @@ export interface GenerationOverrides {
   orientation?: '' | 'N' | 'S' | 'E' | 'W'
 }
 
-const MVP_BUILDING_TYPES = new Set(['house', 'apartment', 'villa'])
+const MVP_BUILDING_TYPES = new Set([
+  'house',
+  'apartment',
+  'villa',
+  'duplex',
+  'clinic',
+  'office',
+])
 const FACING_BY_ORIENTATION: Record<'N' | 'S' | 'E' | 'W', Facing> = {
   N: 'north',
   S: 'south',
@@ -60,7 +67,6 @@ export function applyGenerationOverrides(
 export function generationEngineFor(
   requirements: RequirementsSpec,
 ): GenerationEngine {
-  if (requirements.floors !== 1) return 'established'
   return MVP_BUILDING_TYPES.has(requirements.building_type)
     ? 'mvp'
     : 'established'

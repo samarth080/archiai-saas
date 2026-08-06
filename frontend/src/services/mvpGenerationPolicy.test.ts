@@ -19,15 +19,15 @@ const requirements: RequirementsSpec = {
 }
 
 describe('MVP generation selection policy', () => {
-  it('uses canonical geometry only for supported single-floor residential briefs', () => {
+  it('uses canonical geometry for supported single- and multi-floor briefs', () => {
     expect(generationEngineFor(requirements)).toBe('mvp')
-    expect(generationEngineFor({ ...requirements, floors: 2 })).toBe('established')
+    expect(generationEngineFor({ ...requirements, floors: 2 })).toBe('mvp')
     expect(
       generationEngineFor({ ...requirements, building_type: 'office' }),
-    ).toBe('established')
+    ).toBe('mvp')
     expect(
       generationEngineFor({ ...requirements, building_type: 'duplex' }),
-    ).toBe('established')
+    ).toBe('mvp')
   })
 
   it('applies valid editor overrides without mutating extraction output', () => {
