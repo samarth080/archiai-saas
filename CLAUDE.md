@@ -925,6 +925,16 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] **Production integration + 5.3 fit negotiation** (`codex/phase5-refinement-negotiation`): `/api/generate` now uses deterministic best-of-64 search for rectangular plots; polygon boundaries stay on the proven polygon path. Fit failures return concrete plot-size, SHOULD-constraint, and explicitly-prioritized-space trade-offs. Free-string `spaces` programs now pass clarification/default handling without an irrelevant residential bathroom default. Two implementation commits; full backend gate **905 passed, 3 expected live-model skips**.
 - [ ] **Still optional, deliberately not built:** 5.2 simulated annealing. The workflow marks it as an optional second PR, and best-of-64 already produces the measured quality gain within budget; add another optimizer only when benchmarks show a remaining need.
 
+### Phase 6 — Building-aware quality rule packs ✅ (`codex/phase6-rule-packs`)
+
+- [x] **Pack registry, not a scorer rewrite:** `quality/packs/` is a small dataclass registry over the existing soft-rule functions. Hard constraints remain universal and unchanged. Weights moved out of `mvp_defaults.py` into their owning packs.
+- [x] **Deterministic activation + override:** generic always applies by default; residential, healthcare, workplace, and hospitality/education activate from building/program shape; `RequirementsSpec.rule_packs` can override the selection. Vastu still requires the existing explicit caller opt-in.
+- [x] **Concrete domain checks:** healthcare flags consultation rooms directly adjoining waiting; workplace flags meeting rooms disconnected from the main workspace; hospitality/education flags repeat-unit area variance above 20%. Every rule has a deliberately failing geometry test.
+- [x] **No residential score drift:** pre-pack fixture scores remain exactly 1BHK 100, 2BHK 100, 3BHK-adjacencies 72, 4BHK 92. Clinic activates only `generic + healthcare`, scores 100 on its valid fixture, and emits no residential kitchen/Vastu guidance.
+- [x] **Contract/UI generalization:** `QualityWarning.rule` is a validated free-string pack key; the frontend parser accepts non-empty keys and `QualityPanel` groups warnings under pack-specific headings with a safe fallback for future packs.
+- [x] **Verification:** backend **914 passed, 3 expected live-model skips**; frontend **272 passed / 54 files**; `tsc --noEmit` and production build passed. No dependency added.
+- [ ] **Deliberately deferred depth:** the first pack-specific rule per domain establishes the registry and acceptance path. Add healthcare accessibility/reception rules, workplace desk-distance rules, and corridor load-balance only when their required context is represented reliably; do not pile shallow proxies into this phase.
+
 ---
 
 ## Development Rules

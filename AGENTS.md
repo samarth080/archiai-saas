@@ -748,7 +748,8 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Phase 4: real corridor geometry, circulation-rooted doors, AVOID vetoes, and the `through_room_access` hard rule are merged to `main`.
 - [x] Phase 5.1: deterministic best-of-64 candidate search is merged to `main`.
 - [x] Phase 5.3 continuation (`codex/phase5-refinement-negotiation`): production MVP generation now uses candidate search and fit errors return concrete trade-offs. Full backend gate: 905 passed, 3 expected live-model skips.
-- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated; Phase 6 rule packs is next on its own branch.
+- [x] Phase 6 (`codex/phase6-rule-packs`, stacked on Phase 5): `services/quality/packs/` owns pack activation and weights; generic, residential, healthcare, workplace, hospitality/education, and opt-in Vastu packs are live. Frontend quality guidance groups arbitrary pack keys. Full gates: backend 914 passed/3 skipped; frontend 272 passed, typecheck and production build clean.
+- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated. Phase 7 multi-floor is next on its own branch.
 
 ---
 
