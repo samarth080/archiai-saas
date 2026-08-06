@@ -705,12 +705,40 @@ def plan_from_program(
         )
         for need, rect in placed
     ]
-    return LayoutPlan(
+    plan = LayoutPlan(
         plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
         rooms=rooms,
         walls=walls,
         doors=doors,
     )
+    # A selected archetype is never allowed to weaken the engine's hard
+    # guarantees. Specific styles can produce a geometrically valid partition
+    # whose door graph still routes through a private room; retry once with the
+    # proven general-purpose comb before refusing. Multi-floor plans are
+    # validated after their floor-local pieces are assembled.
+    if spec.floors == 1:
+        from app.services.quality.hard_constraints import validate
+
+        violations = validate(plan, spec)
+        if violations:
+            if band_plan is None and archetype_key != "zoned_bands":
+                try:
+                    safe_bands = zoned_bands(program, plot_w, plot_d, facing)
+                except SubdivisionError as exc:
+                    raise DoesNotFitError(f"{exc} — increase plot size") from exc
+                return plan_from_program(
+                    spec,
+                    program,
+                    plot_w,
+                    plot_d,
+                    facing,
+                    band_plan=safe_bands,
+                    floor=floor,
+                    id_prefix=id_prefix,
+                )
+            messages = "; ".join(violation.message for violation in violations)
+            raise DoesNotFitError(messages)
+    return plan
 
 
 def _generate_plan_multifloor(spec: RequirementsSpec) -> LayoutPlan:
