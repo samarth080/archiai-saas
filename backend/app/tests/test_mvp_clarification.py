@@ -161,6 +161,31 @@ def test_free_string_space_program_routes_without_residential_bathroom_default()
     assert defaulted.defaults_applied == ["9×12 m plot", "east facing"]
 
 
+def test_residential_space_program_gets_a_space_native_bathroom_default():
+    spec = RequirementsSpec.model_validate({
+        "building_type": "house",
+        "spaces": [
+            {"space_type": "bedroom", "count": 3},
+            {"space_type": "living_room", "count": 1},
+            {"space_type": "kitchen", "count": 1},
+        ],
+        "missing_info": ["bathroom_count"],
+    })
+
+    decision = assess(spec)
+    defaulted = apply_defaults_with_report(spec)
+
+    assert BATHROOM_QUESTION in decision.optional_missing
+    assert defaulted.requirements.rooms == []
+    assert [
+        (space.space_type, space.count)
+        for space in defaulted.requirements.spaces
+        if space.space_type == "bathroom"
+    ] == [("bathroom", 2)]
+    assert "2 bathrooms" in defaulted.defaults_applied
+    assert "bathroom_count" not in defaulted.requirements.missing_info
+
+
 def test_apply_defaults_is_non_mutating_transparent_and_fit_able():
     spec = RequirementsSpec.model_validate(
         {

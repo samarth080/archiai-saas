@@ -224,7 +224,7 @@ for canonical, terms in ROOM_TERMS.items():
         for term in terms:
             _ALIAS_TO_CANONICAL[term.strip().lower().replace(" ", "_").replace("-", "_")] = canonical
 
-_INFERRED_CONFIDENCE_FLOOR = 0.75
+INFERRED_CONFIDENCE_FLOOR = 0.75
 _INFERRED_AREA_MIN_M2 = 2.0
 _INFERRED_AREA_MAX_M2 = 200.0
 
@@ -279,7 +279,7 @@ def ensure_registered(
         request.zone_guess is None
         or request.size_guess_m2 is None
         or request.confidence is None
-        or request.confidence < _INFERRED_CONFIDENCE_FLOOR
+        or request.confidence < INFERRED_CONFIDENCE_FLOOR
     ):
         suggestions = get_close_matches(
             request.space_type.strip().lower().replace(" ", "_").replace("-", "_"),

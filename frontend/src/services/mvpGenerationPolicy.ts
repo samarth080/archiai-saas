@@ -58,6 +58,7 @@ export function applyGenerationOverrides(
           : requirements.plot.width_m,
     },
     rooms: requirements.rooms.map((room) => ({ ...room })),
+    spaces: requirements.spaces?.map((space) => ({ ...space })),
     adjacency: requirements.adjacency.map((edge) => ({ ...edge })),
     avoid_adjacency: requirements.avoid_adjacency.map((edge) => ({ ...edge })),
     missing_info: [...requirements.missing_info],
@@ -67,7 +68,7 @@ export function applyGenerationOverrides(
 export function generationEngineFor(
   requirements: RequirementsSpec,
 ): GenerationEngine {
-  return MVP_BUILDING_TYPES.has(requirements.building_type)
+  return requirements.spaces?.length || MVP_BUILDING_TYPES.has(requirements.building_type)
     ? 'mvp'
     : 'established'
 }
@@ -116,9 +117,14 @@ export function reviewWithOverrides(
     }
     if (
       normalized.includes('bathroom') &&
-      requirements.rooms.some(
-        (room) => room.type === 'bathroom' && room.count > 0,
-      )
+      (requirements.spaces?.some(
+        (space) =>
+          (space.space_type === 'bathroom' || space.space_type === 'ensuite') &&
+          space.count > 0,
+      ) ||
+        requirements.rooms.some(
+          (room) => room.type === 'bathroom' && room.count > 0,
+        ))
     ) {
       return false
     }

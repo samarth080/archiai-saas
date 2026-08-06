@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass, field
 
+from app.services.catalog.space_catalog import CATALOG
 from app.services.parser.data.room_vocabulary import ROOM_TERMS
 from app.services.parser.normaliser import normalise
 
@@ -31,6 +32,9 @@ def _build_room_lookup() -> dict[str, str]:
             if "_" in term:
                 # add space variant so "meeting room" matches "meeting_room"
                 lookup[term.replace("_", " ")] = room_type
+    for room_type in CATALOG:
+        lookup.setdefault(room_type, room_type)
+        lookup.setdefault(room_type.replace("_", " "), room_type)
     return lookup
 
 
@@ -67,7 +71,7 @@ _MUST_VERBS = (
     r"attached to|next door to|opens into|opens onto|opens to|leads into|"
     r"leads to|leads onto|just behind|directly behind|right behind|behind|"
     r"in front of|infront of|directly in front of|opposite|across from|facing|"
-    r"backs onto|backs on to"
+    r"backs onto|backs on to|opens? off(?: of)?|off(?: of)?"
 )
 _SHOULD_VERBS = r"near|close to|by the|near the|close by|beside the|nearby"
 

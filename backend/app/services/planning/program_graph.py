@@ -437,7 +437,15 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
     def nodes_for(room_type: str) -> list[Node]:
         raw = room_type.strip().lower().replace(" ", "_").replace("-", "_")
         resolved = catalog.resolve_alias(raw)
-        return nodes_by_key.get(raw) or nodes_by_key.get(resolved or "", [])
+        direct = nodes_by_key.get(raw) or nodes_by_key.get(resolved or "")
+        if direct:
+            return direct
+        if resolved is None:
+            return []
+        for key, nodes in nodes_by_key.items():
+            if catalog.resolve_alias(key) == resolved:
+                return nodes
+        return []
 
     for pref in spec.adjacency:
         strength = pref.strength.upper()

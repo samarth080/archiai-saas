@@ -16,6 +16,10 @@ def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
     return sum(room.count for room in spec.rooms if room.type == room_type)
 
 
+def _space_count(spec: RequirementsSpec, space_type: str) -> int:
+    return sum(space.count for space in spec.spaces if space.space_type == space_type)
+
+
 def test_normalizer_maps_synonyms_and_explicit_feet_without_mutating_input():
     raw = {
         "building_type": "flat",
@@ -274,19 +278,110 @@ async def test_invalid_first_output_is_corrected_once():
     assert calls[0]["schema"] == RequirementsSpec.model_json_schema()
 
 
+def test_non_residential_room_output_is_promoted_to_catalog_spaces():
+    normalized = normalize_extraction(
+        {
+            "building_type": "clinic",
+            "rooms": [
+                {"type": "waiting area", "count": 1},
+                {"type": "consultation room", "count": 3},
+            ],
+        },
+        prompt="Clinic with a waiting area and three consultation rooms",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert spec.rooms == []
+    assert _space_count(spec, "waiting_room") == 1
+    assert _space_count(spec, "consultation_room") == 3
+
+
+def test_arbitrary_building_uses_other_and_recovers_catalog_spaces_from_prompt():
+    normalized = normalize_extraction(
+        {"building_type": "restaurant", "rooms": [], "spaces": []},
+        prompt="Restaurant with dining area, kitchen, storage and a bar",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert spec.building_type.value == "other"
+    assert _space_count(spec, "dining_room") == 1
+    assert _space_count(spec, "kitchen") == 1
+    assert _space_count(spec, "storage") == 1
+    assert _space_count(spec, "bar") == 1
+    assert "rooms" not in spec.missing_info
+
+
+def test_unknown_space_with_confident_metadata_remains_self_describing():
+    normalized = normalize_extraction(
+        {
+            "building_type": "other",
+            "spaces": [{
+                "space_type": "recording studio",
+                "count": 1,
+                "zone_guess": "private",
+                "size_guess_m2": 18.0,
+                "confidence": 0.9,
+            }],
+        },
+        prompt="Design a recording studio room",
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert spec.spaces[0].space_type == "recording_studio"
+    assert not any(item.startswith("conflict:") for item in spec.missing_info)
+
+
+async def test_low_confidence_unknown_space_routes_to_clarification_without_retry():
+    calls: list[dict] = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {
+            "building_type": "other",
+            "spaces": [{
+                "space_type": "sensory_room",
+                "count": 1,
+                "zone_guess": "private",
+                "size_guess_m2": 14.0,
+                "confidence": 0.4,
+            }],
+        }
+
+    spec = await extract_requirements("Preschool with a sensory room", chat=fake_chat)
+
+    assert len(calls) == 1
+    assert spec.spaces[0].space_type == "sensory_room"
+    assert any(item.startswith("conflict:") for item in spec.missing_info)
+
+
+async def test_extraction_prompt_lists_catalog_and_unknown_space_metadata():
+    calls: list[dict] = []
+
+    async def fake_chat(**kwargs):
+        calls.append(kwargs)
+        return {"spaces": [{"space_type": "consultation_room", "count": 1}]}
+
+    await extract_requirements("Clinic with a consultation room", chat=fake_chat)
+
+    system = calls[0]["system"]
+    assert "consultation_room" in system
+    assert "zone_guess" in system
+    assert "technical" in system
+
+
 async def test_two_invalid_outputs_raise_typed_failure_with_last_raw_output():
     calls = 0
 
     async def fake_chat(**kwargs):
         nonlocal calls
         calls += 1
-        return {"rooms": [{"type": "unknown-space", "count": 1}]}
+        return {"rooms": [{"type": "bedroom", "count": "many"}]}
 
     with pytest.raises(ExtractionFailed) as exc_info:
-        await extract_requirements("A house with an unknown space", chat=fake_chat)
+        await extract_requirements("A house with bedrooms", chat=fake_chat)
 
     assert calls == 2
     assert exc_info.value.raw_output == {
-        "rooms": [{"type": "unknown-space", "count": 1}]
+        "rooms": [{"type": "bedroom", "count": "many"}]
     }
     assert exc_info.value.validation_errors

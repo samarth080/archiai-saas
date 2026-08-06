@@ -100,13 +100,12 @@ class RoomRequest(BaseModel):
 
 
 class SpaceRequest(BaseModel):
-    """Phase 1 (engine generalization) superset of RoomRequest: a free-string
-    `space_type` validated against `services.catalog.SpaceCatalog` at the
-    service boundary rather than the closed `RoomType` enum, so the contract
-    can eventually express non-residential programs `RoomType` cannot. Added
-    additively alongside `rooms` (workflow Phase 1.2 migration order item 1)
-    — `rooms` keeps working exactly as before; nothing existing reads
-    `spaces` yet."""
+    """Canonical free-string program entry.
+
+    Known keys resolve through SpaceCatalog. A self-describing unknown key can
+    be registered at the engine boundary; incomplete or low-confidence
+    unknowns are routed to clarification.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

@@ -167,7 +167,7 @@ def test_explicitly_avoided_adjacent_pair_gets_no_direct_door():
             {"type": "living_room", "count": 1},
             {"type": "entry", "count": 1},
         ],
-        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "bathroom"}],
+        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "washroom"}],
         "plot": {"width_m": 8.0, "depth_m": 8.0},
     })
     plan = generate_plan(spec)

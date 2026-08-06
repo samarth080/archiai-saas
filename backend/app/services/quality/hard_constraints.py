@@ -40,6 +40,7 @@ requested room, and quality must not call that layout satisfactory.
 from app.schemas.layout_plan import Door, LayoutPlan, PlanRoom, Wall
 from app.schemas.quality_report import Violation
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services.catalog import resolve_alias
 from app.services import catalog
 from app.services.layout_engine.geometry import EPS, Rect
 
@@ -178,21 +179,30 @@ def _through_room_access_violations(
 def _missing_requested_rooms(
     rooms: list[PlanRoom], requirements: RequirementsSpec
 ) -> list[Violation]:
-    generated_counts: dict[RoomType, int] = {}
+    generated_counts: dict[str, int] = {}
     for room in rooms:
-        generated_counts[room.type] = generated_counts.get(room.type, 0) + 1
+        key = resolve_alias(room.type) or room.type
+        generated_counts[key] = generated_counts.get(key, 0) + 1
 
-    requested_counts: dict[RoomType, int] = {}
-    for requested in requirements.rooms:
-        requested_counts[requested.type] = (
-            requested_counts.get(requested.type, 0) + requested.count
-        )
+    requested_counts: dict[str, int] = {}
+    if requirements.spaces:
+        for requested in requirements.spaces:
+            key = resolve_alias(requested.space_type) or requested.space_type
+            requested_counts[key] = (
+                requested_counts.get(key, 0) + requested.count
+            )
+    else:
+        for requested in requirements.rooms:
+            key = resolve_alias(requested.type.value) or requested.type.value
+            requested_counts[key] = (
+                requested_counts.get(key, 0) + requested.count
+            )
 
     violations: list[Violation] = []
-    for room_type in sorted(requested_counts, key=lambda t: t.value):
+    for room_type in sorted(requested_counts):
         shortfall = requested_counts[room_type] - generated_counts.get(room_type, 0)
         if shortfall > 0:
-            label = room_type.value.replace("_", " ")
+            label = room_type.replace("_", " ")
             violations.append(Violation(
                 code="missing_requested_room",
                 room_ids=[],

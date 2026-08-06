@@ -12,6 +12,7 @@ from app.models.design_version import DesignVersion
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_engine.engine import generate_plan
 from app.services.llm_client import LLMInvalidOutput, LLMTimeout, LLMUnavailable
+from app.services.mvp_pipeline_service import understood_summary
 from app.tests.conftest import TestSessionLocal
 
 FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
@@ -42,6 +43,23 @@ async def _project(client: AsyncClient, token: str, title: str = "MVP Project") 
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_understood_summary_uses_canonical_spaces_when_present():
+    spec = RequirementsSpec.model_validate({
+        "building_type": "other",
+        "rooms": [{"type": "study", "count": 1}],
+        "spaces": [
+            {"space_type": "consultation_room", "count": 3},
+            {"space_type": "waiting_room", "count": 1},
+        ],
+    })
+
+    summary = understood_summary(spec)
+
+    assert "3 consultation rooms" in summary
+    assert "1 waiting room" in summary
+    assert "1 study" not in summary
 
 
 async def test_mvp_pipeline_endpoints_require_access_token(client: AsyncClient):

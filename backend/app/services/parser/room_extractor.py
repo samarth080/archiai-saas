@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass, field
 
+from app.services.catalog.space_catalog import CATALOG
 from app.services.parser.data.room_vocabulary import COMPOUND_LINK_WORDS, ROOM_TERMS
 from app.services.parser.normaliser import normalise
 
@@ -19,6 +20,11 @@ def _room_lookup() -> dict[str, str]:
     for room_type, terms in ROOM_TERMS.items():
         for term in terms:
             lookup[term] = room_type
+    for room_type in CATALOG:
+        if room_type == "kitchen_dining":
+            continue
+        lookup.setdefault(room_type, room_type)
+        lookup.setdefault(room_type.replace("_", " "), room_type)
     return lookup
 
 

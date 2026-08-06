@@ -20,7 +20,14 @@ from app.config.mvp_defaults import (
     DEFAULT_PLOT_DEPTH_M,
     DEFAULT_PLOT_WIDTH_M,
 )
-from app.schemas.requirements import PlotSpec, RequirementsSpec, RoomRequest, RoomType
+from app.schemas.requirements import (
+    PlotSpec,
+    RequirementsSpec,
+    RoomRequest,
+    RoomType,
+    SpaceRequest,
+)
+from app.services.catalog import resolve_alias
 from app.services.layout_engine.engine import DoesNotFitError
 
 
@@ -32,6 +39,7 @@ FACING_QUESTION = (
     "Which direction should the main entrance face (north, south, east, or west)?"
 )
 BATHROOM_QUESTION = "How many bathrooms should the layout include?"
+_RESIDENTIAL_BUILDING_TYPES = frozenset({"house", "apartment", "villa", "duplex"})
 
 class ClarificationResult(BaseModel):
     """A deterministic decision for the API/UI orchestration layer."""
@@ -61,6 +69,24 @@ def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
     return sum(room.count for room in spec.rooms if room.type == room_type)
 
 
+def _space_count(spec: RequirementsSpec, *space_types: str) -> int:
+    return sum(
+        space.count
+        for space in spec.spaces
+        if (resolve_alias(space.space_type) or space.space_type) in space_types
+    )
+
+
+def _is_residential(spec: RequirementsSpec) -> bool:
+    return spec.building_type.value in _RESIDENTIAL_BUILDING_TYPES
+
+
+def _bathroom_count(spec: RequirementsSpec) -> int:
+    if spec.spaces:
+        return _space_count(spec, "bathroom", "ensuite")
+    return _room_count(spec, RoomType.bathroom)
+
+
 def _has_room_program(spec: RequirementsSpec) -> bool:
     return (
         sum(room.count for room in spec.rooms)
@@ -74,9 +100,7 @@ def _optional_questions(spec: RequirementsSpec) -> list[str]:
         questions.append(PLOT_SIZE_QUESTION)
     if spec.facing is None:
         questions.append(FACING_QUESTION)
-    # SpaceCatalog programs are not necessarily residential, and appending a
-    # legacy RoomRequest would be ignored because spaces take precedence.
-    if not spec.spaces and _room_count(spec, RoomType.bathroom) == 0:
+    if _is_residential(spec) and _bathroom_count(spec) == 0:
         questions.append(BATHROOM_QUESTION)
     return questions
 
@@ -255,14 +279,20 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
         defaults_applied.append(f"{facing.value} facing")
 
     rooms = [room.model_copy(deep=True) for room in spec.rooms]
-    bathroom_count = _room_count(spec, RoomType.bathroom)
-    if bathroom_count == 0 and not spec.spaces:
+    spaces = [space.model_copy(deep=True) for space in spec.spaces]
+    bathroom_count = _bathroom_count(spec)
+    if bathroom_count == 0 and _is_residential(spec):
         bedroom_count = (
-            _room_count(spec, RoomType.bedroom)
+            _space_count(spec, "bedroom", "master_bedroom")
+            if spec.spaces
+            else _room_count(spec, RoomType.bedroom)
             + _room_count(spec, RoomType.master_bedroom)
         )
         bathroom_count = max(1, bedroom_count - 1)
-        rooms.append(RoomRequest(type=RoomType.bathroom, count=bathroom_count))
+        if spec.spaces:
+            spaces.append(SpaceRequest(space_type="bathroom", count=bathroom_count))
+        else:
+            rooms.append(RoomRequest(type=RoomType.bathroom, count=bathroom_count))
         noun = "bathroom" if bathroom_count == 1 else "bathrooms"
         defaults_applied.append(f"{bathroom_count} {noun}")
 
@@ -270,7 +300,7 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
         spec.missing_info,
         plot_complete=width is not None and depth is not None,
         facing_complete=facing is not None,
-        bathroom_complete=bool(spec.spaces) or bathroom_count > 0,
+        bathroom_complete=not _is_residential(spec) or bathroom_count > 0,
     )
 
     requirements = spec.model_copy(
@@ -278,6 +308,7 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
             "plot": PlotSpec(width_m=width, depth_m=depth),
             "facing": facing,
             "rooms": rooms,
+            "spaces": spaces,
             "missing_info": missing_info,
         },
         deep=True,

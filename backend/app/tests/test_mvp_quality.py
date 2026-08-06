@@ -156,6 +156,31 @@ def test_missing_requested_bedroom_is_a_hard_violation_not_a_soft_warning():
     assert report.score <= 49
 
 
+def test_missing_requested_catalog_space_is_a_hard_violation():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [{"space_type": "exam_room", "count": 2}],
+    })
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=8, depth_m=8),
+        rooms=[
+            PlanRoom(
+                id="consult-1",
+                type="consultation_room",
+                label="Consultation Room 1",
+                x=0,
+                y=0,
+                w=5,
+                h=3,
+            )
+        ],
+    )
+
+    violations = validate(plan, spec)
+
+    assert [violation.code for violation in violations] == ["missing_requested_room"]
+    assert "Requested 2 consultation room(s)" in violations[0].message
+
+
 def test_validate_without_requirements_stays_geometry_only():
     plan = LayoutPlan(
         plot=PlanPlot(width_m=6, depth_m=6),

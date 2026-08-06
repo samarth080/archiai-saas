@@ -360,19 +360,30 @@ def _place_doors(
     # must route AROUND an explicit avoidance, not through it. Computed once,
     # used by both the spanning tree (step 2) and the "door every remaining
     # adjacent pair" pass (step 3, which already respected this).
-    avoid_type_pairs = {frozenset((p.room_a, p.room_b)) for p in spec.avoid_adjacency}
+    def canonical_type(value: str) -> str:
+        return catalog.resolve_alias(value) or value
+
+    avoid_type_pairs = {
+        frozenset((canonical_type(p.room_a), canonical_type(p.room_b)))
+        for p in spec.avoid_adjacency
+    }
 
     def is_avoided(pair: frozenset) -> bool:
-        return frozenset(types_by_key[k] for k in pair) in avoid_type_pairs
+        pair_types = frozenset(canonical_type(types_by_key[k]) for k in pair)
+        return pair_types in avoid_type_pairs
 
     # 1. `must`-adjacency doors (attached bathroom onto its bedroom, etc.).
     for pref in spec.adjacency:
         if pref.strength != "must":
             continue
         for pair, pair_walls in by_pair.items():
-            pair_types = {types_by_key[k] for k in pair}
-            if pair_types == {pref.room_a, pref.room_b} or (
-                pref.room_a == pref.room_b and len(pair_types) == 1 and pair_types == {pref.room_a}
+            pair_types = {canonical_type(types_by_key[k]) for k in pair}
+            pref_a = canonical_type(pref.room_a)
+            pref_b = canonical_type(pref.room_b)
+            if pair_types == {pref_a, pref_b} or (
+                pref_a == pref_b
+                and len(pair_types) == 1
+                and pair_types == {pref_a}
             ):
                 best = max(pair_walls, key=_wall_length)
                 if _wall_length(best) >= _MIN_DOOR_EDGE:

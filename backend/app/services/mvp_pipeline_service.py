@@ -15,6 +15,7 @@ from app.schemas.mvp import (
     MvpVersionResponse,
 )
 from app.schemas.requirements import RequirementsSpec
+from app.services.catalog import resolve_alias
 from app.services.design_service import AUTO_DRAFT_VERSION_TYPE
 from app.services.layout_adapter import layout_plan_to_canvas
 from app.services.layout_engine import rebuild_derived_geometry
@@ -38,8 +39,13 @@ def understood_summary(spec: RequirementsSpec) -> list[str]:
         f"{spec.floors} {'floor' if spec.floors == 1 else 'floors'}",
     ]
     counts: dict[str, int] = {}
-    for room in spec.rooms:
-        counts[room.type.value] = counts.get(room.type.value, 0) + room.count
+    if spec.spaces:
+        for space in spec.spaces:
+            key = resolve_alias(space.space_type) or space.space_type
+            counts[key] = counts.get(key, 0) + space.count
+    else:
+        for room in spec.rooms:
+            counts[room.type.value] = counts.get(room.type.value, 0) + room.count
     for room_type in sorted(counts):
         count = counts[room_type]
         label = room_type.replace("_", " ")
