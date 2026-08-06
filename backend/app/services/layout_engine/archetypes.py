@@ -593,6 +593,121 @@ def open_core(program: EngineProgram, plot_w: float, plot_d: float, facing: Faci
     return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, [[dominant], rest]))
 
 
+def _must_components(
+    needs: list[RoomNeed],
+    pairs: list[tuple[str, str]],
+) -> list[list[RoomNeed]]:
+    by_key = {need.key: need for need in needs}
+    parent = {key: key for key in by_key}
+
+    def find(key: str) -> str:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for a, b in pairs:
+        if a not in parent or b not in parent:
+            continue
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    grouped: dict[str, list[RoomNeed]] = {}
+    for need in needs:
+        grouped.setdefault(find(need.key), []).append(need)
+    return list(grouped.values())
+
+
+def vertical_core_bands(
+    program: EngineProgram,
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+) -> BandPlan:
+    """Pre-carve an aligned stair/lift core and tile the remaining wing.
+
+    The core is a full-depth strip: stair (and optional lift) at the front,
+    landing/corridor behind. Private MUST-components each receive their own
+    band along that strip, so access never depends on crossing another
+    private component. Non-private rooms share one flex band.
+    """
+    stair = next(
+        (need for need in program.needs if need.type in ("staircase", "stairs")),
+        None,
+    )
+    corridor = next(
+        (need for need in program.needs if need.type in _CORRIDOR_SPINE_TYPES),
+        None,
+    )
+    lift = next(
+        (need for need in program.needs if need.type in ("lift", "elevator")),
+        None,
+    )
+    if stair is None or corridor is None:
+        raise SubdivisionError("multi-floor generation needs a stair and landing on every floor")
+
+    stair_length = max(2.4, stair.min_w, stair.min_d)
+    stair_width = min(stair.min_w, stair.min_d)
+    core_width = max(stair_width, min(lift.min_w, lift.min_d) if lift else 0.0)
+    lift_length = max(lift.min_w, lift.min_d) if lift else 0.0
+    core_used = stair_length + lift_length
+    if core_used + corridor.min_d > plot_d + EPS:
+        raise SubdivisionError(
+            f"vertical core needs at least {core_used + corridor.min_d:.1f}m depth "
+            f"but the plot only has {plot_d:.1f}m"
+        )
+    if core_width >= plot_w - EPS:
+        raise SubdivisionError(
+            f"vertical core is {core_width:.1f}m wide but the plot is only {plot_w:.1f}m"
+        )
+
+    core_bands: list[tuple[Rect, list[RoomNeed]]] = [
+        (Rect(0.0, 0.0, core_width, stair_length), [stair]),
+    ]
+    offset = stair_length
+    if lift is not None:
+        core_bands.append((Rect(0.0, offset, core_width, lift_length), [lift]))
+        offset += lift_length
+    corridor_rect = Rect(0.0, offset, core_width, plot_d - offset)
+    core_bands.append((corridor_rect, [corridor]))
+
+    core_keys = {stair.key, corridor.key}
+    if lift is not None:
+        core_keys.add(lift.key)
+    remaining = [need for need in program.needs if need.key not in core_keys]
+    if not remaining:
+        raise SubdivisionError("multi-floor generation needs at least one non-core room per floor")
+
+    components = _must_components(remaining, program.must_adjacent)
+    served = [
+        group for group in components
+        if any(
+            catalog.privacy_level_for(need.type) >= _THROUGH_ROOM_PRIVACY_THRESHOLD
+            for need in group
+        )
+    ]
+    served_keys = {need.key for group in served for need in group}
+    flex = [need for need in remaining if need.key not in served_keys]
+    groups = served + ([flex] if flex else [])
+
+    wing = Rect(core_width, 0.0, plot_w - core_width, plot_d)
+    group_rects = _split_rect(wing, "d", groups)
+    wing_bands = [
+        flat
+        for rect, group in zip(group_rects, groups)
+        for flat in (
+            _flatten_cluster_band(rect, group)
+            if group in served
+            else [(rect, group)]
+        )
+    ]
+    return BandPlan(
+        bands=core_bands + wing_bands,
+        corridor_rects=[(corridor.key, corridor_rect)],
+    )
+
+
 ArchetypeFn = Callable[[EngineProgram, float, float, Facing], BandPlan]
 ARCHETYPES: dict[str, ArchetypeFn] = {
     "zoned_bands": zoned_bands,
