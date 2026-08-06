@@ -617,34 +617,44 @@ def rebuild_derived_geometry(
     multi_floor = len(floors) > 1 or floors != [0]
     all_walls: list[Wall] = []
     all_doors: list[Door] = []
+    polygon_mode = plan.plot.boundary is not None or any(
+        room.vertices is not None for room in plan.rooms
+    )
+    plot_polygon = polygon.plot_to_polygon(plan.plot) if polygon_mode else None
     for floor in floors:
-        placed: list[tuple[RoomNeed, Rect]] = []
+        placed = []
         for room in plan.rooms:
             if room.floor != floor:
                 continue
             min_w, min_d = catalog.min_dimensions(room.type)
+            shape = polygon.room_to_polygon(room) if polygon_mode else None
             placed.append(
                 (
                     RoomNeed(
                         key=room.id,
                         type=room.type,
                         label=room.label,
-                        preferred_area=room.w * room.h,
+                        preferred_area=(shape.area if shape is not None else room.w * room.h),
                         min_w=min_w,
                         min_d=min_d,
                     ),
-                    Rect(room.x, room.y, room.w, room.h),
+                    shape if shape is not None else Rect(room.x, room.y, room.w, room.h),
                 )
             )
 
         prefix = f"f{floor}-" if multi_floor else ""
-        walls, wall_rooms = _build_walls(
-            placed,
-            plan.plot.width_m,
-            plan.plot.depth_m,
-            floor=floor,
-            id_prefix=prefix,
-        )
+        if polygon_mode:
+            walls, wall_rooms = _build_walls_polygon(
+                placed, plot_polygon, floor=floor, id_prefix=prefix
+            )
+        else:
+            walls, wall_rooms = _build_walls(
+                placed,
+                plan.plot.width_m,
+                plan.plot.depth_m,
+                floor=floor,
+                id_prefix=prefix,
+            )
         zone_of = {need.key: catalog.zone_for(need.type) for need, _ in placed}
         doors = _place_doors(
             placed,

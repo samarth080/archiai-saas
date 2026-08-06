@@ -37,6 +37,7 @@ from app.schemas.quality_report import Violation
 from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services.catalog import resolve_alias
 from app.services import catalog
+from app.services.layout_engine import polygon
 from app.services.layout_engine.geometry import EPS, Rect
 
 _TOUCH_EPS = 0.05  # door-midpoint to room-boundary tolerance (5 cm)
@@ -48,16 +49,20 @@ def _rect(room: PlanRoom) -> Rect:
 
 def _door_point(door: Door, wall: Wall) -> tuple[float, float]:
     """Midpoint of the door leaf along its host wall."""
-    length = abs(wall.x2 - wall.x1) + abs(wall.y2 - wall.y1)
+    dx = wall.x2 - wall.x1
+    dy = wall.y2 - wall.y1
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= EPS:
+        return wall.x1, wall.y1
     at = min(door.offset + door.width / 2, length)
-    if abs(wall.x2 - wall.x1) <= EPS:  # vertical wall
-        y = min(wall.y1, wall.y2) + at
-        return wall.x1, y
-    x = min(wall.x1, wall.x2) + at
-    return x, wall.y1
+    return wall.x1 + dx * at / length, wall.y1 + dy * at / length
 
 
 def _touches(room: PlanRoom, x: float, y: float) -> bool:
+    if room.vertices is not None:
+        from shapely.geometry import Point
+
+        return polygon.room_to_polygon(room).boundary.distance(Point(x, y)) <= _TOUCH_EPS
     r = _rect(room)
     on_vertical = (abs(x - r.x) <= _TOUCH_EPS or abs(x - r.x2) <= _TOUCH_EPS) and (
         r.y - _TOUCH_EPS <= y <= r.y2 + _TOUCH_EPS
@@ -66,6 +71,25 @@ def _touches(room: PlanRoom, x: float, y: float) -> bool:
         r.x - _TOUCH_EPS <= x <= r.x2 + _TOUCH_EPS
     )
     return on_vertical or on_horizontal
+
+
+def _rooms_overlap(a: PlanRoom, b: PlanRoom) -> bool:
+    if a.vertices is None and b.vertices is None:
+        return _rect(a).overlaps(_rect(b))
+    return polygon.room_to_polygon(a).intersection(
+        polygon.room_to_polygon(b)
+    ).area > EPS * EPS
+
+
+def _inside_plot(room: PlanRoom, plan: LayoutPlan) -> bool:
+    if room.vertices is None and plan.plot.boundary is None:
+        return Rect(0.0, 0.0, plan.plot.width_m, plan.plot.depth_m).contains(
+            _rect(room)
+        )
+    outside = polygon.room_to_polygon(room).difference(
+        polygon.plot_to_polygon(plan.plot)
+    )
+    return outside.area <= EPS * EPS
 
 
 def _door_adjacency(plan: LayoutPlan) -> dict[str, set[str]]:
@@ -283,12 +307,10 @@ def validate(
         requirements.floors if requirements is not None else None,
     ))
 
-    plot = Rect(0.0, 0.0, plan.plot.width_m, plan.plot.depth_m)
-
     # (a) pairwise overlap, epsilon-aware
     for i, a in enumerate(rooms):
         for b in rooms[i + 1:]:
-            if a.floor == b.floor and _rect(a).overlaps(_rect(b)):
+            if a.floor == b.floor and _rooms_overlap(a, b):
                 violations.append(Violation(
                     code="overlap",
                     room_ids=[a.id, b.id],
@@ -297,7 +319,7 @@ def validate(
 
     # (b) inside the plot
     for room in rooms:
-        if not plot.contains(_rect(room)):
+        if not _inside_plot(room, plan):
             violations.append(Violation(
                 code="out_of_bounds",
                 room_ids=[room.id],

@@ -11,6 +11,7 @@ from app.schemas.layout_plan import LayoutPlan, PlanRoom
 from app.schemas.quality_report import QualityWarning
 from app.schemas.requirements import RequirementsSpec, RoomType
 from app.services import catalog
+from app.services.layout_engine import polygon
 from app.services.layout_engine.geometry import EPS, Rect
 
 
@@ -26,7 +27,14 @@ def _rect(room: PlanRoom) -> Rect:
 
 
 def rooms_share_wall(a: PlanRoom, b: PlanRoom) -> bool:
-    return a.floor == b.floor and _rect(a).shared_edge(_rect(b)) is not None
+    if a.floor != b.floor:
+        return False
+    if a.vertices is None and b.vertices is None:
+        return _rect(a).shared_edge(_rect(b)) is not None
+    shared = polygon.room_to_polygon(a).boundary.intersection(
+        polygon.room_to_polygon(b).boundary
+    )
+    return shared.length > EPS
 
 
 def _canonical(space_type: str) -> str:
@@ -134,6 +142,11 @@ def privacy_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRuleR
 
 
 def _touches_plot_edge(room: PlanRoom, plan: LayoutPlan) -> bool:
+    if room.vertices is not None or plan.plot.boundary is not None:
+        shared = polygon.room_to_polygon(room).boundary.intersection(
+            polygon.plot_to_polygon(plan.plot).boundary
+        )
+        return shared.length > EPS
     return (
         room.x <= EPS
         or room.y <= EPS
@@ -233,6 +246,15 @@ def wet_stack_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRul
         return SoftRuleResult(name="wet_stack", score=1.0)
 
     def overlaps_below(room: PlanRoom) -> bool:
+        if room.vertices is not None or any(
+            below.vertices is not None for below in wet_rooms
+        ):
+            shape = polygon.room_to_polygon(room)
+            return any(
+                below.floor == room.floor - 1
+                and shape.intersection(polygon.room_to_polygon(below)).area > EPS * EPS
+                for below in wet_rooms
+            )
         rect = _rect(room)
         return any(
             below.floor == room.floor - 1
@@ -264,7 +286,7 @@ def floor_area_balance_rule(
     if len(floors) <= 1:
         return SoftRuleResult(name="floor_area_balance", score=1.0)
     areas = [
-        sum(room.w * room.h for room in plan.rooms if room.floor == floor)
+        sum(polygon.room_area(room) for room in plan.rooms if room.floor == floor)
         for floor in floors
     ]
     score = min(areas) / max(areas) if max(areas) else 1.0

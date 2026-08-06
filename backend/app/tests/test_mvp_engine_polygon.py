@@ -17,9 +17,15 @@ from app.schemas.requirements import (
     RoomType,
     Vertex,
 )
-from app.services.layout_engine import DoesNotFitError, generate_plan
+from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Wall
+from app.services.layout_engine import (
+    DoesNotFitError,
+    generate_plan,
+    rebuild_derived_geometry,
+)
 from app.services.layout_engine import polygon as polygon_mod
 from app.services.layout_engine.geometry import Rect
+from app.services.quality.hard_constraints import validate
 
 _TRAPEZOID = [
     Vertex(x=0, y=0), Vertex(x=12, y=0), Vertex(x=12, y=6), Vertex(x=8, y=10), Vertex(x=0, y=10),
@@ -156,6 +162,67 @@ def test_l_shaped_non_convex_plot_produces_a_sound_plan():
         RoomRequest(type=RoomType.kitchen, count=1),
     ]))
     _assert_polygon_plan_is_sound(plan)
+
+
+def test_slanted_shared_wall_is_reachable_without_bbox_false_overlap():
+    boundary = [
+        Vertex(x=0, y=0), Vertex(x=4, y=0),
+        Vertex(x=4, y=4), Vertex(x=0, y=4),
+    ]
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=4, depth_m=4, boundary=boundary),
+        rooms=[
+            PlanRoom(
+                id="entry", type="entry", label="Entry",
+                x=0, y=0, w=4, h=4,
+                vertices=[boundary[0], boundary[1], boundary[3]],
+            ),
+            PlanRoom(
+                id="bedroom", type="bedroom", label="Bedroom",
+                x=0, y=0, w=4, h=4,
+                vertices=[boundary[1], boundary[2], boundary[3]],
+            ),
+        ],
+        walls=[Wall(id="diagonal", x1=4, y1=0, x2=0, y2=4)],
+        doors=[Door(id="door", wall_ref="diagonal", offset=1, width=0.9)],
+    )
+
+    assert validate(plan) == []
+
+
+def test_polygon_room_in_an_l_plot_notch_is_out_of_bounds():
+    boundary = [
+        Vertex(x=0, y=0), Vertex(x=10, y=0), Vertex(x=10, y=6),
+        Vertex(x=6, y=6), Vertex(x=6, y=10), Vertex(x=0, y=10),
+    ]
+    room_vertices = [
+        Vertex(x=7, y=7), Vertex(x=9, y=7),
+        Vertex(x=9, y=9), Vertex(x=7, y=9),
+    ]
+    plan = LayoutPlan(
+        plot=PlanPlot(width_m=10, depth_m=10, boundary=boundary),
+        rooms=[PlanRoom(
+            id="outside", type="entry", label="Outside",
+            x=7, y=7, w=2, h=2, vertices=room_vertices,
+        )],
+    )
+
+    assert "out_of_bounds" in {violation.code for violation in validate(plan)}
+
+
+def test_polygon_editor_sync_rebuilds_real_edges_without_losing_vertices():
+    spec = _spec(_TRAPEZOID)
+    plan = generate_plan(spec)
+
+    rebuilt = rebuild_derived_geometry(plan, spec)
+
+    assert rebuilt.plot.boundary == plan.plot.boundary
+    assert [room.vertices for room in rebuilt.rooms] == [
+        room.vertices for room in plan.rooms
+    ]
+    assert len(rebuilt.walls) == len(plan.walls)
+    assert len(rebuilt.doors) == len(plan.doors)
+    assert validate(rebuilt, spec) == []
 
 
 # ── Go/no-go property gate, mirroring test_mvp_engine.py's rect-path gate ────

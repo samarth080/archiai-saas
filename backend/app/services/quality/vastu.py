@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.schemas.layout_plan import LayoutPlan, PlanPlot, PlanRoom
 from app.schemas.quality_report import QualityWarning
+from app.services.layout_engine import polygon
 
 
 @dataclass(frozen=True)
@@ -50,8 +51,12 @@ def load_rules() -> tuple[VastuRule, ...]:
 def sector_for_room(room: PlanRoom, plot: PlanPlot) -> str:
     """Return one of the north-up 3x3 compass sectors from room centroid."""
 
-    centre_x = room.x + room.w / 2
-    centre_y = room.y + room.h / 2
+    if room.vertices is None:
+        centre_x = room.x + room.w / 2
+        centre_y = room.y + room.h / 2
+    else:
+        centre = polygon.room_to_polygon(room).centroid
+        centre_x, centre_y = centre.x, centre.y
     horizontal = (
         "west"
         if centre_x < plot.width_m / 3

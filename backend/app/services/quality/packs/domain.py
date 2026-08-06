@@ -6,6 +6,7 @@ from app.schemas.layout_plan import LayoutPlan, PlanRoom
 from app.schemas.quality_report import QualityWarning
 from app.schemas.requirements import RequirementsSpec
 from app.services.quality.soft_rules import SoftRuleResult, rooms_share_wall
+from app.services.layout_engine.polygon import room_area
 
 _CONSULTATION_TYPES = {"consultation_room", "exam_room", "treatment_room"}
 _WAITING_TYPES = {"waiting_room", "waiting_area"}
@@ -90,7 +91,7 @@ def repeat_unit_uniformity_rule(
     scores: list[float] = []
     warnings: list[QualityWarning] = []
     for rooms in groups:
-        areas = [room.w * room.h for room in rooms]
+        areas = [room_area(room) for room in rooms]
         spread = (max(areas) - min(areas)) / fmean(areas)
         scores.append(max(0.0, 1.0 - spread))
         if spread > 0.2:

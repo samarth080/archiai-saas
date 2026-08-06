@@ -15,6 +15,7 @@ module docstring for the full rationale).
 from __future__ import annotations
 
 from shapely.geometry import Point, Polygon, box
+from shapely.ops import snap
 
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 
@@ -28,6 +29,27 @@ def polygon_from_vertices(vertices) -> Polygon:
 
 def rect_to_polygon(rect: Rect) -> Polygon:
     return box(rect.x, rect.y, rect.x2, rect.y2)
+
+
+def room_to_polygon(room) -> Polygon:
+    """Return a room's real outline, falling back to its rectangular bbox."""
+    if room.vertices is not None:
+        return polygon_from_vertices(room.vertices)
+    return box(room.x, room.y, room.x + room.w, room.y + room.h)
+
+
+def plot_to_polygon(plot) -> Polygon:
+    """Return a plot's real boundary without changing the rectangular path."""
+    if plot.boundary is not None:
+        return polygon_from_vertices(plot.boundary)
+    return box(0.0, 0.0, plot.width_m, plot.depth_m)
+
+
+def room_area(room) -> float:
+    """Floor area from the outline; byte-identical multiplication for rects."""
+    if room.vertices is None:
+        return room.w * room.h
+    return room_to_polygon(room).area
 
 
 def is_axis_aligned_rect(polygon: Polygon) -> bool:
@@ -51,7 +73,10 @@ def shared_edges(a: Polygon, b: Polygon, eps: float = EPS) -> list[Segment]:
     run (not a single point — corner-only contact is not adjacency, mirroring
     ``Rect.shared_edge``'s documented rule). A non-convex pair can share more
     than one disjoint run, hence a list."""
-    inter = a.boundary.intersection(b.boundary)
+    # Canonical plans round coordinates to millimetres before editor sync.
+    # Snap that harmless drift back together so rebuilding derived walls does
+    # not drop an edge whose two serialized endpoints differ by < EPS.
+    inter = snap(a, b, eps).boundary.intersection(b.boundary)
     geoms = list(getattr(inter, "geoms", [inter]))
     segments: list[Segment] = []
     for geom in geoms:
