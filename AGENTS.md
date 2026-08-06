@@ -753,8 +753,10 @@ Deferred (Phase 4 remainder): richer graph-driven placement honouring `preferred
 - [x] Phase 7 gates: backend 944 passed/3 expected skips; frontend 273 passed across 54 files; typecheck and production build clean; 300 deterministic randomized 2–3-floor briefs returned 262 valid plans and 38 honest fit refusals with zero invalid plans.
 - [x] Phase 8 (`codex/phase8-requirements-extraction`, stacked on Phase 7): catalog-native arbitrary programs, self-describing unknown-space metadata, low-confidence clarification, free-string relationships, catalog-aware parser recovery, and canonical frontend routing are complete.
 - [x] Phase 8 gates: 24 golden briefs include 15 non-residential programs; all 15 generate valid layouts on a fit plot. Backend 970 passed/3 expected live-model skips; frontend 274 passed across 54 files; typecheck and production build clean.
-- [ ] Phase 5.2 simulated annealing remains optional and benchmark-gated; do not add it until best-of-64 misses a measured quality target.
-- [ ] Phase 9 hardening is next and must use its own branch. Multi-floor polygon boundaries remain an explicit unsupported combination, not a silent bounding-box fallback.
+- [x] Phase 9 (`codex/phase9-engine-hardening`, stacked on Phase 8): sanitary rooms receive corridor-served geometry, specialized archetypes hard-validate with one safe fallback, 13 parser-template building fixtures have complete golden plans/scores, and CI publishes the single-shot versus best-of-64 benchmark matrix.
+- [x] Phase 9 gates: all four archetypes pass 80 deterministic catalog-program property cases; the hand-coded landlocked-bath plan pins privacy-chain, wet-room exterior, and Brahmasthan diagnostics; all 13 fixtures rebuild editor geometry; backend 1,011 passed/3 skipped, frontend 274 passed, typecheck and production build clean.
+- [ ] Phase 5.2 simulated annealing remains deliberately deferred: best-of-64 is never worse than single-shot across the 13-fixture benchmark and remains far below the 3-second ceiling, so the workflow's benchmark gate does not justify another optimizer yet.
+- [ ] Multi-floor polygon boundaries remain an explicit unsupported combination, not a silent bounding-box fallback.
 
 ---
 
