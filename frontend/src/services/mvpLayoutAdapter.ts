@@ -162,6 +162,7 @@ export function layoutPlanToCanvas(
       },
       rotation: { x: 0, y: room.rotation, z: 0 },
       color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
+      ...(room.zone_id ? { zoneId: room.zone_id } : {}),
     }
   })
   const objects = [...roomObjects, ...layoutPlanDerivedObjects(layout)]
@@ -195,6 +196,9 @@ export function layoutPlanToCanvas(
       mvpRequirements: options.requirements,
       mvpQuality: options.quality,
       mvpVastuEnabled: /va?astu/i.test(options.prompt ?? ''),
+      ...(layout.archetype_reasons?.length
+        ? { archetypeReasons: layout.archetype_reasons }
+        : {}),
     },
     building: {
       floorHeight: WALL_HEIGHT_M,
@@ -244,6 +248,7 @@ export function canvasObjectsToLayoutPlan(
         h: round3(worldDepth),
         rotation,
         floor: room.floorLevel ?? 0,
+        ...(typeof room.zoneId === 'string' ? { zone_id: room.zoneId } : {}),
       }
     })
 

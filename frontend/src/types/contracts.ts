@@ -60,6 +60,22 @@ export interface PlanRoom {
   h: number
   rotation: Rotation
   floor?: number
+  zone_id?: string
+}
+
+export interface PlanZoneSpan {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface ArchetypeReason {
+  zone_id: string
+  archetype: string
+  reason: string
+  room_ids: string[]
+  spans: PlanZoneSpan[]
 }
 
 export interface Wall {
@@ -84,6 +100,7 @@ export interface LayoutPlan {
   rooms: PlanRoom[]
   walls: Wall[]
   doors: Door[]
+  archetype_reasons?: ArchetypeReason[]
 }
 
 export interface Violation { code: string; room_ids: string[]; message: string }

@@ -122,6 +122,7 @@ def layout_plan_to_canvas(
             "size": {"w": room.w, "h": WALL_HEIGHT_M, "d": room.h},
             "rotation": _rotation(room.rotation),
             "color": _room_color(room.type),
+            **({"zoneId": room.zone_id} if room.zone_id is not None else {}),
         }
         for room in plan.rooms
     ]
@@ -167,6 +168,11 @@ def layout_plan_to_canvas(
         metadata["mvpRequirements"] = requirements
     if quality is not None:
         metadata["mvpQuality"] = quality
+    if plan.archetype_reasons:
+        metadata["archetypeReasons"] = [
+            reason.model_dump(mode="json")
+            for reason in plan.archetype_reasons
+        ]
 
     return {
         "version": "1.0",

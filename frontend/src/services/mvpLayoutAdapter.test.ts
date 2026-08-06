@@ -236,6 +236,41 @@ describe('canonical MVP layout adapter', () => {
     expect(restored.doors[0].floor).toBe(1)
   })
 
+  it('preserves hierarchical zone identity and exposes archetype reasons', () => {
+    const hierarchical: LayoutPlan = {
+      ...layout,
+      rooms: layout.rooms.map((room) => ({
+        ...room,
+        zone_id: room.id === 'room-1' ? 'zone-classrooms' : 'zone-support',
+      })),
+      archetype_reasons: [{
+        zone_id: 'zone-classrooms',
+        archetype: 'double_loaded_corridor',
+        reason: 'repeat classrooms share a spine',
+        room_ids: ['room-1'],
+        spans: [{ x: 0, y: 0, w: 4.5, h: 12 }],
+      }],
+    }
+
+    const canvas = layoutPlanToCanvas(hierarchical)
+    const restored = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 9, d: 12 },
+      'east',
+    )
+
+    expect(canvas.metadata?.archetypeReasons).toEqual(
+      hierarchical.archetype_reasons,
+    )
+    expect(canvas.rooms.find((room) => room.id === 'room-1')?.zoneId).toBe(
+      'zone-classrooms',
+    )
+    expect(restored.rooms.map((room) => room.zone_id)).toEqual([
+      'zone-classrooms',
+      'zone-support',
+    ])
+  })
+
   it('carries generation identity and produces deterministic canvas JSON', () => {
     const response: GenerateMvpResponse = {
       requirements,

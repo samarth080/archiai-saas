@@ -1,5 +1,7 @@
 """Canonical-to-canvas compatibility checks for the MVP layout adapter."""
 
+from pathlib import Path
+
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_adapter import layout_plan_to_canvas
 from app.services.layout_engine import generate_plan
@@ -82,3 +84,26 @@ def test_multi_floor_plan_maps_objects_to_existing_canvas_levels():
     assert {
         stair["position"]["y"] for stair in stairs
     } == {1.5, 4.5}
+
+
+def test_hierarchical_zone_metadata_reaches_the_existing_canvas_contract():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "requirements"
+        / "phase10_composed_school.json"
+    )
+    spec = RequirementsSpec.model_validate_json(fixture.read_text(encoding="utf-8"))
+
+    canvas = layout_plan_to_canvas(generate_plan(spec))
+
+    reasons = canvas["metadata"]["archetypeReasons"]
+    assert {reason["archetype"] for reason in reasons} >= {
+        "double_loaded_corridor",
+        "open_core",
+    }
+    canonical_rooms = [
+        room for room in canvas["rooms"]
+        if room["objectType"] in {"room", "stair"}
+    ]
+    assert all(room["zoneId"] for room in canonical_rooms)
