@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 
 from app.config.mvp_defaults import ROOM_SIZING
-from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType
+from app.schemas.requirements import RequirementsSpec, RoomRequest, RoomType, SpaceRequest
 from app.services.catalog import (
     CATALOG,
     CIRCULATION_WIDTHS,
     SpaceType,
     UnknownSpaceType,
     get,
+    ensure_registered,
     min_dimensions,
     register,
     resolve_alias,
@@ -88,6 +89,18 @@ def test_get_is_case_and_separator_insensitive():
     assert get("MASTER-BEDROOM").key == "master_bedroom"
 
 
+@pytest.mark.parametrize(
+    "alias,key",
+    [
+        ("doctor's room", "consultation_room"),
+        ("sales floor", "sales_floor"),
+        ("attached bathroom", "ensuite"),
+    ],
+)
+def test_parser_vocabulary_aliases_resolve_through_the_catalog(alias, key):
+    assert resolve_alias(alias) == key
+
+
 def test_unknown_type_raises_with_no_invented_guess():
     with pytest.raises(UnknownSpaceType) as exc_info:
         get("recording_studio")
@@ -116,6 +129,38 @@ def test_register_extends_the_catalog_for_the_session():
         assert get("recording_studio").preferred_area_m2 == 15.0
     finally:
         CATALOG.pop("recording_studio", None)
+
+
+def test_high_confidence_unknown_space_registers_with_bounded_area():
+    request = SpaceRequest(
+        space_type="podcast_studio",
+        count=1,
+        zone_guess="private",
+        size_guess_m2=30,
+        confidence=0.9,
+    )
+    try:
+        key = ensure_registered(request, plot_area_m2=50)
+        space = get(key)
+        assert key == "podcast_studio"
+        assert space.zone == "private"
+        assert space.preferred_area_m2 == 20
+    finally:
+        CATALOG.pop("podcast_studio", None)
+
+
+def test_low_confidence_unknown_space_is_not_registered():
+    request = SpaceRequest(
+        space_type="podcast_studio",
+        count=1,
+        zone_guess="private",
+        size_guess_m2=18,
+        confidence=0.4,
+    )
+
+    with pytest.raises(UnknownSpaceType):
+        ensure_registered(request)
+    assert "podcast_studio" not in CATALOG
 
 
 def test_derived_minimums_for_base_sizes_only_types_respect_the_absolute_floor():

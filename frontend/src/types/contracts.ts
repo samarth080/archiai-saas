@@ -19,8 +19,18 @@ export type RoomType =
 export type Facing = 'north' | 'south' | 'east' | 'west'
 
 export interface RoomRequest { type: RoomType; count: number }
-export interface AdjacencyPref { room_a: RoomType; room_b: RoomType; strength: 'must' | 'should' }
-export interface AvoidPair { room_a: RoomType; room_b: RoomType }
+export interface SpaceRequest {
+  space_type: string
+  count: number
+  size_hint?: 'small' | 'medium' | 'large' | 'xlarge' | null
+  area_m2?: number | null
+  priority?: number | null
+  zone_guess?: 'public' | 'private' | 'semi_private' | 'service' | 'circulation' | 'outdoor' | 'technical' | null
+  size_guess_m2?: number | null
+  confidence?: number | null
+}
+export interface AdjacencyPref { room_a: string; room_b: string; strength: 'must' | 'should' }
+export interface AvoidPair { room_a: string; room_b: string }
 export interface PlotSpec { width_m: number | null; depth_m: number | null }
 
 export interface RequirementsSpec {
@@ -28,6 +38,7 @@ export interface RequirementsSpec {
   floors: number
   accessibility_mode?: boolean
   rooms: RoomRequest[]
+  spaces?: SpaceRequest[]
   adjacency: AdjacencyPref[]
   avoid_adjacency: AvoidPair[]
   plot: PlotSpec

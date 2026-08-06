@@ -80,6 +80,46 @@ def test_space_priority_is_a_strict_bounded_integer(priority):
         })
 
 
+def test_space_guess_metadata_and_free_string_constraints_are_validated():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [{
+            "space_type": "recording_studio",
+            "count": 1,
+            "zone_guess": "private",
+            "size_guess_m2": 18,
+            "confidence": 0.9,
+        }],
+        "adjacency": [{
+            "room_a": "recording_studio",
+            "room_b": "control_room",
+            "strength": "must",
+        }],
+        "avoid_adjacency": [{
+            "room_a": "recording_studio",
+            "room_b": "classroom",
+        }],
+    })
+
+    assert spec.spaces[0].zone_guess == "private"
+    assert spec.spaces[0].size_guess_m2 == 18
+    assert spec.adjacency[0].room_a == "recording_studio"
+    assert spec.avoid_adjacency[0].room_b == "classroom"
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.1, "0.9"])
+def test_space_confidence_is_numeric_and_bounded(confidence):
+    with pytest.raises(ValidationError):
+        RequirementsSpec.model_validate({
+            "spaces": [{
+                "space_type": "recording_studio",
+                "count": 1,
+                "zone_guess": "private",
+                "size_guess_m2": 18,
+                "confidence": confidence,
+            }],
+        })
+
+
 def test_plot_bounds_enforced():
     with pytest.raises(ValidationError):
         RequirementsSpec.model_validate({"plot": {"width_m": 150.0, "depth_m": 12.0}})

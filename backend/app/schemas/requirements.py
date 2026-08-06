@@ -21,7 +21,7 @@ Changing this file is a mini-migration, not a casual edit (workflow Step 0.3).
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, field_validator
 
 
 class BuildingType(str, Enum):
@@ -68,6 +68,16 @@ RulePackName = Literal[
     "vastu",
 ]
 
+ZoneName = Literal[
+    "public",
+    "private",
+    "semi_private",
+    "service",
+    "circulation",
+    "outdoor",
+    "technical",
+]
+
 
 def _reject_string_number(value: object) -> object:
     """Dimensions must arrive as numbers, not numeric strings — the schema is the
@@ -108,21 +118,27 @@ class SpaceRequest(BaseModel):
     # Lower numbers are more important. None means the user did not authorize
     # the engine to treat this space as expendable during fit negotiation.
     priority: StrictInt | None = Field(default=None, ge=1, le=100)
+    # Metadata for a genuinely unknown catalog key. Known keys need none of
+    # these; unknown keys need all three and sufficient confidence before the
+    # service boundary will register them.
+    zone_guess: ZoneName | None = None
+    size_guess_m2: float | None = Field(default=None, gt=1, lt=2000)
+    confidence: StrictFloat | None = Field(default=None, ge=0, le=1)
 
 
 class AdjacencyPref(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    room_a: RoomType
-    room_b: RoomType
+    room_a: str = Field(min_length=1, max_length=64)
+    room_b: str = Field(min_length=1, max_length=64)
     strength: Literal["must", "should"]
 
 
 class AvoidPair(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    room_a: RoomType
-    room_b: RoomType
+    room_a: str = Field(min_length=1, max_length=64)
+    room_b: str = Field(min_length=1, max_length=64)
 
 
 class Vertex(BaseModel):

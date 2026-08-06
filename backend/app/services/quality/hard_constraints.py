@@ -134,8 +134,8 @@ def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | N
     for pref in requirements.adjacency:
         if pref.strength != "must":
             continue
-        a_ids = [rid for rid, t in types_by_id.items() if t == pref.room_a.value]
-        b_ids = [rid for rid, t in types_by_id.items() if t == pref.room_b.value]
+        a_ids = [rid for rid, t in types_by_id.items() if t == pref.room_a]
+        b_ids = [rid for rid, t in types_by_id.items() if t == pref.room_b]
         for a in a_ids:
             for b in b_ids:
                 if a != b:

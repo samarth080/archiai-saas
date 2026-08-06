@@ -59,8 +59,8 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
         if satisfied:
             earned += weight
             continue
-        a_label = preference.room_a.value.replace("_", " ").title()
-        b_label = preference.room_b.value.replace("_", " ").title()
+        a_label = preference.room_a.replace("_", " ").title()
+        b_label = preference.room_b.replace("_", " ").title()
         qualifier = "must share a wall" if preference.strength == "must" else "would work better beside"
         warnings.append(
             QualityWarning(
@@ -78,8 +78,8 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
         if not violates:
             earned += 2.0
             continue
-        a_label = pair.room_a.value.replace("_", " ").title()
-        b_label = pair.room_b.value.replace("_", " ").title()
+        a_label = pair.room_a.replace("_", " ").title()
+        b_label = pair.room_b.replace("_", " ").title()
         warnings.append(
             QualityWarning(
                 code="generic.adjacency.avoid",

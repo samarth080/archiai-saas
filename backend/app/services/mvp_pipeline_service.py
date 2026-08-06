@@ -59,13 +59,13 @@ def understood_summary(spec: RequirementsSpec) -> list[str]:
         spec.adjacency,
         key=lambda item: (
             strength_order[item.strength],
-            item.room_a.value,
-            item.room_b.value,
+            item.room_a,
+            item.room_b,
         ),
     ):
         relation = "Must connect" if edge.strength == "must" else "Prefer nearby"
-        a = edge.room_a.value.replace("_", " ")
-        b = edge.room_b.value.replace("_", " ")
+        a = edge.room_a.replace("_", " ")
+        b = edge.room_b.replace("_", " ")
         summary.append(f"{relation}: {a} ↔ {b}")
     return summary
 
