@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.schemas.requirements import RequirementsSpec
-from app.services.layout_engine.engine import generate_plan
+from app.services.layout_engine.engine import generate_plan, rebuild_derived_geometry
 from app.services.parser.data.building_templates import BUILDING_TEMPLATES
 from app.services.quality.hard_constraints import validate
 from app.services.quality.scorer import score
@@ -54,3 +54,20 @@ def test_template_fixture_matches_golden_layout_and_quality(name: str):
         expected["quality_score"],
         abs=2,
     )
+
+
+@pytest.mark.parametrize("name", TEMPLATE_NAMES)
+def test_editor_rebuild_preserves_new_space_types_and_floors(name: str):
+    spec = _load(name)
+    plan = generate_plan(spec)
+    stale = plan.model_copy(update={"walls": [], "doors": []})
+
+    rebuilt = rebuild_derived_geometry(stale, spec)
+
+    assert rebuilt.rooms == plan.rooms
+    assert rebuilt.walls
+    assert rebuilt.doors
+    assert validate(rebuilt, spec) == []
+    assert {room.floor for room in rebuilt.rooms} == set(range(spec.floors))
+    assert len({wall.id for wall in rebuilt.walls}) == len(rebuilt.walls)
+    assert len({door.id for door in rebuilt.doors}) == len(rebuilt.doors)
