@@ -1,9 +1,15 @@
 """Workflow Phase 7 canonical multi-floor generation."""
 
+import json
+from pathlib import Path
+
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_engine import generate_plan
 from app.services.layout_engine.search import best_candidate
 from app.services.quality.hard_constraints import validate
+
+
+FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
 
 
 def _two_storey() -> RequirementsSpec:
@@ -63,6 +69,25 @@ def test_two_storey_home_splits_day_and_night_zones_and_stays_valid():
         room.floor == 1
         for room in plan.rooms
         if room.type == "bedroom"
+    )
+
+
+def test_four_bhk_fixture_splits_day_and_night_zones_across_two_floors():
+    payload = json.loads((FIXTURES / "4bhk.json").read_text(encoding="utf-8"))
+    spec = RequirementsSpec.model_validate({**payload, "floors": 2})
+
+    plan = generate_plan(spec)
+
+    assert validate(plan, spec) == []
+    assert all(
+        room.floor == 0
+        for room in plan.rooms
+        if room.type in {"entry", "living_room", "kitchen", "dining", "parking"}
+    )
+    assert all(
+        room.floor == 1
+        for room in plan.rooms
+        if room.type in {"bedroom", "master_bedroom"}
     )
 
 
