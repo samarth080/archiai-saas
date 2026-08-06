@@ -1012,9 +1012,10 @@ def _macro_zones(program: EngineProgram, corridor: RoomNeed) -> list[_MacroZone]
     if not zones or len(remaining) < 2:
         return []
 
-    # A dominant room with a real service dependency gets its own core zone.
-    # Requiring both the >=50% selector threshold and a dependency avoids
-    # manufacturing one-room zones merely because an isolated room is large.
+    # A dominant room with a real service dependency names the remaining
+    # front/support program as one open-core macro-zone. Keeping its support
+    # rooms in that zone lets the existing selector see the real area share
+    # while preserving the dominant-to-service MUST edge inside one wing.
     dominant = max(remaining, key=lambda room: (room.preferred_area, room.key))
     remaining_area = sum(room.preferred_area for room in remaining) or 1.0
     attached = _service_partners(
@@ -1022,23 +1023,16 @@ def _macro_zones(program: EngineProgram, corridor: RoomNeed) -> list[_MacroZone]
         {dominant.key},
         {room.key for room in remaining if room.key != dominant.key},
     )
-    core_keys = {dominant.key} | attached
     if (
         dominant.preferred_area / remaining_area >= _MIN_DOMINANT_SHARE
-        and len(core_keys) >= 2
-        and len(remaining) - len(core_keys) >= 2
+        and attached
     ):
-        core_rooms = [room for room in remaining if room.key in core_keys]
         zones.append(_MacroZone(
             zone_id=f"zone-core-{dominant.type}",
-            rooms=core_rooms,
+            rooms=remaining,
         ))
-        unassigned -= core_keys
-
-    support = [room for room in candidates if room.key in unassigned]
-    if len(support) < 2:
-        return []
-    zones.append(_MacroZone(zone_id="zone-support", rooms=support))
+    else:
+        zones.append(_MacroZone(zone_id="zone-support", rooms=remaining))
     return zones
 
 
@@ -1055,8 +1049,16 @@ def _zone_sides(
         back, facing = rooms[0::2], rooms[1::2]
     elif archetype == "open_core":
         dominant = max(rooms, key=lambda room: (room.preferred_area, room.key))
-        facing = [dominant]
-        if entry is not None and entry.key != dominant.key:
+        partner_keys = {
+            b if a == dominant.key else a
+            for a, b in program.must_adjacent
+            if dominant.key in (a, b)
+        }
+        facing = [dominant] + [
+            room for room in rooms
+            if room.key in partner_keys and room.key != dominant.key
+        ]
+        if entry is not None and entry.key not in {room.key for room in facing}:
             facing.append(entry)
         facing_keys = {room.key for room in facing}
         back = [room for room in rooms if room.key not in facing_keys]

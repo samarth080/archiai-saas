@@ -3,7 +3,11 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from app.schemas.requirements import Facing
 from app.schemas.requirements import RequirementsSpec
+from app.services.layout_engine.search import best_candidate
 from app.services.layout_engine.engine import generate_plan
 from app.services.layout_engine.geometry import Rect
 from app.services.quality.hard_constraints import _door_adjacency, validate
@@ -84,6 +88,29 @@ def test_hierarchical_metadata_round_trips_in_the_canonical_contract():
     assert payload["archetype_reasons"][0]["zone_id"] == "zone-repeat-classroom"
     assert all("zone_id" in room for room in payload["rooms"])
     assert restored == plan
+
+
+@pytest.mark.parametrize("facing", list(Facing))
+def test_composed_school_is_valid_from_every_facing(facing: Facing):
+    spec = _load("phase10_composed_school.json").model_copy(
+        update={"facing": facing}
+    )
+
+    plan = generate_plan(spec)
+
+    assert validate(plan, spec) == []
+    assert plan.archetype_reasons is not None
+    assert len({reason.archetype for reason in plan.archetype_reasons}) >= 2
+
+
+def test_hierarchical_best_of_n_is_deterministic():
+    spec = _load("phase10_composed_school.json")
+
+    first = best_candidate(spec, n=16, seed=42)
+    second = best_candidate(spec, n=16, seed=42)
+
+    assert first == second
+    assert first.archetype_reasons is not None
 
 
 def test_plain_house_remains_byte_identical_to_the_phase9_golden():

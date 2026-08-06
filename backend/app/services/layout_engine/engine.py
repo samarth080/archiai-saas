@@ -446,6 +446,20 @@ def _place_doors(
         if a in connected or (b or "") in connected:
             connected.update({a, b} if b else {a})
 
+    def extend_through_existing_doors() -> None:
+        extended = True
+        while extended:
+            extended = False
+            for door in doors:
+                a, b = wall_rooms[door.wall_ref]
+                if b is None or (a in connected) == (b in connected):
+                    continue
+                connected.update((a, b))
+                extended = True
+
+    if not add_convenience_doors:
+        extend_through_existing_doors()
+
     changed = True
     while changed:
         changed = False
@@ -467,6 +481,11 @@ def _place_doors(
             else:
                 continue
             connected.update(pair)
+            if not add_convenience_doors:
+                # A newly reached room may already have a required/MUST door
+                # to its partner. Traverse that real opening before adding a
+                # redundant second door from the corridor.
+                extend_through_existing_doors()
             changed = True
 
     unreachable = [n.label for n, _ in placed if n.key not in connected]
