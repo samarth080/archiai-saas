@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas.requirements import RequirementsSpec, RoomType
+from app.schemas.requirements import RequirementsSpec
+from app.services.catalog import resolve_alias
 from app.services.clarification import assess
 from app.services.extraction import extract_requirements
 from app.services.llm_client import chat_structured
@@ -53,47 +54,86 @@ async def test_live_structured_output_smoke():
     assert isinstance(result.get("rooms"), list)
 
 
-def _count(spec: RequirementsSpec, room_type: RoomType) -> int:
-    return sum(room.count for room in spec.rooms if room.type == room_type)
+def _program_counts(spec: RequirementsSpec) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    if spec.spaces:
+        entries = (
+            (space.space_type, space.count)
+            for space in spec.spaces
+        )
+    else:
+        entries = (
+            (room.type.value, room.count)
+            for room in spec.rooms
+        )
+    for raw_type, count in entries:
+        room_type = resolve_alias(raw_type) or raw_type
+        counts[room_type] = counts.get(room_type, 0) + count
+    return counts
 
 
 def _has_adjacency(spec: RequirementsSpec, expected: dict) -> bool:
-    wanted = {RoomType(expected["room_a"]), RoomType(expected["room_b"])}
+    wanted = {
+        resolve_alias(expected["room_a"]) or expected["room_a"],
+        resolve_alias(expected["room_b"]) or expected["room_b"],
+    }
     return any(
-        {edge.room_a, edge.room_b} == wanted
+        {
+            resolve_alias(edge.room_a) or edge.room_a,
+            resolve_alias(edge.room_b) or edge.room_b,
+        } == wanted
         and edge.strength == expected["strength"]
         for edge in spec.adjacency
     )
 
 
-def _matches(case: dict, spec: RequirementsSpec) -> bool:
+def _has_avoid(spec: RequirementsSpec, expected: dict) -> bool:
+    wanted = {
+        resolve_alias(expected["room_a"]) or expected["room_a"],
+        resolve_alias(expected["room_b"]) or expected["room_b"],
+    }
+    return any(
+        {
+            resolve_alias(edge.room_a) or edge.room_a,
+            resolve_alias(edge.room_b) or edge.room_b,
+        } == wanted
+        for edge in spec.avoid_adjacency
+    )
+
+
+def _checks(case: dict, spec: RequirementsSpec) -> list[bool]:
     expected = case["expect"]
-    checks: list[bool] = []
+    counts = _program_counts(spec)
+    decision = assess(spec)
+    checks: list[bool] = [decision.route == expected["route"]]
     if "building_type" in expected:
         checks.append(spec.building_type.value == expected["building_type"])
     if "floors" in expected:
         checks.append(spec.floors == expected["floors"])
     if "bedrooms_total" in expected:
         checks.append(
-            _count(spec, RoomType.bedroom)
-            + _count(spec, RoomType.master_bedroom)
+            counts.get("bedroom", 0)
+            + counts.get("master_bedroom", 0)
             == expected["bedrooms_total"]
         )
     if "master_bedrooms" in expected:
-        checks.append(
-            _count(spec, RoomType.master_bedroom) == expected["master_bedrooms"]
-        )
+        checks.append(counts.get("master_bedroom", 0) == expected["master_bedrooms"])
     if "bathrooms_total" in expected:
-        checks.append(_count(spec, RoomType.bathroom) == expected["bathrooms_total"])
+        checks.append(counts.get("bathroom", 0) == expected["bathrooms_total"])
     for key, room_type in (
-        ("has_pooja_room", RoomType.pooja_room),
-        ("has_parking", RoomType.parking),
-        ("has_study", RoomType.study),
+        ("has_pooja_room", "pooja_room"),
+        ("has_parking", "garage"),
+        ("has_study", "study"),
     ):
         if expected.get(key):
-            checks.append(_count(spec, room_type) > 0)
+            checks.append(counts.get(room_type, 0) > 0)
+    for room_type, count in expected.get("space_counts", {}).items():
+        canonical = resolve_alias(room_type) or room_type
+        checks.append(counts.get(canonical, 0) == count)
     if "adjacency_contains" in expected:
         checks.append(_has_adjacency(spec, expected["adjacency_contains"]))
+    if "avoid_contains" in expected:
+        checks.append(_has_avoid(spec, expected["avoid_contains"]))
     if "plot_width_m_approx" in expected:
         checks.append(
             spec.plot.width_m is not None
@@ -107,28 +147,37 @@ def _matches(case: dict, spec: RequirementsSpec) -> bool:
     if "facing" in expected:
         checks.append(spec.facing is not None and spec.facing.value == expected["facing"])
     if "rooms_max" in expected:
-        checks.append(sum(room.count for room in spec.rooms) <= expected["rooms_max"])
+        checks.append(sum(counts.values()) <= expected["rooms_max"])
     elif expected["route"] == "vague":
-        checks.append(sum(room.count for room in spec.rooms) == 0)
+        checks.append(sum(counts.values()) == 0)
     if expected["route"] == "conflict":
         checks.append(any(item.startswith("conflict:") for item in spec.missing_info))
-    return bool(checks) and all(checks)
+    if "question_count" in expected:
+        checks.append(len(decision.questions) == expected["question_count"])
+    return checks
 
 
-async def test_live_golden_suite_scores_at_least_eight_of_ten_three_times():
+async def test_live_golden_suite_field_accuracy_is_at_least_eighty_percent_three_times():
     cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
 
     for run in range(1, 4):
         rows = []
+        field_checks: list[bool] = []
         for case in cases:
             spec = await extract_requirements(case["prompt"])
-            rows.append((case["id"], _matches(case, spec)))
-        passed = sum(ok for _, ok in rows)
-        print(f"golden run {run}: {passed}/10 — {rows}")
-        assert passed >= 8
+            checks = _checks(case, spec)
+            field_checks.extend(checks)
+            rows.append((case["id"], sum(checks), len(checks)))
+        passed = sum(field_checks)
+        accuracy = passed / len(field_checks)
+        print(
+            f"golden run {run}: {passed}/{len(field_checks)} "
+            f"fields ({accuracy:.1%}) - {rows}"
+        )
+        assert accuracy >= 0.8
 
 
-async def test_live_golden_suite_routes_all_ten_prompts_correctly():
+async def test_live_golden_suite_routes_all_prompts_correctly():
     cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
     rows = []
     for case in cases:

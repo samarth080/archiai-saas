@@ -1,6 +1,8 @@
 """MVP workflow Phase 2.2–2.3 — normalization and retry enforcement."""
 
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +13,8 @@ from app.services.extraction import (
     normalize_extraction,
 )
 
+GOLDEN = Path(__file__).parent / "golden_prompts.json"
+
 
 def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
     return sum(room.count for room in spec.rooms if room.type == room_type)
@@ -18,6 +22,11 @@ def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
 
 def _space_count(spec: RequirementsSpec, space_type: str) -> int:
     return sum(space.count for space in spec.spaces if space.space_type == space_type)
+
+
+def _contains_pair(edges, expected: dict) -> bool:
+    wanted = {expected["room_a"], expected["room_b"]}
+    return any({edge.room_a, edge.room_b} == wanted for edge in edges)
 
 
 def test_normalizer_maps_synonyms_and_explicit_feet_without_mutating_input():
@@ -311,6 +320,28 @@ def test_arbitrary_building_uses_other_and_recovers_catalog_spaces_from_prompt()
     assert "rooms" not in spec.missing_info
 
 
+def test_non_residential_relationship_phrases_reach_the_canonical_contract():
+    normalized = normalize_extraction(
+        {"building_type": "restaurant", "rooms": [], "spaces": []},
+        prompt=(
+            "Restaurant with consultation rooms off the waiting area; "
+            "keep storage away from dining"
+        ),
+    )
+    spec = RequirementsSpec.model_validate(normalized)
+
+    assert any(
+        {edge.room_a, edge.room_b}
+        == {"consultation_room", "waiting_room"}
+        and edge.strength == "must"
+        for edge in spec.adjacency
+    )
+    assert any(
+        {edge.room_a, edge.room_b} == {"storage", "dining_room"}
+        for edge in spec.avoid_adjacency
+    )
+
+
 def test_unknown_space_with_confident_metadata_remains_self_describing():
     normalized = normalize_extraction(
         {
@@ -367,6 +398,42 @@ async def test_extraction_prompt_lists_catalog_and_unknown_space_metadata():
     assert "consultation_room" in system
     assert "zone_guess" in system
     assert "technical" in system
+
+
+def test_non_residential_golden_fields_are_recovered_without_model_help():
+    cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
+    non_residential = [
+        case
+        for case in cases
+        if case["expect"].get("building_type") in {"clinic", "office", "other"}
+    ]
+
+    for case in non_residential:
+        spec = RequirementsSpec.model_validate(
+            normalize_extraction({"rooms": [], "spaces": []}, prompt=case["prompt"])
+        )
+        expected = case["expect"]
+        assert spec.building_type.value == expected["building_type"], case["id"]
+        if "floors" in expected:
+            assert spec.floors == expected["floors"], case["id"]
+        for space_type, count in expected.get("space_counts", {}).items():
+            assert _space_count(spec, space_type) == count, (
+                case["id"],
+                space_type,
+            )
+        if "adjacency_contains" in expected:
+            edge = expected["adjacency_contains"]
+            assert _contains_pair(spec.adjacency, edge), case["id"]
+            assert any(
+                {item.room_a, item.room_b} == {edge["room_a"], edge["room_b"]}
+                and item.strength == edge["strength"]
+                for item in spec.adjacency
+            ), case["id"]
+        if "avoid_contains" in expected:
+            assert _contains_pair(
+                spec.avoid_adjacency,
+                expected["avoid_contains"],
+            ), case["id"]
 
 
 async def test_two_invalid_outputs_raise_typed_failure_with_last_raw_output():

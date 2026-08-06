@@ -24,6 +24,7 @@ from app.services.catalog import (
     resolve_alias,
 )
 from app.services.llm_client import chat_structured
+from app.services.parser.constraint_extractor import extract_constraints
 from app.services.parser.room_extractor import extract_explicit_rooms
 
 
@@ -600,6 +601,29 @@ def _recover_prompt_spaces(payload: dict[str, Any], prompt: str) -> None:
         spaces.append({"space_type": space_type, "count": room.count})
 
 
+def _recover_prompt_constraints(payload: dict[str, Any], prompt: str) -> None:
+    adjacency = payload.setdefault("adjacency", [])
+    avoid = payload.setdefault("avoid_adjacency", [])
+    if not isinstance(adjacency, list) or not isinstance(avoid, list):
+        return
+
+    constraints = extract_constraints(prompt)
+    for constraint in constraints.adjacency:
+        room_a = _canonical_space(constraint.room_a)
+        room_b = _canonical_space(constraint.room_b)
+        target = avoid if constraint.strength == "AVOID" else adjacency
+        if not _has_edge(target, room_a, room_b):
+            edge = {"room_a": room_a, "room_b": room_b}
+            if target is adjacency:
+                edge["strength"] = constraint.strength.lower()
+            target.append(edge)
+    for room_a, room_b in constraints.separations:
+        room_a = _canonical_space(room_a)
+        room_b = _canonical_space(room_b)
+        if not _has_edge(avoid, room_a, room_b):
+            avoid.append({"room_a": room_a, "room_b": room_b})
+
+
 def _promote_remaining_rooms(payload: dict[str, Any]) -> None:
     spaces = payload.get("spaces")
     rooms = payload.get("rooms")
@@ -681,6 +705,24 @@ def _extract_facing(prompt: str) -> str | None:
 
 def _explicit_building_type(prompt: str) -> str | None:
     lowered = prompt.lower()
+    for term in (
+        "restaurant",
+        "cafe",
+        "coworking",
+        "gym",
+        "boutique",
+        "hostel",
+        "preschool",
+        "school",
+        "hotel",
+        "warehouse",
+        "retail",
+        "shop",
+        "studio",
+        "library",
+    ):
+        if re.search(rf"\b{term}\b", lowered):
+            return "other"
     for term, building_type in (
         ("clinic", "clinic"),
         ("duplex", "duplex"),
@@ -690,19 +732,6 @@ def _explicit_building_type(prompt: str) -> str | None:
         ("house", "house"),
         ("home", "house"),
         ("office", "office"),
-        ("restaurant", "other"),
-        ("cafe", "other"),
-        ("coworking", "other"),
-        ("gym", "other"),
-        ("boutique", "other"),
-        ("hostel", "other"),
-        ("preschool", "other"),
-        ("school", "other"),
-        ("hotel", "other"),
-        ("warehouse", "other"),
-        ("retail", "other"),
-        ("shop", "other"),
-        ("studio", "other"),
     ):
         if re.search(rf"\b{term}\b", lowered):
             return building_type
@@ -865,6 +894,7 @@ def normalize_extraction(
             payload["facing"] = _extract_facing(prompt)
             _apply_prompt_semantics(payload, prompt, missing)
             _recover_prompt_spaces(payload, prompt)
+            _recover_prompt_constraints(payload, prompt)
 
     _promote_remaining_rooms(payload)
     payload["spaces"] = _normalize_spaces(payload.get("spaces", []), missing)

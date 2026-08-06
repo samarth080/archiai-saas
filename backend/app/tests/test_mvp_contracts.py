@@ -1,9 +1,9 @@
 """MVP workflow Phase 0 — contract lock tests (Steps 0.3 + 0.4) and the
 extended /api/health (Step 0.1).
 
-Fixture note: the clinic fixture expresses consultation rooms as `study`
-(closed RoomType enum has no clinical types by design — the MVP is
-residential-first; `building_type: clinic` is what the extraction gate checks).
+Fixture note: the legacy clinic JSON still expresses consultation rooms as
+`study` for backward compatibility. Phase 8 extraction uses canonical
+`spaces` and preserves `consultation_room` directly.
 """
 import json
 from pathlib import Path
@@ -31,11 +31,17 @@ def test_fixture_validates_and_round_trips(name):
     assert again == spec
 
 
-def test_golden_prompt_suite_loads_with_ten_prompts():
+def test_golden_prompt_suite_includes_fifteen_non_residential_briefs():
     data = json.loads(GOLDEN.read_text())
-    assert len(data["prompts"]) == 10
+    assert len(data["prompts"]) >= 24
     ids = [p["id"] for p in data["prompts"]]
-    assert len(set(ids)) == 10
+    assert len(set(ids)) == len(ids)
+    non_residential = [
+        prompt
+        for prompt in data["prompts"]
+        if prompt["expect"].get("building_type") in {"clinic", "office", "other"}
+    ]
+    assert len(non_residential) >= 15
     assert all(p["prompt"].strip() for p in data["prompts"])
     assert all(p["expect"]["route"] in ("generate", "vague", "conflict") for p in data["prompts"])
 

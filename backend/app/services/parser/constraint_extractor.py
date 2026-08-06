@@ -118,7 +118,8 @@ _NEGATION_PATTERN = re.compile(
 
 # "keep/place <A> away from <B>" — separation, not adjacency.
 _SEPARATION_PATTERN = re.compile(
-    rf"(?P<a>{_ROOM_PAT})s?[^.;]{{0,40}}?\b(?:away|far)\s+from\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
+    rf"(?P<a>{_ROOM_PAT})s?(?:\s+(?:well|very|quite))?\s+"
+    rf"(?:away|far)\s+from\s+(?:the\s+)?(?P<b>{_ROOM_PAT})s?",
     re.IGNORECASE,
 )
 

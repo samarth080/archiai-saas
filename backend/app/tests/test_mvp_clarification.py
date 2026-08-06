@@ -262,7 +262,7 @@ def test_apply_defaults_cannot_bypass_blocking_clarification(
         apply_defaults_with_report(spec)
 
 
-def test_all_ten_golden_prompts_route_correctly_without_model_dependency():
+def test_all_golden_prompts_route_correctly_without_model_dependency():
     cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
 
     routes = {}
