@@ -17,16 +17,11 @@ Aligned stair/lift instances connect consecutive floors; geometry on different
 floors otherwise remains independent.
 
 ``through_room_access`` (workflow Phase 4.5, the privacy-chain check): a
-room with ``privacy_level >= 2`` (bedrooms, offices, ... — see
-``catalog.privacy_level_for``) must not be reachable ONLY by walking
-through another such room. Implemented by re-walking the same door graph
-with every OTHER privacy_level>=2 room deleted; if the room drops out of
-the reachable set, its only path required passing through a private
-neighbour. The one exception: a MUST-adjacency partner (an ensuite through
-its own bedroom is working as intended, not a defect) — that specific
-partner is never deleted from the walk. Only checked for rooms the plain
-reachability walk above already found reachable, so a genuinely
-disconnected room is reported once, as ``unreachable``, not twice.
+private room or sanitary room must not be reachable only by walking through a
+private room. The validator re-walks the door graph with private blockers
+removed. A MUST-adjacency partner remains exempt, so an explicitly attached
+ensuite through its own bedroom is intentional. Only reachable targets are
+checked, so a disconnected room is reported once as ``unreachable``.
 
 ``requirements`` is optional (Packet 7.1 — prompt-to-program truth gate): the
 fast per-drop editor endpoint has no RequirementsSpec to compare against and
@@ -121,6 +116,7 @@ def _walk(start: str, adjacency: dict[str, set[str]], blocked: frozenset[str] = 
 
 
 _PRIVACY_THRESHOLD = 2
+_SANITARY_TYPES = frozenset({"bathroom", "ensuite", "toilet", "washroom", "wc"})
 
 
 def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | None) -> set[frozenset]:
@@ -154,13 +150,19 @@ def _through_room_access_violations(
     rooms = plan.rooms
     privacy = {r.id: catalog.privacy_level_for(r.type) for r in rooms}
     private_ids = {rid for rid, lvl in privacy.items() if lvl >= _PRIVACY_THRESHOLD}
-    if len(private_ids) < 2:
-        return []  # need at least one OTHER private room to block a path
+    sanitary_ids = {
+        room.id
+        for room in rooms
+        if (resolve_alias(room.type) or room.type) in _SANITARY_TYPES
+    }
+    target_ids = private_ids | sanitary_ids
+    if not private_ids:
+        return []  # no private room can act as a through-route blocker
 
     exempt_pairs = _must_exempt_pairs(rooms, requirements)
     labels = {r.id: r.label for r in rooms}
     violations: list[Violation] = []
-    for pid in sorted(private_ids):
+    for pid in sorted(target_ids):
         if pid == start or pid not in reachable:
             continue  # a disconnected room is already reported as `unreachable`
         blocked = frozenset(
@@ -171,7 +173,7 @@ def _through_room_access_violations(
             violations.append(Violation(
                 code="through_room_access",
                 room_ids=[pid],
-                message=f"{labels[pid]} is only reachable by walking through another private room",
+                message=f"{labels[pid]} is only reachable by walking through a private room",
             ))
     return violations
 

@@ -49,7 +49,9 @@ def _room(
         ("1bhk", 100),
         ("2bhk", 100),
         ("3bhk_adjacencies", 72),
-        ("4bhk", 92),
+        # Stronger sanitary circulation changed this layout: all three baths
+        # now open to the corridor instead of one relying on a bedroom route.
+        ("4bhk", 87),
     ],
 )
 def test_residential_scores_are_unchanged_from_the_pre_pack_baseline(

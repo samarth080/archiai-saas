@@ -101,16 +101,18 @@ def test_best_candidate_raises_when_the_plot_genuinely_cannot_fit_anything():
 
 
 def test_search_finds_a_meaningfully_better_layout_than_single_shot():
-    """Real, measured value (not assumed): 3bhk_adjacencies' single-shot
-    quality score is 72; best-of-64 search finds a 91. Pinned as an exact
-    regression, not just a >= bound, so a future change that erodes this
-    specific gain gets caught."""
+    """Pin the measured gain among plans that pass sanitary circulation.
+
+    The former 91-point candidate left one bathroom reachable only through a
+    private room. Once that became a hard violation, the best valid candidate
+    is 81; the search still improves materially over the 72-point baseline.
+    """
     spec = _load("3bhk_adjacencies")
     single_shot_score = score(generate_plan(spec), spec).score
     best_score = score(best_candidate(spec, n=64, seed=0), spec).score
     assert single_shot_score == 72
-    assert best_score == 91
-    assert best_score - single_shot_score >= 15
+    assert best_score == 81
+    assert best_score - single_shot_score >= 8
 
 
 def test_best_candidate_preserves_the_polygon_generation_path():

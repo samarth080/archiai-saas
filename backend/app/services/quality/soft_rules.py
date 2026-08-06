@@ -144,7 +144,14 @@ def natural_light_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Sof
             RoomType.kitchen,
         }
     ]
-    if not daylight_rooms:
+    wet_rooms: list[PlanRoom] = []
+    for room in plan.rooms:
+        try:
+            if catalog.get(room.type).wet_room:
+                wet_rooms.append(room)
+        except catalog.UnknownSpaceType:
+            continue
+    if not daylight_rooms and not wet_rooms:
         return SoftRuleResult(name="natural_light", score=1.0)
 
     lit = [room for room in daylight_rooms if _touches_plot_edge(room, plan)]
@@ -157,9 +164,18 @@ def natural_light_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Sof
         for room in daylight_rooms
         if room not in lit
     ]
+    warnings.extend(
+        QualityWarning(
+            code="generic.wet_room_exterior",
+            message=f"{room.label} has no exterior edge for direct ventilation.",
+            severity="info",
+        )
+        for room in wet_rooms
+        if not _touches_plot_edge(room, plan)
+    )
     return SoftRuleResult(
         name="natural_light",
-        score=len(lit) / len(daylight_rooms),
+        score=len(lit) / len(daylight_rooms) if daylight_rooms else 1.0,
         warnings=warnings,
     )
 

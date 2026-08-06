@@ -94,23 +94,18 @@ _CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway
 # engine.py's door-policy alignment (workflow 4.4/4.5) — one canonical
 # "genuinely private" definition shared by placement, doors, and the check.
 _THROUGH_ROOM_PRIVACY_THRESHOLD = 2
+_SANITARY_TYPES = frozenset({"bathroom", "ensuite", "toilet", "washroom", "wc"})
 
 
 def _corridor_served_groups(
     rooms: list[RoomNeed], must_adjacent: list[tuple[str, str]],
 ) -> tuple[list[list[RoomNeed]], list[RoomNeed]]:
     """Split ``rooms`` into (comb clusters that need guaranteed corridor
-    access, everything else). Only a genuinely private room
-    (``catalog.privacy_level_for >= 2``) needs the guarantee — a MUST-
-    attached service partner (an ensuite bathroom) travels with its private
-    anchor as ONE comb slot instead of getting its own, which is also the
-    doc's own stated exception ("except a MUST-attached service"). Anything
-    else (an unattached bathroom, utility, parking, ...) doesn't need comb
-    treatment at all — it isn't privacy-checked, and forcing it into the
-    comb wastes real space for no correctness benefit. Found live: combing
-    every non-public room (bathrooms, utility, parking alongside the actual
-    bedrooms) needed far more length than several real fixtures' plots had,
-    despite none of those extra rooms needing the guarantee."""
+    access, everything else). Genuinely private rooms and sanitary rooms need
+    the guarantee. A MUST-attached service partner travels with its private
+    anchor as one comb cluster; unattached sanitary rooms are distributed over
+    those clusters. Utility, parking, and other service/outdoor rooms remain
+    flexible so circulation does not consume unnecessary frontage."""
     by_key = {n.key: n for n in rooms}
     keys = set(by_key)
     private_keys = {
@@ -147,34 +142,73 @@ def _corridor_served_groups(
         group = [n] + [by_key[p] for p in partners.get(n.key, []) if p not in claimed]
         claimed.update(m.key for m in group)
         clusters.append(group)
+    # An unattached bathroom is also access-sensitive: if it sits behind a
+    # bedroom, the layout is reachable on paper but requires walking through
+    # that bedroom. Distribute sanitary rooms across the smallest private
+    # clusters; the cluster is split ALONG the corridor later, so every member
+    # still touches it directly without consuming a separate full comb slot.
+    sanitary = [
+        n for n in rooms
+        if n.key not in claimed
+        and (catalog.resolve_alias(n.type) or n.type) in _SANITARY_TYPES
+    ]
+    for n in sanitary:
+        if clusters:
+            index = min(
+                range(len(clusters)),
+                key=lambda i: (
+                    len(clusters[i]),
+                    sum(item.preferred_area for item in clusters[i]),
+                    i,
+                ),
+            )
+            if index == len(clusters) - 1:
+                clusters[index].insert(0, n)
+            else:
+                clusters[index].append(n)
+        else:
+            clusters.append([n])
+        claimed.add(n.key)
+
     flex = [n for n in rooms if n.key not in claimed]
     return clusters, flex
 
 
 def _balance_two_ways(groups: list[list[RoomNeed]]) -> tuple[list[list[RoomNeed]], list[list[RoomNeed]]]:
     """Split ``groups`` (e.g. corridor-served clusters) into two lists
-    balanced by total room area — a greedy largest-first bin-pack, not a
-    plain alternating-index split. Found live: alternating index put a
-    heavy multi-room cluster (master_bedroom + its ensuite) in the same
-    wing as two more clusters while the other wing got only two much
-    smaller ones, so the heavier wing needed more depth than the plot's
-    constrained span had, while the lighter wing had spare room to give."""
-    ordered = sorted(groups, key=lambda g: -sum(n.preferred_area for n in g))
+    balanced by required corridor frontage. Preferred area breaks ties; it
+    cannot replace the linear minimum that determines whether a comb fits."""
+    def span(group: list[RoomNeed]) -> float:
+        return sum(min(need.min_w, need.min_d) for need in group)
+
+    def area(group: list[RoomNeed]) -> float:
+        return sum(need.preferred_area for need in group)
+
+    ordered = sorted(groups, key=lambda group: (-span(group), -area(group)))
     wing_a: list[list[RoomNeed]] = []
     wing_b: list[list[RoomNeed]] = []
+    span_a = span_b = 0.0
     area_a = area_b = 0.0
     for g in ordered:
-        g_area = sum(n.preferred_area for n in g)
-        if area_a <= area_b:
+        g_span = span(g)
+        g_area = area(g)
+        if (span_a, area_a) <= (span_b, area_b):
             wing_a.append(g)
+            span_a += g_span
             area_a += g_area
         else:
             wing_b.append(g)
+            span_b += g_span
             area_b += g_area
     return wing_a, wing_b
 
 
-def _flatten_cluster_band(rect: Rect, cluster: list[RoomNeed]) -> list[tuple[Rect, list[RoomNeed]]]:
+def _flatten_cluster_band(
+    rect: Rect,
+    cluster: list[RoomNeed],
+    *,
+    axis: str | None = None,
+) -> list[tuple[Rect, list[RoomNeed]]]:
     """A comb-arranged cluster's rect (from ``_split_rect``'s floor+slack
     allocation, sized for the cluster's aggregate area) doesn't always have
     a workable aspect ratio for the general recursive ``subdivide()`` —
@@ -187,8 +221,8 @@ def _flatten_cluster_band(rect: Rect, cluster: list[RoomNeed]) -> list[tuple[Rec
     single-room cluster is returned unchanged."""
     if len(cluster) <= 1:
         return [(rect, cluster)]
-    axis = "w" if rect.w >= rect.d else "d"
-    rects = _split_rect(rect, axis, [[n] for n in cluster])
+    split_axis = axis or ("w" if rect.w >= rect.d else "d")
+    rects = _split_rect(rect, split_axis, [[n] for n in cluster])
     return list(zip(rects, [[n] for n in cluster]))
 
 
@@ -282,7 +316,12 @@ def _band_floor(rooms: list[RoomNeed], other: float) -> float:
 
 
 def _facing_progression_bands(
-    plot_w: float, plot_d: float, facing: Facing, ordered_groups: list[list[RoomNeed]],
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+    ordered_groups: list[list[RoomNeed]],
+    *,
+    minimum_spans: list[float] | None = None,
 ) -> list[tuple[Rect, list[RoomNeed]]]:
     """Distribute ``ordered_groups`` (facing-edge group first) as consecutive
     bands along the facing progression axis. Every band first gets its own
@@ -298,6 +337,8 @@ def _facing_progression_bands(
 
     span, other = (plot_w, plot_d) if facing in (Facing.east, Facing.west) else (plot_d, plot_w)
     floors = [_band_floor(g, other) for g in ordered_groups]
+    if minimum_spans is not None:
+        floors = [max(floor, minimum) for floor, minimum in zip(floors, minimum_spans)]
     total_floor = sum(floors)
     if total_floor > span + EPS:
         raise SubdivisionError(
@@ -316,7 +357,13 @@ def _facing_progression_bands(
     return bands
 
 
-def _split_rect(rect: Rect, axis: str, groups: list[list[RoomNeed]]) -> list[Rect]:
+def _split_rect(
+    rect: Rect,
+    axis: str,
+    groups: list[list[RoomNeed]],
+    *,
+    flatten_groups: bool = False,
+) -> list[Rect]:
     """Split ``rect`` into one sub-rect per group along ``axis`` ("w" or
     "d"), same floor-then-slack allocation as :func:`_facing_progression_bands`
     — used for the axis PERPENDICULAR to the facing progression
@@ -324,7 +371,12 @@ def _split_rect(rect: Rect, axis: str, groups: list[list[RoomNeed]]) -> list[Rec
     side to anchor against, just a left-to-right/top-to-bottom order."""
     span = rect.w if axis == "w" else rect.d
     other = rect.d if axis == "w" else rect.w
-    floors = [_band_floor(g, other) for g in groups]
+    floors = [
+        sum(_band_floor([need], other) for need in group)
+        if flatten_groups and len(group) > 1
+        else _band_floor(group, other)
+        for group in groups
+    ]
     total_floor = sum(floors)
     if total_floor > span + EPS:
         raise SubdivisionError(
@@ -430,9 +482,16 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
     served_rect = bands[insert_at + 1][0]
 
     perp_axis = "d" if facing in (Facing.east, Facing.west) else "w"
-    cluster_rects = _split_rect(served_rect, perp_axis, clusters)
+    cluster_rects = _split_rect(
+        served_rect,
+        perp_axis,
+        clusters,
+        flatten_groups=True,
+    )
     comb_bands = [
-        flat for rect, cluster in zip(cluster_rects, clusters) for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(cluster_rects, clusters)
+        for flat in _flatten_cluster_band(rect, cluster, axis=perp_axis)
     ]
 
     final_bands = bands[:insert_at] + [bands[insert_at]] + comb_bands + bands[insert_at + 2:]
@@ -511,16 +570,26 @@ def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float,
     # band, so it doesn't pay a second band's own floor overhead on top of
     # the wings' (found live: a separate flex band left too little depth for
     # the wings to comb-arrange their clusters in on several real fixtures).
+    wing_a, wing_b = _balance_two_ways(clusters)
     clusters_footprint = [n for cluster in clusters for n in cluster]
     public_and_flex = public + flex
     skeleton = [public_and_flex, clusters_footprint]
-    progression_bands = _facing_progression_bands(plot_w, plot_d, facing, skeleton)
+    wing_span = max(
+        sum(min(n.min_w, n.min_d) for cluster in wing for n in cluster)
+        for wing in (wing_a, wing_b)
+    )
+    progression_bands = _facing_progression_bands(
+        plot_w,
+        plot_d,
+        facing,
+        skeleton,
+        minimum_spans=[0.0, wing_span],
+    )
     public_rect, _ = progression_bands[0]
     public_band = (public_rect, public_and_flex)
     wings_rect = progression_bands[1][0]
     trailing_bands: list[tuple[Rect, list[RoomNeed]]] = []
 
-    wing_a, wing_b = _balance_two_ways(clusters)
     if not wing_b:
         # Degenerate: every cluster landed in one wing, nothing to spine
         # against on the other side.
@@ -537,12 +606,20 @@ def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float,
     )
     along_axis = "w" if perp_axis == "d" else "d"
     comb_a = [
-        flat for rect, cluster in zip(_split_rect(wing_a_rect, along_axis, wing_a), wing_a)
-        for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(
+            _split_rect(wing_a_rect, along_axis, wing_a, flatten_groups=True),
+            wing_a,
+        )
+        for flat in _flatten_cluster_band(rect, cluster, axis=along_axis)
     ]
     comb_b = [
-        flat for rect, cluster in zip(_split_rect(wing_b_rect, along_axis, wing_b), wing_b)
-        for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(
+            _split_rect(wing_b_rect, along_axis, wing_b, flatten_groups=True),
+            wing_b,
+        )
+        for flat in _flatten_cluster_band(rect, cluster, axis=along_axis)
     ]
 
     bands = [public_band] + comb_a + [(corridor_rect, [corridor])] + comb_b + trailing_bands

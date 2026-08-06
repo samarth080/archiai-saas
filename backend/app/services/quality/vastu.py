@@ -111,6 +111,20 @@ def evaluate_vastu(plan: LayoutPlan) -> VastuEvaluation:
             )
         )
 
+    for room in plan.rooms:
+        if sector_for_room(room, plan.plot) == "center":
+            warnings.append(
+                QualityWarning(
+                    code="vastu.brahmasthan_occupied",
+                    message=(
+                        f"{room.label} occupies the Brahmasthan (central sector); "
+                        "Vastu guidance prefers keeping this area open."
+                    ),
+                    severity="warn",
+                    rule="vastu",
+                )
+            )
+
     return VastuEvaluation(
         score=earned / possible if possible else 1.0,
         warnings=warnings,
