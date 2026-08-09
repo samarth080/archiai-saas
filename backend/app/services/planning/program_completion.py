@@ -130,6 +130,22 @@ def _ensure_one_per_floor(
                 floor_index=floor,
                 source="inferred_rule",
             ))
+        else:
+            # A REUSED node (user-requested stair/lift, or a corridor injected
+            # by `ensure_corridor`) keeps its own catalog sizing, which does
+            # not have to equal the sizing injected nodes get here — a
+            # user-supplied `staircase` is 2.4x1.2 while the commercial
+            # injected one is 2.4x1.5, and `lift` is only ensured per floor
+            # under the rule below. `archetypes.vertical_core_bands` derives
+            # the core footprint from ITS OWN floor's node, so a mismatch
+            # makes floor N's core a different size from floor N+1's — which
+            # is a `staircase_alignment` hard violation AND (because
+            # `hard_constraints._door_adjacency` only links stairs with an
+            # identical footprint) leaves every upper floor unreachable.
+            # Normalizing here is what makes "one aligned core per floor"
+            # true by construction rather than by luck of provenance.
+            node.min_width_m = min_width_m
+            node.min_depth_m = min_depth_m
         result.append(node)
     return result
 
@@ -196,7 +212,13 @@ def ensure_vertical_circulation(
         min_depth_m=1.5,
     )
 
-    if floors >= 3 or accessibility:
+    # A lift the program ALREADY asks for must also become a per-floor aligned
+    # core: leaving a single lift node unpinned lets `assign_floors` drop it on
+    # one floor only, and `vertical_core_bands` widens that floor's core to the
+    # lift while every other floor's core stays stair-width — the same
+    # misalignment `_ensure_one_per_floor` normalizes dimensions against above.
+    has_lift = any(node.space_type in _LIFT_TYPES for node in graph.nodes)
+    if floors >= 3 or accessibility or has_lift:
         lifts = _ensure_one_per_floor(
             graph,
             _LIFT_TYPES,

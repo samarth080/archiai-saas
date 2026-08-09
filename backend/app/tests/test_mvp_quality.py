@@ -102,6 +102,51 @@ def test_fixing_must_adjacency_improves_the_rule_and_total_score():
     assert score(adjacent, spec).score > score(separated, spec).score
 
 
+def test_constraint_endpoints_match_a_plan_that_uses_the_legacy_room_spelling():
+    """Phase 8 canonicalizes constraint endpoints to catalog keys
+    ("dining_room", "foyer", "laundry", "garage"), but a `spec.rooms`-sourced
+    plan emits the raw `RoomType` value ("dining", "entry", ...). Matching the
+    two literally scored a genuinely satisfied MUST adjacency as unmet — the
+    plan below really does have Kitchen sharing a wall with Dining."""
+    adjacent = _adjacency_plan(kitchen_next_to_dining=True)
+    catalog_keyed = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "kitchen", "count": 1},
+            {"type": "dining", "count": 1},
+            {"type": "entry", "count": 1},
+        ],
+        "adjacency": [
+            {"room_a": "kitchen", "room_b": "dining_room", "strength": "must"}
+        ],
+        "plot": {"width_m": 7.5, "depth_m": 3},
+        "facing": "east",
+    })
+
+    assert adjacency_rule(adjacent, catalog_keyed).score == 1
+    assert score(adjacent, catalog_keyed).score == score(adjacent, _adjacency_spec()).score
+
+
+def test_catalog_keyed_avoid_pair_still_detects_a_legacy_spelled_violation():
+    """Same mismatch in the direction that hides a real problem: an AVOID pair
+    written with the catalog key silently scored as respected."""
+    adjacent = _adjacency_plan(kitchen_next_to_dining=True)
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "kitchen", "count": 1},
+            {"type": "dining", "count": 1},
+            {"type": "entry", "count": 1},
+        ],
+        "avoid_adjacency": [{"room_a": "kitchen", "room_b": "dining_room"}],
+        "plot": {"width_m": 7.5, "depth_m": 3},
+        "facing": "east",
+    })
+
+    result = adjacency_rule(adjacent, spec)
+
+    assert result.score == 0
+    assert any(w.code == "generic.adjacency.avoid" for w in result.warnings)
+
+
 def test_bathroom_beside_kitchen_emits_a_human_warning_with_room_names():
     plan = LayoutPlan(
         plot=PlanPlot(width_m=6, depth_m=3),

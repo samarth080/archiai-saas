@@ -63,6 +63,31 @@ def test_existing_unpinned_stair_is_reused_and_completion_is_idempotent():
     assert (len(graph.nodes), len(graph.edges)) == first_counts
 
 
+def test_a_requested_lift_is_pinned_per_floor_even_below_the_lift_threshold():
+    existing = Node(id="user-lift", type="circulation", space_type="lift")
+    graph = ProgramGraph(nodes=[existing])
+
+    ensure_vertical_circulation(graph, 2)
+
+    assert [node.floor_index for node in _by_type(graph, "lift", "elevator")] == [0, 1]
+
+
+def test_a_reused_core_node_is_resized_to_the_canonical_core_footprint():
+    """`vertical_core_bands` derives each floor's core from that floor's own
+    node, so a reused node keeping its own catalog sizing produced differently
+    sized cores per floor — a staircase_alignment violation."""
+    existing = Node(
+        id="user-stair", type="circulation", space_type="stairs",
+        min_width_m=2.4, min_depth_m=1.2,
+    )
+    graph = ProgramGraph(nodes=[existing])
+
+    ensure_vertical_circulation(graph, 2, commercial=True)
+
+    stairs = _by_type(graph, "staircase", "stairs")
+    assert {(node.min_width_m, node.min_depth_m) for node in stairs} == {(2.4, 1.5)}
+
+
 def test_floor_assignment_honours_every_exact_core_floor():
     graph = ensure_vertical_circulation(ProgramGraph(), 3)
 

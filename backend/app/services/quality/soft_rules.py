@@ -29,10 +29,20 @@ def rooms_share_wall(a: PlanRoom, b: PlanRoom) -> bool:
     return a.floor == b.floor and _rect(a).shared_edge(_rect(b)) is not None
 
 
-def _rooms_by_type(plan: LayoutPlan) -> dict[RoomType, list[PlanRoom]]:
-    grouped: dict[RoomType, list[PlanRoom]] = {}
+def _canonical(space_type: str) -> str:
+    """Constraint endpoints are catalog keys ("dining_room", "foyer") since
+    Phase 8 canonicalized them, while a `spec.rooms`-sourced plan emits raw
+    `RoomType` values ("dining", "entry", "utility", "parking"). Matching the
+    two spellings literally silently scored a satisfied MUST adjacency as
+    unmet — resolve both sides the same way `hard_constraints` and
+    `engine._place_doors` already do."""
+    return catalog.resolve_alias(space_type) or space_type
+
+
+def _rooms_by_type(plan: LayoutPlan) -> dict[str, list[PlanRoom]]:
+    grouped: dict[str, list[PlanRoom]] = {}
     for room in plan.rooms:
-        grouped.setdefault(room.type, []).append(room)
+        grouped.setdefault(_canonical(room.type), []).append(room)
     return grouped
 
 
@@ -53,8 +63,8 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
     for preference in requirements.adjacency:
         weight = 2.0 if preference.strength == "must" else 1.0
         possible += weight
-        a_rooms = grouped.get(preference.room_a, [])
-        b_rooms = grouped.get(preference.room_b, [])
+        a_rooms = grouped.get(_canonical(preference.room_a), [])
+        b_rooms = grouped.get(_canonical(preference.room_b), [])
         satisfied = bool(a_rooms and b_rooms) and _pair_is_adjacent(a_rooms, b_rooms)
         if satisfied:
             earned += weight
@@ -72,8 +82,8 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
 
     for pair in requirements.avoid_adjacency:
         possible += 2.0
-        a_rooms = grouped.get(pair.room_a, [])
-        b_rooms = grouped.get(pair.room_b, [])
+        a_rooms = grouped.get(_canonical(pair.room_a), [])
+        b_rooms = grouped.get(_canonical(pair.room_b), [])
         violates = bool(a_rooms and b_rooms) and _pair_is_adjacent(a_rooms, b_rooms)
         if not violates:
             earned += 2.0

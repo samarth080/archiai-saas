@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_engine import generate_plan
 from app.services.layout_engine.search import best_candidate
@@ -123,6 +125,87 @@ def test_three_floor_hotel_program_gets_aligned_stairs_and_lifts():
         for room in plan.rooms
         if room.type in {"reception", "waiting_room", "dining_room", "kitchen", "entry"}
     )
+
+
+def test_requested_lift_below_the_three_floor_threshold_stays_aligned():
+    """A two-floor brief that asks for a lift: `ensure_vertical_circulation`
+    only pinned lifts per floor at 3+ floors (or accessibility_mode), so the
+    single requested lift landed on one floor and widened only that floor's
+    vertical core — misaligning the staircases and, because the reachability
+    walk only bridges levels through an exactly aligned stair/lift, leaving
+    the whole upper storey unreachable."""
+    spec = RequirementsSpec.model_validate({
+        "building_type": "other",
+        "floors": 2,
+        "spaces": [
+            {"space_type": "lift", "count": 1},
+            {"space_type": "bedroom", "count": 2},
+            {"space_type": "kitchen", "count": 1},
+            {"space_type": "living_room", "count": 1},
+            {"space_type": "bathroom", "count": 2},
+        ],
+        "plot": {"width_m": 18, "depth_m": 20},
+        "facing": "east",
+    })
+
+    plan = generate_plan(spec)
+
+    assert validate(plan, spec) == []
+    assert len(_footprints(plan, "staircase")) == 1
+    assert len(_footprints(plan, "lift")) == 1
+    assert len([room for room in plan.rooms if room.type == "lift"]) == 2
+
+
+def test_requested_staircase_is_resized_to_the_commercial_core_on_every_floor():
+    """Same defect from the other direction: a user-supplied `staircase` keeps
+    its catalog 2.4x1.2 sizing while the injected upper-floor stair of a
+    clinic/office program is 2.4x1.5, so the two cores had different widths."""
+    spec = RequirementsSpec.model_validate({
+        "building_type": "office",
+        "floors": 2,
+        "spaces": [
+            {"space_type": "staircase", "count": 1},
+            {"space_type": "open_office", "count": 1},
+            {"space_type": "meeting_room", "count": 2},
+            {"space_type": "reception", "count": 1},
+            {"space_type": "bathroom", "count": 2},
+        ],
+        "plot": {"width_m": 20, "depth_m": 24},
+        "facing": "east",
+    })
+
+    plan = generate_plan(spec)
+
+    assert validate(plan, spec) == []
+    assert len(_footprints(plan, "staircase")) == 1
+
+
+def test_multi_floor_generation_refuses_rather_than_returning_an_invalid_plan(monkeypatch):
+    """`plan_from_program` skips its hard check for floors > 1 because
+    cross-floor rules can only be judged after assembly — this pins that the
+    assembly step actually performs it."""
+    from app.services.layout_engine import engine
+
+    spec = _two_storey()
+    real_plan_from_program = engine.plan_from_program
+
+    def _misalign(*args, **kwargs):
+        plan = real_plan_from_program(*args, **kwargs)
+        if kwargs.get("floor") != 1:
+            return plan
+        return plan.model_copy(update={
+            "rooms": [
+                room.model_copy(update={"x": room.x + 0.5})
+                if room.type == "staircase"
+                else room
+                for room in plan.rooms
+            ],
+        })
+
+    monkeypatch.setattr(engine, "plan_from_program", _misalign)
+
+    with pytest.raises(engine.DoesNotFitError):
+        generate_plan(spec)
 
 
 def test_candidate_entrypoint_dispatches_multi_floor_to_the_proven_path():

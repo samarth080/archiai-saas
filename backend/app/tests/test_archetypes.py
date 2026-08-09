@@ -504,6 +504,34 @@ def test_select_archetype_ignores_repeat_units_without_a_real_corridor_spine():
     assert reason
 
 
+def test_a_leaf_min_size_shortfall_falls_back_to_zoned_bands_before_refusing():
+    """The Phase 9 safety net caught a failed partition (SubdivisionError) and
+    a hard-invalid assembled plan, but not the leaf min-size gate in between:
+    a specialized archetype that partitioned fine yet left one room slightly
+    short on one side refused outright, even though the general-purpose comb
+    fits the identical program on the identical plot."""
+    from app.schemas.requirements import RequirementsSpec
+    from app.services.layout_engine import generate_plan
+    from app.services.quality.hard_constraints import validate
+
+    payload = {
+        "building_type": "other",
+        "floors": 1,
+        "spaces": [
+            {"space_type": "sales_floor", "count": 1},
+            {"space_type": "classroom", "count": 3},
+            {"space_type": "consultation_room", "count": 3},
+        ],
+        "plot": {"width_m": 19.8, "depth_m": 22.1},
+        "facing": "east",
+    }
+    spec = RequirementsSpec.model_validate(payload)
+    forced = RequirementsSpec.model_validate({**payload, "layout_style": "zoned_bands"})
+
+    assert validate(generate_plan(forced), forced) == []  # the fallback really does fit
+    assert validate(generate_plan(spec), spec) == []      # so selection must not refuse
+
+
 def test_select_archetype_does_not_flip_existing_residential_fixtures_with_three_plus_bedrooms():
     """Regression pin for the exact false-positive the corridor-spine gate
     above fixes: 4bhk.json has 3 `bedroom` + an auto-injected `entry` (no

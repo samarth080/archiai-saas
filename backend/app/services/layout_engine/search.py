@@ -82,8 +82,11 @@ def generate_candidates(spec: RequirementsSpec, *, n: int = 64, seed: int = 0) -
     plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
     facing = spec.facing or DEFAULT_FACING
 
-    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    # `_build_program` first: it carries the program-size guard, and building
+    # the scoring graph before it would pay the full node-explosion cost of an
+    # oversized program the guard is there to refuse cheaply.
     base_program = _build_program(spec)
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
 
     rng = random.Random(seed)
     candidates: list[Candidate] = []

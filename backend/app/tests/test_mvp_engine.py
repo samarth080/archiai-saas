@@ -310,6 +310,36 @@ def test_too_many_rooms_for_plot_raises_structured_does_not_fit():
     assert "increase plot size" in str(exc.value)
 
 
+def test_oversized_program_is_refused_before_any_graph_node_is_built():
+    """The requested-count cap has to fire BEFORE `from_requirements`
+    materialises one node per instance: neither `rooms` nor `spaces` has a
+    length bound, so an in-body-limit request used to build millions of nodes
+    (and permanently register every self-describing unknown space in the
+    process-global catalog) before the post-build check refused it."""
+    from app.services import catalog
+
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {
+                "space_type": f"zz_probe_{index:04d}",
+                "count": 50,
+                "zone_guess": "private",
+                "size_guess_m2": 5.0,
+                "confidence": 1.0,
+            }
+            for index in range(200)
+        ],
+        "plot": {"width_m": 20.0, "depth_m": 30.0},
+    })
+    catalog_size = len(catalog.CATALOG)
+
+    with pytest.raises(DoesNotFitError) as exc:
+        generate_plan(spec)
+
+    assert "more than 30 rooms requested" in str(exc.value)
+    assert len(catalog.CATALOG) == catalog_size
+
+
 def test_single_room_spec_works():
     spec = RequirementsSpec.model_validate({"rooms": [{"type": "living_room", "count": 1}]})
     plan = generate_plan(spec)

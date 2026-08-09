@@ -122,6 +122,30 @@ def _remap_program(program: EngineProgram, prefix: str = "r") -> EngineProgram:
     )
 
 
+def _guard_program_size(spec: RequirementsSpec) -> None:
+    """Reject an oversized program BEFORE any graph is built.
+
+    ``plan_from_program`` already refuses more than ``MAX_ROOMS_PER_LAYOUT``
+    needs, but only *after* ``from_requirements`` has materialised one graph
+    node per requested instance — and neither ``rooms``/``spaces`` list has a
+    length bound, only a per-entry ``count <= 50``. A single request inside
+    the 3 MB body cap therefore built millions of nodes (measured: 3,000
+    spaces x 50 = 36 s of CPU and 237 MB before the existing check fired),
+    and every unknown-but-self-describing space also permanently registered
+    itself in the process-global catalog on the way. Checking the requested
+    total first is the same refusal with the same message, just before the
+    work instead of after it. The threshold is deliberately identical:
+    ``_build_program`` may still add an entry and a corridor, so the
+    post-injection check downstream stays the authoritative one and this
+    guard only short-circuits programs that could never pass it.
+    """
+    requested = sum(room.count for room in spec.rooms) + sum(
+        space.count for space in spec.spaces
+    )
+    if requested > MAX_ROOMS_PER_LAYOUT:
+        raise DoesNotFitError(f"more than {MAX_ROOMS_PER_LAYOUT} rooms requested")
+
+
 def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> EngineProgram:
     """Program construction via the ProgramGraph bridge (workflow Phase 2.2b,
     extended in 3.1a): ``from_requirements`` builds the graph, ``ensure_entry``
@@ -144,6 +168,7 @@ def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> E
     by diffing against a pre-refactor golden snapshot of all 5 fixtures
     before this key remap was added.
     """
+    _guard_program_size(spec)
     try:
         graph = ensure_entry(from_requirements(spec))
         if inject_corridor:
@@ -158,6 +183,7 @@ def _build_program(spec: RequirementsSpec, *, inject_corridor: bool = True) -> E
 
 
 def _programs_by_floor(spec: RequirementsSpec) -> list[EngineProgram]:
+    _guard_program_size(spec)
     try:
         graph = ensure_corridor(ensure_entry(from_requirements(spec)))
         graph = ensure_vertical_circulation(
@@ -680,8 +706,36 @@ def plan_from_program(
     else:
         archetype_key = "vertical_core"
         archetype_fn = lambda _program, _w, _d, _facing: band_plan
+    def _place_checked(
+        prog: EngineProgram,
+        archetype_fn,
+    ) -> tuple[list[tuple[RoomNeed, Rect]], BandPlan]:
+        """`_place` plus the leaf min-size gate (swap-tolerant).
+
+        The gate raises SubdivisionError, not DoesNotFitError, so it lands
+        inside the same retry envelope as a failed partition below. It used to
+        run after the try/except and refuse outright: a specialized archetype
+        that partitioned successfully but left one room a few centimetres short
+        on one side ("Sales Floor would be 9.4x8.3 m, below its minimum
+        9.5x3.8 m") was refused without ever trying the general-purpose
+        zoned_bands comb, which fits ~4% of those programs on the very same
+        plot. The retry re-runs this gate, so nothing under-minimum is ever
+        emitted — only the refusal is deferred until zoned_bands has failed too.
+        """
+        result, used_band_plan = _place(prog, archetype_fn)
+        for need, rect in result:
+            fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
+                rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
+            )
+            if not fits:
+                raise SubdivisionError(
+                    f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its "
+                    f"minimum {need.min_w:.1f}x{need.min_d:.1f} m"
+                )
+        return result, used_band_plan
+
     try:
-        placed, used_band_plan = _place(program, archetype_fn)
+        placed, used_band_plan = _place_checked(program, archetype_fn)
     except SubdivisionError as exc:
         if archetype_key in {"zoned_bands", "vertical_core"}:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
@@ -700,19 +754,9 @@ def plan_from_program(
         # when even the general-purpose archetype can't fit the program
         # AND keep every private room genuinely reachable.
         try:
-            placed, used_band_plan = _place(program, zoned_bands)
+            placed, used_band_plan = _place_checked(program, zoned_bands)
         except SubdivisionError:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
-
-    for need, rect in placed:  # leaf min-size gate (swap-tolerant)
-        fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
-            rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
-        )
-        if not fits:
-            raise DoesNotFitError(
-                f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its minimum "
-                f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
-            )
 
     walls, wall_rooms = _build_walls(
         placed,
@@ -851,12 +895,25 @@ def _generate_plan_multifloor(spec: RequirementsSpec) -> LayoutPlan:
         walls.extend(floor_plan.walls)
         doors.extend(floor_plan.doors)
 
-    return LayoutPlan(
+    plan = LayoutPlan(
         plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
         rooms=rooms,
         walls=walls,
         doors=doors,
     )
+    # `plan_from_program` skips its own hard check for floors > 1 ("validated
+    # after their floor-local pieces are assembled") — this is that check.
+    # Cross-floor rules (staircase_alignment, and the reachability walk that
+    # only bridges levels through an exactly aligned stair/lift) are invisible
+    # to a per-floor validation, so without this the engine could return a
+    # plan with an entire unreachable storey instead of refusing honestly, the
+    # exact guarantee the single-floor path already upholds.
+    from app.services.quality.hard_constraints import validate
+
+    violations = validate(plan, spec)
+    if violations:
+        raise DoesNotFitError("; ".join(v.message for v in violations))
+    return plan
 
 
 def _generate_plan_polygon(spec: RequirementsSpec) -> LayoutPlan:

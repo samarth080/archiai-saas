@@ -126,13 +126,18 @@ def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | N
     against, same opt-in posture as `_missing_requested_rooms`."""
     if requirements is None:
         return set()
-    types_by_id = {r.id: r.type for r in rooms}
+    # Canonical on both sides: constraint endpoints are catalog keys, plan
+    # room types may be raw RoomType values ("entry" vs "foyer") — matching
+    # them literally would silently drop the ensuite exemption.
+    types_by_id = {r.id: (resolve_alias(r.type) or r.type) for r in rooms}
     exempt: set[frozenset] = set()
     for pref in requirements.adjacency:
         if pref.strength != "must":
             continue
-        a_ids = [rid for rid, t in types_by_id.items() if t == pref.room_a]
-        b_ids = [rid for rid, t in types_by_id.items() if t == pref.room_b]
+        pref_a = resolve_alias(pref.room_a) or pref.room_a
+        pref_b = resolve_alias(pref.room_b) or pref.room_b
+        a_ids = [rid for rid, t in types_by_id.items() if t == pref_a]
+        b_ids = [rid for rid, t in types_by_id.items() if t == pref_b]
         for a in a_ids:
             for b in b_ids:
                 if a != b:
