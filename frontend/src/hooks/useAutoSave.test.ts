@@ -166,6 +166,44 @@ describe('useAutoSave', () => {
     expect(useCanvasStore.getState().latestDraftVersionId).toBe(draftResponse.id)
   })
 
+  it('keeps an edit made while the request was in flight, and drafts it next', async () => {
+    let resolveSave: (value: typeof draftResponse) => void = () => {}
+    vi.mocked(saveDesignDraft).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+
+    useCanvasStore.getState().markDirty()
+    renderHook(() => useAutoSave({ designId: 'design-1', debounceMs: 100 }))
+    await advance(100)
+    expect(saveDesignDraft).toHaveBeenCalledTimes(1)
+
+    // The user keeps editing before the first draft request comes back.
+    act(() => {
+      useCanvasStore
+        .getState()
+        .updateRoom('room-1', { position: { x: 42, y: 1.5, z: 0 } })
+    })
+
+    await act(async () => {
+      resolveSave(draftResponse)
+      await Promise.resolve()
+    })
+
+    // That edit is not in the draft that just landed, so it must stay dirty.
+    expect(useCanvasStore.getState().hasUnsavedChanges).toBe(true)
+    expect(useCanvasStore.getState().draftStatus).toBe('dirty')
+
+    vi.mocked(saveDesignDraft).mockResolvedValue(draftResponse)
+    await advance(100)
+
+    expect(saveDesignDraft).toHaveBeenCalledTimes(2)
+    const [, layout] = vi.mocked(saveDesignDraft).mock.calls[1]
+    expect(layout.rooms.find((room) => room.id === 'room-1')?.position.x).toBe(42)
+    expect(useCanvasStore.getState().hasUnsavedChanges).toBe(false)
+  })
+
   it('marks draft error when save fails', async () => {
     vi.mocked(saveDesignDraft).mockRejectedValue({
       response: { data: { error: 'Draft save failed' } },

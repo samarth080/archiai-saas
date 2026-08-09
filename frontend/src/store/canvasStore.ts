@@ -650,6 +650,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           updatedFootprint,
           objectType === 'room' ? updated.rotation.y : 0,
         )
+      } else if (nextPatch.rotation) {
+        // A quarter turn swaps the visible world extents, so a room that fit
+        // before the turn can overhang the footprint after it. Elevation is
+        // deliberately left alone here — rotating must not move an object
+        // vertically the way a resize or floor change does.
+        updated.position = clampToFootprint(
+          updated.position,
+          updated.size,
+          updatedFootprint,
+          objectType === 'room' ? updated.rotation.y : 0,
+        )
       }
 
       const shouldLog = options?.log ?? true

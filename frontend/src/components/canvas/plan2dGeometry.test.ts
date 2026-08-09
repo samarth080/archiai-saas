@@ -76,6 +76,73 @@ describe('plan2d geometry', () => {
     expect(result.position).toEqual({ x: 5, y: 1.5, z: 5 })
   })
 
+  it('resizes the edge the user actually grabbed on a quarter-turned room', () => {
+    // Local 4x6 turned 90 degrees renders as a 6x4 world box centred on (4, 4),
+    // so the local "east" handle is drawn on the visible south edge (z = 6).
+    const rotated: Room = {
+      ...ROOM,
+      size: { w: 4, h: 3, d: 6 },
+      rotation: { x: 0, y: 90, z: 0 },
+    }
+
+    const result = resizeRoomFromPlanHandle({
+      room: rotated,
+      handle: PLAN_RESIZE_HANDLES.find((handle) => handle.key === 'e')!,
+      point: { x: 4, z: 8 },
+      snapToGrid: false,
+      gridSize: 1,
+    })
+
+    // Dragging that edge to z = 8 grows the visible depth 4 -> 6 (local w),
+    // keeps the visible width (local d) untouched, and anchors the north edge.
+    expect(result.size).toEqual({ w: 6, h: 3, d: 6 })
+    expect(result.position.x).toBe(4)
+    expect(result.position.z).toBe(5)
+  })
+
+  it('anchors the opposite visible corner on a quarter-turned room', () => {
+    const rotated: Room = {
+      ...ROOM,
+      size: { w: 4, h: 3, d: 6 },
+      rotation: { x: 0, y: 90, z: 0 },
+    }
+
+    // The local "se" handle renders at the visible south-west corner (1, 6),
+    // so its anchor is the north-east corner (7, 2).
+    const result = resizeRoomFromPlanHandle({
+      room: rotated,
+      handle: PLAN_RESIZE_HANDLES.find((handle) => handle.key === 'se')!,
+      point: { x: 0, z: 8 },
+      snapToGrid: false,
+      gridSize: 1,
+    })
+
+    expect(result.size).toEqual({ w: 6, h: 3, d: 7 })
+    expect(result.position.x).toBe(3.5)
+    expect(result.position.z).toBe(5)
+  })
+
+  it('clamps a quarter-turned resize against the matching world footprint axis', () => {
+    const rotated: Room = {
+      ...ROOM,
+      size: { w: 4, h: 3, d: 6 },
+      rotation: { x: 0, y: 90, z: 0 },
+    }
+
+    const result = resizeRoomFromPlanHandle({
+      room: rotated,
+      handle: PLAN_RESIZE_HANDLES.find((handle) => handle.key === 'e')!,
+      point: { x: 4, z: 100 },
+      snapToGrid: false,
+      gridSize: 1,
+      footprint: { x: 0, z: 0, w: 12, d: 8 },
+    })
+
+    // Anchored at z = 2, so the visible depth stops at the footprint edge.
+    expect(result.size.w).toBe(6)
+    expect(result.position.z).toBe(5)
+  })
+
   it('changes only the axis controlled by an edge handle', () => {
     const result = resizeRoomFromPlanHandle({
       room: ROOM,

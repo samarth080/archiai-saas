@@ -36,6 +36,7 @@ export function useAutoSave({
   const markDraftSaving = useCanvasStore((state) => state.markDraftSaving)
   const markDraftSaved = useCanvasStore((state) => state.markDraftSaved)
   const markDraftError = useCanvasStore((state) => state.markDraftError)
+  const markDirty = useCanvasStore((state) => state.markDirty)
   const mountedRef = useRef(true)
   const savingRef = useRef(false)
 
@@ -58,9 +59,16 @@ export function useAutoSave({
       markDraftSaving()
 
       try {
-        const draft = await saveDesignDraft(designId, serializeLayout())
+        const payload = serializeLayout()
+        const saved = JSON.stringify(payload)
+        const draft = await saveDesignDraft(designId, payload)
         if (!mountedRef.current) return
         markDraftSaved(draft.updatedAt ?? draft.createdAt, draft.id)
+        // Edits that landed while the request was in flight are not in this
+        // draft, and markDraftSaved has just cleared the dirty flag they set.
+        // Re-mark so the next debounce window drafts them instead of dropping
+        // them and reporting "Saved" for work the server never received.
+        if (JSON.stringify(serializeLayout()) !== saved) markDirty()
       } catch (error) {
         if (!mountedRef.current) return
         markDraftError(getErrorMessage(error))
@@ -78,6 +86,7 @@ export function useAutoSave({
     draftStatus,
     enabled,
     hasUnsavedChanges,
+    markDirty,
     markDraftError,
     markDraftSaved,
     markDraftSaving,

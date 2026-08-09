@@ -13,21 +13,6 @@ import { canonicalQuarterTurn, quarterTurnSwapsAxes } from '../utils/quarterTurn
 const WALL_HEIGHT_M = 3
 const FALLBACK_COLOR = '#94a3b8'
 
-const CANONICAL_ROOM_TYPES = new Set<RoomType>([
-  'bedroom',
-  'master_bedroom',
-  'bathroom',
-  'kitchen',
-  'living_room',
-  'dining',
-  'balcony',
-  'entry',
-  'pooja_room',
-  'study',
-  'utility',
-  'parking',
-])
-
 const ROOM_COLORS: Partial<Record<RoomType, string>> = {
   living_room: '#b3b8e9',
   kitchen: '#6bc0a1',
@@ -58,10 +43,6 @@ function boundedCenter(origin: number, span: number, plotSpan: number) {
   const half = span / 2
   const rounded = round3(origin + half)
   return Math.min(plotSpan - half, Math.max(half, rounded))
-}
-
-function isCanonicalRoomType(value: unknown): value is RoomType {
-  return typeof value === 'string' && CANONICAL_ROOM_TYPES.has(value as RoomType)
 }
 
 function wallObject(layout: LayoutPlan, index: number): Room {
@@ -226,8 +207,14 @@ export function layoutPlanToCanvas(
 
 /**
  * Convert the editor's center-based objects back to the locked NW-origin MVP
- * contract for post-edit validation. This bridge is deliberately limited to
- * canonical rooms plus the wall/hosted-door objects emitted by this adapter.
+ * contract for post-edit validation, covering every room object plus the
+ * wall/hosted-door objects emitted by this adapter.
+ *
+ * Every `objectType: 'room'` object is included — `PlanRoom.type` is an open
+ * string validated against the server's space catalog, and the engine already
+ * emits types outside the twelve residential ones (e.g. the injected
+ * `corridor`). Filtering those out here silently deleted them from the plan
+ * sent for scoring, which made every room they served report `unreachable`.
  */
 export function canvasObjectsToLayoutPlan(
   objects: Room[],
@@ -235,9 +222,7 @@ export function canvasObjectsToLayoutPlan(
   facing: Facing,
 ): LayoutPlan {
   const rooms = objects
-    .filter(
-      (object) => object.objectType === 'room' && isCanonicalRoomType(object.roomType),
-    )
+    .filter((object) => object.objectType === 'room')
     .map((room) => {
       const rotation = canonicalQuarterTurn(room.rotation.y)
       const swapsAxes = quarterTurnSwapsAxes(rotation)
