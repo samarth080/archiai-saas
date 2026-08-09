@@ -37,6 +37,7 @@ export interface Room {
   objectType: CanvasObjectType
   floorId?: string
   floorLevel?: number
+  zoneId?: string
   position: { x: number; y: number; z: number }
   size: ComponentSize
   rotation: { x: number; y: number; z: number }

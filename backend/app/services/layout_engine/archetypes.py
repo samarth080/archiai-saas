@@ -59,7 +59,7 @@ subdivider does not have (and are exactly the kind of thing Phase 4's
 `circulation.py` and Phase 10.2's polygon geometry exist for) — not
 attempted here.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Literal
 
 from app.schemas.requirements import Facing
@@ -94,23 +94,18 @@ _CORRIDOR_SPINE_TYPES = frozenset({"hallway", "corridor", "passage", "passageway
 # engine.py's door-policy alignment (workflow 4.4/4.5) — one canonical
 # "genuinely private" definition shared by placement, doors, and the check.
 _THROUGH_ROOM_PRIVACY_THRESHOLD = 2
+_SANITARY_TYPES = frozenset({"bathroom", "ensuite", "toilet", "washroom", "wc"})
 
 
 def _corridor_served_groups(
     rooms: list[RoomNeed], must_adjacent: list[tuple[str, str]],
 ) -> tuple[list[list[RoomNeed]], list[RoomNeed]]:
     """Split ``rooms`` into (comb clusters that need guaranteed corridor
-    access, everything else). Only a genuinely private room
-    (``catalog.privacy_level_for >= 2``) needs the guarantee — a MUST-
-    attached service partner (an ensuite bathroom) travels with its private
-    anchor as ONE comb slot instead of getting its own, which is also the
-    doc's own stated exception ("except a MUST-attached service"). Anything
-    else (an unattached bathroom, utility, parking, ...) doesn't need comb
-    treatment at all — it isn't privacy-checked, and forcing it into the
-    comb wastes real space for no correctness benefit. Found live: combing
-    every non-public room (bathrooms, utility, parking alongside the actual
-    bedrooms) needed far more length than several real fixtures' plots had,
-    despite none of those extra rooms needing the guarantee."""
+    access, everything else). Genuinely private rooms and sanitary rooms need
+    the guarantee. A MUST-attached service partner travels with its private
+    anchor as one comb cluster; unattached sanitary rooms are distributed over
+    those clusters. Utility, parking, and other service/outdoor rooms remain
+    flexible so circulation does not consume unnecessary frontage."""
     by_key = {n.key: n for n in rooms}
     keys = set(by_key)
     private_keys = {
@@ -147,34 +142,73 @@ def _corridor_served_groups(
         group = [n] + [by_key[p] for p in partners.get(n.key, []) if p not in claimed]
         claimed.update(m.key for m in group)
         clusters.append(group)
+    # An unattached bathroom is also access-sensitive: if it sits behind a
+    # bedroom, the layout is reachable on paper but requires walking through
+    # that bedroom. Distribute sanitary rooms across the smallest private
+    # clusters; the cluster is split ALONG the corridor later, so every member
+    # still touches it directly without consuming a separate full comb slot.
+    sanitary = [
+        n for n in rooms
+        if n.key not in claimed
+        and (catalog.resolve_alias(n.type) or n.type) in _SANITARY_TYPES
+    ]
+    for n in sanitary:
+        if clusters:
+            index = min(
+                range(len(clusters)),
+                key=lambda i: (
+                    len(clusters[i]),
+                    sum(item.preferred_area for item in clusters[i]),
+                    i,
+                ),
+            )
+            if index == len(clusters) - 1:
+                clusters[index].insert(0, n)
+            else:
+                clusters[index].append(n)
+        else:
+            clusters.append([n])
+        claimed.add(n.key)
+
     flex = [n for n in rooms if n.key not in claimed]
     return clusters, flex
 
 
 def _balance_two_ways(groups: list[list[RoomNeed]]) -> tuple[list[list[RoomNeed]], list[list[RoomNeed]]]:
     """Split ``groups`` (e.g. corridor-served clusters) into two lists
-    balanced by total room area — a greedy largest-first bin-pack, not a
-    plain alternating-index split. Found live: alternating index put a
-    heavy multi-room cluster (master_bedroom + its ensuite) in the same
-    wing as two more clusters while the other wing got only two much
-    smaller ones, so the heavier wing needed more depth than the plot's
-    constrained span had, while the lighter wing had spare room to give."""
-    ordered = sorted(groups, key=lambda g: -sum(n.preferred_area for n in g))
+    balanced by required corridor frontage. Preferred area breaks ties; it
+    cannot replace the linear minimum that determines whether a comb fits."""
+    def span(group: list[RoomNeed]) -> float:
+        return sum(min(need.min_w, need.min_d) for need in group)
+
+    def area(group: list[RoomNeed]) -> float:
+        return sum(need.preferred_area for need in group)
+
+    ordered = sorted(groups, key=lambda group: (-span(group), -area(group)))
     wing_a: list[list[RoomNeed]] = []
     wing_b: list[list[RoomNeed]] = []
+    span_a = span_b = 0.0
     area_a = area_b = 0.0
     for g in ordered:
-        g_area = sum(n.preferred_area for n in g)
-        if area_a <= area_b:
+        g_span = span(g)
+        g_area = area(g)
+        if (span_a, area_a) <= (span_b, area_b):
             wing_a.append(g)
+            span_a += g_span
             area_a += g_area
         else:
             wing_b.append(g)
+            span_b += g_span
             area_b += g_area
     return wing_a, wing_b
 
 
-def _flatten_cluster_band(rect: Rect, cluster: list[RoomNeed]) -> list[tuple[Rect, list[RoomNeed]]]:
+def _flatten_cluster_band(
+    rect: Rect,
+    cluster: list[RoomNeed],
+    *,
+    axis: str | None = None,
+) -> list[tuple[Rect, list[RoomNeed]]]:
     """A comb-arranged cluster's rect (from ``_split_rect``'s floor+slack
     allocation, sized for the cluster's aggregate area) doesn't always have
     a workable aspect ratio for the general recursive ``subdivide()`` —
@@ -187,15 +221,55 @@ def _flatten_cluster_band(rect: Rect, cluster: list[RoomNeed]) -> list[tuple[Rec
     single-room cluster is returned unchanged."""
     if len(cluster) <= 1:
         return [(rect, cluster)]
-    axis = "w" if rect.w >= rect.d else "d"
-    rects = _split_rect(rect, axis, [[n] for n in cluster])
+    split_axis = axis or ("w" if rect.w >= rect.d else "d")
+    rects = _split_rect(rect, split_axis, [[n] for n in cluster])
     return list(zip(rects, [[n] for n in cluster]))
 
 
 @dataclass(frozen=True)
+class BandEntry:
+    """One placement band plus its hierarchical-zone ownership.
+
+    Iteration intentionally exposes only ``(rect, rooms)`` so every Phase
+    3–9 consumer keeps its established two-value unpacking. ``zone_id`` is
+    additive metadata for Phase 10 composition, not another geometry axis.
+    """
+
+    rect: Rect
+    rooms: list[RoomNeed]
+    zone_id: str = "global"
+
+    def __iter__(self):
+        return iter((self.rect, self.rooms))
+
+    def __getitem__(self, index: int):
+        return (self.rect, self.rooms)[index]
+
+
+@dataclass(frozen=True)
+class ArchetypeRegion:
+    zone_id: str
+    archetype: str
+    reason: str
+    room_ids: tuple[str, ...]
+    spans: tuple[Rect, ...]
+
+
+@dataclass(frozen=True)
 class BandPlan:
-    bands: list[tuple[Rect, list[RoomNeed]]]
+    bands: list[BandEntry | tuple[Rect, list[RoomNeed]]]
     corridor_rects: list[tuple[str, Rect]] = field(default_factory=list)
+    regions: list[ArchetypeRegion] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "bands",
+            [
+                band if isinstance(band, BandEntry) else BandEntry(*band)
+                for band in self.bands
+            ],
+        )
 
 
 def macro_zone(zone: str) -> str:
@@ -282,7 +356,12 @@ def _band_floor(rooms: list[RoomNeed], other: float) -> float:
 
 
 def _facing_progression_bands(
-    plot_w: float, plot_d: float, facing: Facing, ordered_groups: list[list[RoomNeed]],
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+    ordered_groups: list[list[RoomNeed]],
+    *,
+    minimum_spans: list[float] | None = None,
 ) -> list[tuple[Rect, list[RoomNeed]]]:
     """Distribute ``ordered_groups`` (facing-edge group first) as consecutive
     bands along the facing progression axis. Every band first gets its own
@@ -298,6 +377,8 @@ def _facing_progression_bands(
 
     span, other = (plot_w, plot_d) if facing in (Facing.east, Facing.west) else (plot_d, plot_w)
     floors = [_band_floor(g, other) for g in ordered_groups]
+    if minimum_spans is not None:
+        floors = [max(floor, minimum) for floor, minimum in zip(floors, minimum_spans)]
     total_floor = sum(floors)
     if total_floor > span + EPS:
         raise SubdivisionError(
@@ -316,7 +397,14 @@ def _facing_progression_bands(
     return bands
 
 
-def _split_rect(rect: Rect, axis: str, groups: list[list[RoomNeed]]) -> list[Rect]:
+def _split_rect(
+    rect: Rect,
+    axis: str,
+    groups: list[list[RoomNeed]],
+    *,
+    flatten_groups: bool = False,
+    minimum_spans: list[float] | None = None,
+) -> list[Rect]:
     """Split ``rect`` into one sub-rect per group along ``axis`` ("w" or
     "d"), same floor-then-slack allocation as :func:`_facing_progression_bands`
     — used for the axis PERPENDICULAR to the facing progression
@@ -324,7 +412,14 @@ def _split_rect(rect: Rect, axis: str, groups: list[list[RoomNeed]]) -> list[Rec
     side to anchor against, just a left-to-right/top-to-bottom order."""
     span = rect.w if axis == "w" else rect.d
     other = rect.d if axis == "w" else rect.w
-    floors = [_band_floor(g, other) for g in groups]
+    floors = [
+        sum(_band_floor([need], other) for need in group)
+        if flatten_groups and len(group) > 1
+        else _band_floor(group, other)
+        for group in groups
+    ]
+    if minimum_spans is not None:
+        floors = [max(floor, minimum) for floor, minimum in zip(floors, minimum_spans)]
     total_floor = sum(floors)
     if total_floor > span + EPS:
         raise SubdivisionError(
@@ -430,9 +525,16 @@ def zoned_bands(program: EngineProgram, plot_w: float, plot_d: float, facing: Fa
     served_rect = bands[insert_at + 1][0]
 
     perp_axis = "d" if facing in (Facing.east, Facing.west) else "w"
-    cluster_rects = _split_rect(served_rect, perp_axis, clusters)
+    cluster_rects = _split_rect(
+        served_rect,
+        perp_axis,
+        clusters,
+        flatten_groups=True,
+    )
     comb_bands = [
-        flat for rect, cluster in zip(cluster_rects, clusters) for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(cluster_rects, clusters)
+        for flat in _flatten_cluster_band(rect, cluster, axis=perp_axis)
     ]
 
     final_bands = bands[:insert_at] + [bands[insert_at]] + comb_bands + bands[insert_at + 2:]
@@ -511,16 +613,26 @@ def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float,
     # band, so it doesn't pay a second band's own floor overhead on top of
     # the wings' (found live: a separate flex band left too little depth for
     # the wings to comb-arrange their clusters in on several real fixtures).
+    wing_a, wing_b = _balance_two_ways(clusters)
     clusters_footprint = [n for cluster in clusters for n in cluster]
     public_and_flex = public + flex
     skeleton = [public_and_flex, clusters_footprint]
-    progression_bands = _facing_progression_bands(plot_w, plot_d, facing, skeleton)
+    wing_span = max(
+        sum(min(n.min_w, n.min_d) for cluster in wing for n in cluster)
+        for wing in (wing_a, wing_b)
+    )
+    progression_bands = _facing_progression_bands(
+        plot_w,
+        plot_d,
+        facing,
+        skeleton,
+        minimum_spans=[0.0, wing_span],
+    )
     public_rect, _ = progression_bands[0]
     public_band = (public_rect, public_and_flex)
     wings_rect = progression_bands[1][0]
     trailing_bands: list[tuple[Rect, list[RoomNeed]]] = []
 
-    wing_a, wing_b = _balance_two_ways(clusters)
     if not wing_b:
         # Degenerate: every cluster landed in one wing, nothing to spine
         # against on the other side.
@@ -537,12 +649,20 @@ def double_loaded_corridor(program: EngineProgram, plot_w: float, plot_d: float,
     )
     along_axis = "w" if perp_axis == "d" else "d"
     comb_a = [
-        flat for rect, cluster in zip(_split_rect(wing_a_rect, along_axis, wing_a), wing_a)
-        for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(
+            _split_rect(wing_a_rect, along_axis, wing_a, flatten_groups=True),
+            wing_a,
+        )
+        for flat in _flatten_cluster_band(rect, cluster, axis=along_axis)
     ]
     comb_b = [
-        flat for rect, cluster in zip(_split_rect(wing_b_rect, along_axis, wing_b), wing_b)
-        for flat in _flatten_cluster_band(rect, cluster)
+        flat
+        for rect, cluster in zip(
+            _split_rect(wing_b_rect, along_axis, wing_b, flatten_groups=True),
+            wing_b,
+        )
+        for flat in _flatten_cluster_band(rect, cluster, axis=along_axis)
     ]
 
     bands = [public_band] + comb_a + [(corridor_rect, [corridor])] + comb_b + trailing_bands
@@ -591,6 +711,121 @@ def open_core(program: EngineProgram, plot_w: float, plot_d: float, facing: Faci
         program.must_adjacent,
     )
     return BandPlan(bands=_facing_progression_bands(plot_w, plot_d, facing, [[dominant], rest]))
+
+
+def _must_components(
+    needs: list[RoomNeed],
+    pairs: list[tuple[str, str]],
+) -> list[list[RoomNeed]]:
+    by_key = {need.key: need for need in needs}
+    parent = {key: key for key in by_key}
+
+    def find(key: str) -> str:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for a, b in pairs:
+        if a not in parent or b not in parent:
+            continue
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    grouped: dict[str, list[RoomNeed]] = {}
+    for need in needs:
+        grouped.setdefault(find(need.key), []).append(need)
+    return list(grouped.values())
+
+
+def vertical_core_bands(
+    program: EngineProgram,
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+) -> BandPlan:
+    """Pre-carve an aligned stair/lift core and tile the remaining wing.
+
+    The core is a full-depth strip: stair (and optional lift) at the front,
+    landing/corridor behind. Private MUST-components each receive their own
+    band along that strip, so access never depends on crossing another
+    private component. Non-private rooms share one flex band.
+    """
+    stair = next(
+        (need for need in program.needs if need.type in ("staircase", "stairs")),
+        None,
+    )
+    corridor = next(
+        (need for need in program.needs if need.type in _CORRIDOR_SPINE_TYPES),
+        None,
+    )
+    lift = next(
+        (need for need in program.needs if need.type in ("lift", "elevator")),
+        None,
+    )
+    if stair is None or corridor is None:
+        raise SubdivisionError("multi-floor generation needs a stair and landing on every floor")
+
+    stair_length = max(2.4, stair.min_w, stair.min_d)
+    stair_width = min(stair.min_w, stair.min_d)
+    core_width = max(stair_width, min(lift.min_w, lift.min_d) if lift else 0.0)
+    lift_length = max(lift.min_w, lift.min_d) if lift else 0.0
+    core_used = stair_length + lift_length
+    if core_used + corridor.min_d > plot_d + EPS:
+        raise SubdivisionError(
+            f"vertical core needs at least {core_used + corridor.min_d:.1f}m depth "
+            f"but the plot only has {plot_d:.1f}m"
+        )
+    if core_width >= plot_w - EPS:
+        raise SubdivisionError(
+            f"vertical core is {core_width:.1f}m wide but the plot is only {plot_w:.1f}m"
+        )
+
+    core_bands: list[tuple[Rect, list[RoomNeed]]] = [
+        (Rect(0.0, 0.0, core_width, stair_length), [stair]),
+    ]
+    offset = stair_length
+    if lift is not None:
+        core_bands.append((Rect(0.0, offset, core_width, lift_length), [lift]))
+        offset += lift_length
+    corridor_rect = Rect(0.0, offset, core_width, plot_d - offset)
+    core_bands.append((corridor_rect, [corridor]))
+
+    core_keys = {stair.key, corridor.key}
+    if lift is not None:
+        core_keys.add(lift.key)
+    remaining = [need for need in program.needs if need.key not in core_keys]
+    if not remaining:
+        raise SubdivisionError("multi-floor generation needs at least one non-core room per floor")
+
+    components = _must_components(remaining, program.must_adjacent)
+    served = [
+        group for group in components
+        if any(
+            catalog.privacy_level_for(need.type) >= _THROUGH_ROOM_PRIVACY_THRESHOLD
+            for need in group
+        )
+    ]
+    served_keys = {need.key for group in served for need in group}
+    flex = [need for need in remaining if need.key not in served_keys]
+    groups = served + ([flex] if flex else [])
+
+    wing = Rect(core_width, 0.0, plot_w - core_width, plot_d)
+    group_rects = _split_rect(wing, "d", groups)
+    wing_bands = [
+        flat
+        for rect, group in zip(group_rects, groups)
+        for flat in (
+            _flatten_cluster_band(rect, group)
+            if group in served
+            else [(rect, group)]
+        )
+    ]
+    return BandPlan(
+        bands=core_bands + wing_bands,
+        corridor_rects=[(corridor.key, corridor_rect)],
+    )
 
 
 ArchetypeFn = Callable[[EngineProgram, float, float, Facing], BandPlan]
@@ -675,3 +910,304 @@ def select_archetype(
         )
 
     return "zoned_bands", zoned_bands, "no archetype-specific graph shape matched"
+
+
+# ── hierarchical composition (workflow Phase 10.1) ─────────────────────────
+
+
+@dataclass(frozen=True)
+class _MacroZone:
+    zone_id: str
+    rooms: list[RoomNeed]
+    forced_archetype: str | None = None
+    forced_reason: str | None = None
+
+
+def _subset_program(program: EngineProgram, rooms: list[RoomNeed]) -> EngineProgram:
+    keys = {room.key for room in rooms}
+
+    def pairs(values: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return [(a, b) for a, b in values if a in keys and b in keys]
+
+    return replace(
+        program,
+        needs=rooms,
+        zone_of={key: zone for key, zone in program.zone_of.items() if key in keys},
+        must_adjacent=pairs(program.must_adjacent),
+        should_adjacent=pairs(program.should_adjacent),
+        avoid=pairs(program.avoid),
+        circulation_nodes=[key for key in program.circulation_nodes if key in keys],
+        floor_of={key: floor for key, floor in program.floor_of.items() if key in keys},
+        entry_node=program.entry_node if program.entry_node in keys else None,
+    )
+
+
+def _service_partners(
+    program: EngineProgram,
+    anchors: set[str],
+    available: set[str],
+) -> set[str]:
+    partners: set[str] = set()
+    for a, b in program.must_adjacent:
+        if a in anchors and b in available:
+            candidate = b
+        elif b in anchors and a in available:
+            candidate = a
+        else:
+            continue
+        if program.zone_of.get(candidate) in {"service", "technical"}:
+            partners.add(candidate)
+    return partners
+
+
+def _macro_zones(program: EngineProgram, corridor: RoomNeed) -> list[_MacroZone]:
+    """Type-agnostic macro-zones from repeat units plus service dependencies.
+
+    The conservative activation is intentional: only non-private repeated
+    units (classrooms, studio units, similar catalog programs) trigger this
+    first hierarchical packet. Repeated bedrooms remain on the byte-stable
+    residential path. MUST-attached service rooms follow their anchor zone;
+    a dominant remaining room plus its own service dependency becomes an
+    open-core candidate; everything else forms the shared support/front zone.
+    """
+    candidates = [room for room in program.needs if room.key != corridor.key]
+    by_type: dict[str, list[RoomNeed]] = {}
+    for room in candidates:
+        if (
+            program.zone_of.get(room.key) not in {"circulation", "service", "technical"}
+            and catalog.privacy_level_for(room.type) < _THROUGH_ROOM_PRIVACY_THRESHOLD
+        ):
+            by_type.setdefault(room.type, []).append(room)
+
+    repeated = [
+        (space_type, rooms)
+        for space_type, rooms in sorted(by_type.items())
+        if len(rooms) >= _MIN_REPEAT_UNITS
+        and space_type not in _CORRIDOR_SPINE_TYPES
+    ]
+    if not repeated:
+        return []
+
+    by_key = {room.key: room for room in candidates}
+    unassigned = set(by_key)
+    zones: list[_MacroZone] = []
+    for space_type, rooms in repeated:
+        room_keys = {room.key for room in rooms} & unassigned
+        if len(room_keys) < _MIN_REPEAT_UNITS:
+            continue
+        attached = _service_partners(program, room_keys, unassigned - room_keys)
+        keys = room_keys | attached
+        ordered = [room for room in candidates if room.key in keys]
+        unassigned -= keys
+        zones.append(_MacroZone(
+            zone_id=f"zone-repeat-{space_type}",
+            rooms=ordered,
+            forced_archetype="double_loaded_corridor",
+            forced_reason=(
+                f"{len(room_keys)} {space_type!r} repeat units share the building circulation spine"
+            ),
+        ))
+
+    remaining = [room for room in candidates if room.key in unassigned]
+    if not zones or len(remaining) < 2:
+        return []
+
+    # A dominant room with a real service dependency names the remaining
+    # front/support program as one open-core macro-zone. Keeping its support
+    # rooms in that zone lets the existing selector see the real area share
+    # while preserving the dominant-to-service MUST edge inside one wing.
+    dominant = max(remaining, key=lambda room: (room.preferred_area, room.key))
+    remaining_area = sum(room.preferred_area for room in remaining) or 1.0
+    attached = _service_partners(
+        program,
+        {dominant.key},
+        {room.key for room in remaining if room.key != dominant.key},
+    )
+    if (
+        dominant.preferred_area / remaining_area >= _MIN_DOMINANT_SHARE
+        and attached
+    ):
+        zones.append(_MacroZone(
+            zone_id=f"zone-core-{dominant.type}",
+            rooms=remaining,
+        ))
+    else:
+        zones.append(_MacroZone(zone_id="zone-support", rooms=remaining))
+    return zones
+
+
+def _zone_sides(
+    zone: _MacroZone,
+    archetype: str,
+    program: EngineProgram,
+) -> tuple[list[RoomNeed], list[RoomNeed]]:
+    """Return ``(back, facing)`` room groups for one shared-spine zone."""
+    rooms = list(zone.rooms)
+    entry = next((room for room in rooms if room.key == program.entry_node), None)
+
+    if archetype == "double_loaded_corridor":
+        back, facing = rooms[0::2], rooms[1::2]
+    elif archetype == "open_core":
+        dominant = max(rooms, key=lambda room: (room.preferred_area, room.key))
+        partner_keys = {
+            b if a == dominant.key else a
+            for a, b in program.must_adjacent
+            if dominant.key in (a, b)
+        }
+        facing = [dominant] + [
+            room for room in rooms
+            if room.key in partner_keys and room.key != dominant.key
+        ]
+        if entry is not None and entry.key not in {room.key for room in facing}:
+            facing.append(entry)
+        facing_keys = {room.key for room in facing}
+        back = [room for room in rooms if room.key not in facing_keys]
+    elif archetype == "hub_and_spoke":
+        public = [
+            room for room in rooms
+            if macro_zone(program.zone_of.get(room.key, "semi_private")) == "public"
+        ] or rooms
+        hub = max(public, key=lambda room: (_circulation_weight(room.type), room.preferred_area))
+        facing = [hub]
+        if entry is not None and entry.key != hub.key:
+            facing.append(entry)
+        facing_keys = {room.key for room in facing}
+        back = [room for room in rooms if room.key not in facing_keys]
+    else:
+        facing = [
+            room for room in rooms
+            if macro_zone(program.zone_of.get(room.key, "semi_private")) == "public"
+            or room.key == program.entry_node
+        ]
+        facing_keys = {room.key for room in facing}
+        back = [room for room in rooms if room.key not in facing_keys]
+
+    if not back or not facing:
+        ordered = sorted(rooms, key=lambda room: (-room.preferred_area, room.key))
+        back, facing = [], []
+        area_back = area_facing = 0.0
+        for room in ordered:
+            if area_back <= area_facing:
+                back.append(room)
+                area_back += room.preferred_area
+            else:
+                facing.append(room)
+                area_facing += room.preferred_area
+        if entry is not None and entry in back:
+            swap = next((room for room in facing if room.key != entry.key), None)
+            back.remove(entry)
+            facing.append(entry)
+            if swap is not None:
+                facing.remove(swap)
+                back.append(swap)
+    return back, facing
+
+
+def _shared_spine_wings(
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+    corridor_width: float,
+) -> tuple[Rect, Rect, Rect, str]:
+    if facing in (Facing.east, Facing.west):
+        wing_width = (plot_w - corridor_width) / 2
+        west = Rect(0.0, 0.0, wing_width, plot_d)
+        corridor = Rect(wing_width, 0.0, corridor_width, plot_d)
+        east = Rect(wing_width + corridor_width, 0.0, wing_width, plot_d)
+        return (west, east, corridor, "d") if facing == Facing.east else (east, west, corridor, "d")
+
+    wing_depth = (plot_d - corridor_width) / 2
+    north = Rect(0.0, 0.0, plot_w, wing_depth)
+    corridor = Rect(0.0, wing_depth, plot_w, corridor_width)
+    south = Rect(0.0, wing_depth + corridor_width, plot_w, wing_depth)
+    return (north, south, corridor, "w") if facing == Facing.south else (south, north, corridor, "w")
+
+
+def hierarchical_bands(
+    program: EngineProgram,
+    plot_w: float,
+    plot_d: float,
+    facing: Facing,
+) -> BandPlan | None:
+    """Compose independently selected macro-zones around one shared spine.
+
+    Returns ``None`` for ordinary/small programs so all Phase 3–9 geometry is
+    untouched. A composed plan uses one full-length corridor and a pair of
+    room combs per macro-zone. Every room therefore has literal corridor
+    frontage, while each zone's side split expresses its selected archetype:
+    repeats alternate across the spine, hubs/dominant cores occupy the facing
+    wing, and support rooms follow public-to-facing zoning.
+    """
+    corridor = next((room for room in program.needs if room.type in _CORRIDOR_SPINE_TYPES), None)
+    if corridor is None:
+        return None
+    zones = _macro_zones(program, corridor)
+    if len(zones) < 2:
+        return None
+
+    corridor_width = max(
+        min(corridor.min_w, corridor.min_d),
+        catalog.CIRCULATION_WIDTHS["residential"],
+    )
+    progression_span = plot_w if facing in (Facing.east, Facing.west) else plot_d
+    if corridor_width >= progression_span - EPS:
+        raise SubdivisionError("shared circulation spine leaves no room for macro-zones")
+    back_wing, facing_wing, corridor_rect, cross_axis = _shared_spine_wings(
+        plot_w, plot_d, facing, corridor_width,
+    )
+
+    decisions: list[tuple[_MacroZone, str, str, list[RoomNeed], list[RoomNeed]]] = []
+    for zone in zones:
+        if zone.forced_archetype is not None:
+            archetype = zone.forced_archetype
+            reason = zone.forced_reason or "hierarchical repeat-unit zone"
+        else:
+            archetype, _, reason = select_archetype(_subset_program(program, zone.rooms))
+        back_rooms, facing_rooms = _zone_sides(zone, archetype, program)
+        if not back_rooms or not facing_rooms:
+            return None
+        decisions.append((zone, archetype, reason, back_rooms, facing_rooms))
+
+    zone_groups = [zone.rooms for zone, _, _, _, _ in decisions]
+    side_width = back_wing.w if cross_axis == "d" else back_wing.d
+    minimum_spans = [
+        max(
+            sum(_band_floor([room], side_width) for room in back_rooms),
+            sum(_band_floor([room], side_width) for room in facing_rooms),
+        )
+        for _, _, _, back_rooms, facing_rooms in decisions
+    ]
+    back_rects = _split_rect(
+        back_wing, cross_axis, zone_groups, minimum_spans=minimum_spans,
+    )
+    facing_rects = _split_rect(
+        facing_wing, cross_axis, zone_groups, minimum_spans=minimum_spans,
+    )
+
+    bands: list[BandEntry] = [BandEntry(corridor_rect, [corridor], "shared-circulation")]
+    regions: list[ArchetypeRegion] = []
+    for decision, back_rect, facing_rect in zip(decisions, back_rects, facing_rects):
+        zone, archetype, reason, back_rooms, facing_rooms = decision
+        back_slots = _split_rect(back_rect, cross_axis, [[room] for room in back_rooms])
+        facing_slots = _split_rect(facing_rect, cross_axis, [[room] for room in facing_rooms])
+        bands.extend(
+            BandEntry(rect, [room], zone.zone_id)
+            for rect, room in zip(back_slots, back_rooms)
+        )
+        bands.extend(
+            BandEntry(rect, [room], zone.zone_id)
+            for rect, room in zip(facing_slots, facing_rooms)
+        )
+        regions.append(ArchetypeRegion(
+            zone_id=zone.zone_id,
+            archetype=archetype,
+            reason=reason,
+            room_ids=tuple(room.key for room in zone.rooms),
+            spans=(back_rect, facing_rect),
+        ))
+
+    return BandPlan(
+        bands=bands,
+        corridor_rects=[(corridor.key, corridor_rect)],
+        regions=regions,
+    )

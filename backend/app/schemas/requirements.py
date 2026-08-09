@@ -21,7 +21,7 @@ Changing this file is a mini-migration, not a casual edit (workflow Step 0.3).
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, field_validator
 
 
 class BuildingType(str, Enum):
@@ -59,6 +59,26 @@ class Facing(str, Enum):
     west = "west"
 
 
+RulePackName = Literal[
+    "generic",
+    "residential",
+    "healthcare",
+    "workplace",
+    "hospitality_edu",
+    "vastu",
+]
+
+ZoneName = Literal[
+    "public",
+    "private",
+    "semi_private",
+    "service",
+    "circulation",
+    "outdoor",
+    "technical",
+]
+
+
 def _reject_string_number(value: object) -> object:
     """Dimensions must arrive as numbers, not numeric strings — the schema is the
     type gate for LLM output (workflow Risk #4)."""
@@ -80,13 +100,12 @@ class RoomRequest(BaseModel):
 
 
 class SpaceRequest(BaseModel):
-    """Phase 1 (engine generalization) superset of RoomRequest: a free-string
-    `space_type` validated against `services.catalog.SpaceCatalog` at the
-    service boundary rather than the closed `RoomType` enum, so the contract
-    can eventually express non-residential programs `RoomType` cannot. Added
-    additively alongside `rooms` (workflow Phase 1.2 migration order item 1)
-    — `rooms` keeps working exactly as before; nothing existing reads
-    `spaces` yet."""
+    """Canonical free-string program entry.
+
+    Known keys resolve through SpaceCatalog. A self-describing unknown key can
+    be registered at the engine boundary; incomplete or low-confidence
+    unknowns are routed to clarification.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -95,21 +114,30 @@ class SpaceRequest(BaseModel):
     size_hint: Literal["small", "medium", "large", "xlarge"] | None = None
     # Explicit user override beats any hint or catalog default.
     area_m2: float | None = Field(default=None, gt=1, lt=2000)
+    # Lower numbers are more important. None means the user did not authorize
+    # the engine to treat this space as expendable during fit negotiation.
+    priority: StrictInt | None = Field(default=None, ge=1, le=100)
+    # Metadata for a genuinely unknown catalog key. Known keys need none of
+    # these; unknown keys need all three and sufficient confidence before the
+    # service boundary will register them.
+    zone_guess: ZoneName | None = None
+    size_guess_m2: float | None = Field(default=None, gt=1, lt=2000)
+    confidence: StrictFloat | None = Field(default=None, ge=0, le=1)
 
 
 class AdjacencyPref(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    room_a: RoomType
-    room_b: RoomType
+    room_a: str = Field(min_length=1, max_length=64)
+    room_b: str = Field(min_length=1, max_length=64)
     strength: Literal["must", "should"]
 
 
 class AvoidPair(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    room_a: RoomType
-    room_b: RoomType
+    room_a: str = Field(min_length=1, max_length=64)
+    room_b: str = Field(min_length=1, max_length=64)
 
 
 class Vertex(BaseModel):
@@ -147,10 +175,12 @@ class RequirementsSpec(BaseModel):
 
     building_type: BuildingType = BuildingType.house
     floors: StrictInt = Field(default=1, ge=1, le=5)
+    # Requests an accessible-width core and lift even below the normal
+    # three-floor lift threshold.
+    accessibility_mode: StrictBool = False
     rooms: list[RoomRequest] = Field(default_factory=list)
-    # Superset of `rooms` (Phase 1.2) — free-string SpaceRequest entries.
-    # Nothing populates or reads this yet; it exists so the migration can
-    # proceed one call site at a time instead of a single breaking cutover.
+    # Superset of `rooms` (Phase 1.2) — free-string SpaceRequest entries used
+    # by the canonical graph/engine path for non-residential programs.
     spaces: list[SpaceRequest] = Field(default_factory=list)
     adjacency: list[AdjacencyPref] = Field(default_factory=list)
     avoid_adjacency: list[AvoidPair] = Field(default_factory=list)
@@ -163,5 +193,8 @@ class RequirementsSpec(BaseModel):
     layout_style: Literal[
         "zoned_bands", "double_loaded_corridor", "hub_and_spoke", "open_core"
     ] | None = None
+    # None selects packs from the building/program shape. A populated list is
+    # an explicit override; Vastu still also requires the caller's opt-in.
+    rule_packs: list[RulePackName] | None = None
     # Field names / question topics the prompt genuinely did not state.
     missing_info: list[str] = Field(default_factory=list)

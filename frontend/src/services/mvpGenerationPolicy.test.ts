@@ -19,15 +19,23 @@ const requirements: RequirementsSpec = {
 }
 
 describe('MVP generation selection policy', () => {
-  it('uses canonical geometry only for supported single-floor residential briefs', () => {
+  it('uses canonical geometry for supported single- and multi-floor briefs', () => {
     expect(generationEngineFor(requirements)).toBe('mvp')
-    expect(generationEngineFor({ ...requirements, floors: 2 })).toBe('established')
+    expect(generationEngineFor({ ...requirements, floors: 2 })).toBe('mvp')
     expect(
       generationEngineFor({ ...requirements, building_type: 'office' }),
-    ).toBe('established')
+    ).toBe('mvp')
     expect(
       generationEngineFor({ ...requirements, building_type: 'duplex' }),
-    ).toBe('established')
+    ).toBe('mvp')
+    expect(
+      generationEngineFor({
+        ...requirements,
+        building_type: 'other',
+        rooms: [],
+        spaces: [{ space_type: 'recording_studio', count: 1 }],
+      }),
+    ).toBe('mvp')
   })
 
   it('applies valid editor overrides without mutating extraction output', () => {
@@ -57,6 +65,21 @@ describe('MVP generation selection policy', () => {
 
     expect(result.floors).toBe(1)
     expect(result.plot.width_m).toBeNull()
+  })
+
+  it('clones arbitrary spaces when applying overrides', () => {
+    const custom = {
+      ...requirements,
+      building_type: 'other' as const,
+      rooms: [],
+      spaces: [{ space_type: 'recording_studio', count: 1 }],
+    }
+
+    const result = applyGenerationOverrides(custom, {})
+
+    expect(result.spaces).toEqual(custom.spaces)
+    expect(result.spaces).not.toBe(custom.spaces)
+    expect(result.spaces?.[0]).not.toBe(custom.spaces[0])
   })
 
   it('updates review facts and removes questions resolved by overrides', () => {

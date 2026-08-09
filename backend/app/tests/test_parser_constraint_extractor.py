@@ -99,6 +99,18 @@ def test_close_to_produces_should_constraint():
     assert _strength(c, "office", "meeting_room") == "SHOULD"
 
 
+def test_consultation_rooms_off_waiting_area_are_must_connected():
+    c = extract_constraints("consultation rooms off the waiting area")
+
+    assert _strength(c, "consultation_room", "waiting_room") == "MUST"
+
+
+def test_non_residential_away_from_phrase_is_a_separation():
+    c = extract_constraints("keep storage away from dining")
+
+    assert ("storage", "dining_room") in c.separations
+
+
 def test_duplicate_constraint_not_added_twice():
     c = extract_constraints("kitchen next to dining room, kitchen beside the dining room")
     pairs = [a for a in c.adjacency if frozenset({a.room_a, a.room_b}) == frozenset({"kitchen", "dining_room"})]

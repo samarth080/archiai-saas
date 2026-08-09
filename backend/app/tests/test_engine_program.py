@@ -216,6 +216,44 @@ def test_from_requirements_rejects_an_unknown_space_type_eagerly():
         from_requirements(spec)
 
 
+def test_from_requirements_registers_self_describing_unknown_space():
+    key = "voiceover_booth"
+    spec = RequirementsSpec(spaces=[SpaceRequest(
+        space_type=key,
+        count=1,
+        zone_guess="private",
+        size_guess_m2=12,
+        confidence=0.95,
+    )])
+    try:
+        graph = from_requirements(spec)
+        node = graph.nodes_of_space_type(key)[0]
+        assert node.zone == "private"
+        assert node.target_area_sqm is None
+        assert catalog.get(key).preferred_area_m2 == 12
+    finally:
+        catalog.CATALOG.pop(key, None)
+
+
+def test_from_requirements_matches_free_string_constraint_endpoints():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {"space_type": "consultation_room", "count": 1},
+            {"space_type": "waiting_room", "count": 1},
+        ],
+        "adjacency": [{
+            "room_a": "consultation_room",
+            "room_b": "waiting_room",
+            "strength": "must",
+        }],
+    })
+
+    graph = from_requirements(spec)
+
+    assert len(graph.edges) == 1
+    assert graph.edges[0].strength == "MUST"
+
+
 def test_from_requirements_does_not_auto_inject_entry():
     # Contrasts with engine._expand()'s own auto-entry hack — this adapter
     # is a faithful structural translation only; injection stays

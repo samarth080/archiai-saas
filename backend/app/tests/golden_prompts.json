@@ -1,5 +1,5 @@
 {
-  "_comment": "Workflow Step 0.4 — the 10-prompt acceptance suite. `expect` fields are asserted by Phase 2 (extraction) and Phase 3 (clarification) tests. route: generate | vague | conflict.",
+  "_comment": "Workflow Phase 8 — 24 extraction prompts including 15 non-residential briefs. Expect fields are checked offline and by the opt-in live field-accuracy gate. route: generate | vague | conflict.",
   "prompts": [
     {
       "id": "demo",
@@ -45,7 +45,236 @@
     {
       "id": "clinic",
       "prompt": "Small clinic with a waiting area, 2 consultation rooms and a toilet",
-      "expect": { "route": "generate", "building_type": "clinic" }
+      "expect": {
+        "route": "generate",
+        "building_type": "clinic",
+        "space_counts": {
+          "waiting_room": 1,
+          "consultation_room": 2,
+          "bathroom": 1
+        }
+      }
+    },
+    {
+      "id": "cafe",
+      "prompt": "Cafe with a dining area next to the kitchen. Include checkout, one toilet, and keep storage away from dining",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "dining_room": 1,
+          "kitchen": 1,
+          "checkout": 1,
+          "bathroom": 1,
+          "storage": 1
+        },
+        "adjacency_contains": {
+          "room_a": "dining_room",
+          "room_b": "kitchen",
+          "strength": "must"
+        },
+        "avoid_contains": { "room_a": "storage", "room_b": "dining_room" }
+      }
+    },
+    {
+      "id": "coworking",
+      "prompt": "Coworking office with reception, an open office, 3 meeting rooms, kitchen and 2 toilets",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "reception": 1,
+          "open_office": 1,
+          "meeting_room": 3,
+          "kitchen": 1,
+          "bathroom": 2
+        }
+      }
+    },
+    {
+      "id": "gym",
+      "prompt": "Gym with 2 changing rooms, 2 bathrooms, storage and a reception",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "gym": 1,
+          "changing_room": 2,
+          "bathroom": 2,
+          "storage": 1,
+          "reception": 1
+        }
+      }
+    },
+    {
+      "id": "boutique",
+      "prompt": "Boutique retail shop with a sales floor, checkout, 2 changing rooms and storage",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "retail_display": 1,
+          "checkout": 1,
+          "changing_room": 2,
+          "storage": 1
+        }
+      }
+    },
+    {
+      "id": "hostel",
+      "prompt": "Hostel with 6 bedrooms, 3 bathrooms, reception, laundry and storage",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "bedroom": 6,
+          "bathroom": 3,
+          "reception": 1,
+          "laundry": 1,
+          "storage": 1
+        }
+      }
+    },
+    {
+      "id": "preschool",
+      "prompt": "Preschool with 3 classrooms, an office, waiting room, 2 bathrooms and storage",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "classroom": 3,
+          "office": 1,
+          "waiting_room": 1,
+          "bathroom": 2,
+          "storage": 1
+        }
+      }
+    },
+    {
+      "id": "veterinary_clinic",
+      "prompt": "Veterinary clinic with reception, waiting room, 2 consultation rooms, storage and a bathroom",
+      "expect": {
+        "route": "generate",
+        "building_type": "clinic",
+        "space_counts": {
+          "reception": 1,
+          "waiting_room": 1,
+          "consultation_room": 2,
+          "storage": 1,
+          "bathroom": 1
+        }
+      }
+    },
+    {
+      "id": "photography_studio",
+      "prompt": "Photography studio layout with a studio unit, changing room, storage and reception",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "studio_unit": 1,
+          "changing_room": 1,
+          "storage": 1,
+          "reception": 1
+        }
+      }
+    },
+    {
+      "id": "warehouse_office",
+      "prompt": "Warehouse layout with storage, an office, reception and 2 bathrooms",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "storage": 1,
+          "office": 1,
+          "reception": 1,
+          "bathroom": 2
+        }
+      }
+    },
+    {
+      "id": "school",
+      "prompt": "School with 5 classrooms, an office, reception, 3 bathrooms and a hallway",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "classroom": 5,
+          "office": 1,
+          "reception": 1,
+          "bathroom": 3,
+          "hallway": 1
+        }
+      }
+    },
+    {
+      "id": "hotel",
+      "prompt": "Three floor hotel with 8 bedrooms, reception, laundry, storage, 4 bathrooms and a lift",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "floors": 3,
+        "space_counts": {
+          "bedroom": 8,
+          "reception": 1,
+          "laundry": 1,
+          "storage": 1,
+          "bathroom": 4,
+          "lift": 1
+        }
+      }
+    },
+    {
+      "id": "restaurant",
+      "prompt": "Restaurant with dining room next to kitchen, a bar and 2 bathrooms. Keep storage away from dining",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "dining_room": 1,
+          "kitchen": 1,
+          "bar": 1,
+          "bathroom": 2,
+          "storage": 1
+        },
+        "adjacency_contains": {
+          "room_a": "dining_room",
+          "room_b": "kitchen",
+          "strength": "must"
+        },
+        "avoid_contains": { "room_a": "storage", "room_b": "dining_room" }
+      }
+    },
+    {
+      "id": "retail_shop",
+      "prompt": "Retail shop with sales floor, checkout, storage, reception and a changing room",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "retail_display": 1,
+          "checkout": 1,
+          "storage": 1,
+          "reception": 1,
+          "changing_room": 1
+        }
+      }
+    },
+    {
+      "id": "library",
+      "prompt": "Community library layout with reception, workspace, 2 meeting rooms, storage and 2 bathrooms",
+      "expect": {
+        "route": "generate",
+        "building_type": "other",
+        "space_counts": {
+          "reception": 1,
+          "workspace": 1,
+          "meeting_room": 2,
+          "storage": 1,
+          "bathroom": 2
+        }
+      }
     },
     {
       "id": "plot_feet",

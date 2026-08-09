@@ -1,9 +1,11 @@
 from app.services.catalog.space_catalog import (
     CATALOG,
     CIRCULATION_WIDTHS,
+    INFERRED_CONFIDENCE_FLOOR,
     SpaceType,
     UnknownSpaceType,
     get,
+    ensure_registered,
     min_dimensions,
     privacy_level_for,
     register,
@@ -15,9 +17,11 @@ from app.services.catalog.space_catalog import (
 __all__ = [
     "CATALOG",
     "CIRCULATION_WIDTHS",
+    "INFERRED_CONFIDENCE_FLOOR",
     "SpaceType",
     "UnknownSpaceType",
     "get",
+    "ensure_registered",
     "min_dimensions",
     "privacy_level_for",
     "register",

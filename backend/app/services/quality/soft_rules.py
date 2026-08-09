@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from app.schemas.layout_plan import LayoutPlan, PlanRoom
 from app.schemas.quality_report import QualityWarning
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services import catalog
 from app.services.layout_engine.geometry import EPS, Rect
 
 
@@ -24,21 +25,31 @@ def _rect(room: PlanRoom) -> Rect:
     return Rect(room.x, room.y, room.w, room.h)
 
 
-def _share_wall(a: PlanRoom, b: PlanRoom) -> bool:
-    return _rect(a).shared_edge(_rect(b)) is not None
+def rooms_share_wall(a: PlanRoom, b: PlanRoom) -> bool:
+    return a.floor == b.floor and _rect(a).shared_edge(_rect(b)) is not None
 
 
-def _rooms_by_type(plan: LayoutPlan) -> dict[RoomType, list[PlanRoom]]:
-    grouped: dict[RoomType, list[PlanRoom]] = {}
+def _canonical(space_type: str) -> str:
+    """Constraint endpoints are catalog keys ("dining_room", "foyer") since
+    Phase 8 canonicalized them, while a `spec.rooms`-sourced plan emits raw
+    `RoomType` values ("dining", "entry", "utility", "parking"). Matching the
+    two spellings literally silently scored a satisfied MUST adjacency as
+    unmet — resolve both sides the same way `hard_constraints` and
+    `engine._place_doors` already do."""
+    return catalog.resolve_alias(space_type) or space_type
+
+
+def _rooms_by_type(plan: LayoutPlan) -> dict[str, list[PlanRoom]]:
+    grouped: dict[str, list[PlanRoom]] = {}
     for room in plan.rooms:
-        grouped.setdefault(room.type, []).append(room)
+        grouped.setdefault(_canonical(room.type), []).append(room)
     return grouped
 
 
 def _pair_is_adjacent(a_rooms: list[PlanRoom], b_rooms: list[PlanRoom]) -> bool:
     for a in a_rooms:
         for b in b_rooms:
-            if a.id != b.id and _share_wall(a, b):
+            if a.id != b.id and rooms_share_wall(a, b):
                 return True
     return False
 
@@ -52,14 +63,14 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
     for preference in requirements.adjacency:
         weight = 2.0 if preference.strength == "must" else 1.0
         possible += weight
-        a_rooms = grouped.get(preference.room_a, [])
-        b_rooms = grouped.get(preference.room_b, [])
+        a_rooms = grouped.get(_canonical(preference.room_a), [])
+        b_rooms = grouped.get(_canonical(preference.room_b), [])
         satisfied = bool(a_rooms and b_rooms) and _pair_is_adjacent(a_rooms, b_rooms)
         if satisfied:
             earned += weight
             continue
-        a_label = preference.room_a.value.replace("_", " ").title()
-        b_label = preference.room_b.value.replace("_", " ").title()
+        a_label = preference.room_a.replace("_", " ").title()
+        b_label = preference.room_b.replace("_", " ").title()
         qualifier = "must share a wall" if preference.strength == "must" else "would work better beside"
         warnings.append(
             QualityWarning(
@@ -71,14 +82,14 @@ def adjacency_rule(plan: LayoutPlan, requirements: RequirementsSpec) -> SoftRule
 
     for pair in requirements.avoid_adjacency:
         possible += 2.0
-        a_rooms = grouped.get(pair.room_a, [])
-        b_rooms = grouped.get(pair.room_b, [])
+        a_rooms = grouped.get(_canonical(pair.room_a), [])
+        b_rooms = grouped.get(_canonical(pair.room_b), [])
         violates = bool(a_rooms and b_rooms) and _pair_is_adjacent(a_rooms, b_rooms)
         if not violates:
             earned += 2.0
             continue
-        a_label = pair.room_a.value.replace("_", " ").title()
-        b_label = pair.room_b.value.replace("_", " ").title()
+        a_label = pair.room_a.replace("_", " ").title()
+        b_label = pair.room_b.replace("_", " ").title()
         warnings.append(
             QualityWarning(
                 code="generic.adjacency.avoid",
@@ -106,7 +117,7 @@ def privacy_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRuleR
     warnings: list[QualityWarning] = []
     protected = 0
     for room in private_rooms:
-        if any(_share_wall(entry, room) for entry in entries):
+        if any(rooms_share_wall(entry, room) for entry in entries):
             warnings.append(
                 QualityWarning(
                     code="generic.privacy_entry",
@@ -143,7 +154,14 @@ def natural_light_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Sof
             RoomType.kitchen,
         }
     ]
-    if not daylight_rooms:
+    wet_rooms: list[PlanRoom] = []
+    for room in plan.rooms:
+        try:
+            if catalog.get(room.type).wet_room:
+                wet_rooms.append(room)
+        except catalog.UnknownSpaceType:
+            continue
+    if not daylight_rooms and not wet_rooms:
         return SoftRuleResult(name="natural_light", score=1.0)
 
     lit = [room for room in daylight_rooms if _touches_plot_edge(room, plan)]
@@ -156,9 +174,18 @@ def natural_light_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Sof
         for room in daylight_rooms
         if room not in lit
     ]
+    warnings.extend(
+        QualityWarning(
+            code="generic.wet_room_exterior",
+            message=f"{room.label} has no exterior edge for direct ventilation.",
+            severity="info",
+        )
+        for room in wet_rooms
+        if not _touches_plot_edge(room, plan)
+    )
     return SoftRuleResult(
         name="natural_light",
-        score=len(lit) / len(daylight_rooms),
+        score=len(lit) / len(daylight_rooms) if daylight_rooms else 1.0,
         warnings=warnings,
     )
 
@@ -173,7 +200,7 @@ def bath_kitchen_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Soft
         (kitchen, bathroom)
         for kitchen in kitchens
         for bathroom in bathrooms
-        if _share_wall(kitchen, bathroom)
+        if rooms_share_wall(kitchen, bathroom)
     ]
     warnings = [
         QualityWarning(
@@ -186,6 +213,71 @@ def bath_kitchen_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> Soft
     return SoftRuleResult(
         name="bath_kitchen",
         score=(possible - len(touching)) / possible,
+        warnings=warnings,
+    )
+
+
+def wet_stack_rule(plan: LayoutPlan, _requirements: RequirementsSpec) -> SoftRuleResult:
+    def is_wet(room: PlanRoom) -> bool:
+        try:
+            return catalog.get(room.type).wet_room
+        except catalog.UnknownSpaceType:
+            return False
+
+    wet_rooms = [
+        room for room in plan.rooms
+        if is_wet(room)
+    ]
+    upper_wet = [room for room in wet_rooms if room.floor > 0]
+    if not upper_wet:
+        return SoftRuleResult(name="wet_stack", score=1.0)
+
+    def overlaps_below(room: PlanRoom) -> bool:
+        rect = _rect(room)
+        return any(
+            below.floor == room.floor - 1
+            and min(rect.x2, _rect(below).x2) - max(rect.x, _rect(below).x) > EPS
+            and min(rect.y2, _rect(below).y2) - max(rect.y, _rect(below).y) > EPS
+            for below in wet_rooms
+        )
+
+    unstacked = [room for room in upper_wet if not overlaps_below(room)]
+    return SoftRuleResult(
+        name="wet_stack",
+        score=(len(upper_wet) - len(unstacked)) / len(upper_wet),
+        warnings=[
+            QualityWarning(
+                code="generic.wet_stack",
+                message=f"{room.label} is not stacked over a wet room on the floor below.",
+                severity="info",
+            )
+            for room in unstacked
+        ],
+    )
+
+
+def floor_area_balance_rule(
+    plan: LayoutPlan,
+    _requirements: RequirementsSpec,
+) -> SoftRuleResult:
+    floors = sorted({room.floor for room in plan.rooms})
+    if len(floors) <= 1:
+        return SoftRuleResult(name="floor_area_balance", score=1.0)
+    areas = [
+        sum(room.w * room.h for room in plan.rooms if room.floor == floor)
+        for floor in floors
+    ]
+    score = min(areas) / max(areas) if max(areas) else 1.0
+    warnings = []
+    if score < 0.8:
+        warnings.append(QualityWarning(
+            code="generic.floor_area_balance",
+            message="Floor areas differ by more than 20%; rebalance the level programs.",
+            severity="info",
+        ))
+    return SoftRuleResult(
+        name="floor_area_balance",
+        score=score,
         warnings=warnings,
     )
 

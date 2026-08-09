@@ -5,6 +5,8 @@ Every shared wall between two adjacent rooms long enough to fit a doorway
 now gets a door marker centred on it, so a generated floor plan is actually
 walkable room-to-room instead of just visually divided by solid walls.
 """
+import pytest
+
 from app.services.layout_service import generate_layout
 from app.services.prompt_service import detect_building_type, extract_rooms, extract_total_floors
 
@@ -29,6 +31,25 @@ def _partition_walls(layout: dict) -> list[dict]:
     return [
         room for room in layout["rooms"]
         if room["objectType"] == "wall" and room["label"] == "Partition Wall"
+    ]
+
+
+def _rooms_without_doors(layout: dict) -> list[str]:
+    rooms = [room for room in layout["rooms"] if room["objectType"] == "room"]
+    doors = [room for room in layout["rooms"] if room["objectType"] == "door"]
+    door_counts = {room["id"]: 0 for room in rooms}
+    for room in rooms:
+        position, size = room["position"], room["size"]
+        x1, x2 = position["x"] - size["w"] / 2, position["x"] + size["w"] / 2
+        z1, z2 = position["z"] - size["d"] / 2, position["z"] + size["d"] / 2
+        for door in doors:
+            x, z = door["position"]["x"], door["position"]["z"]
+            if x1 - 0.1 <= x <= x2 + 0.1 and z1 - 0.1 <= z <= z2 + 0.1:
+                door_counts[room["id"]] += 1
+    return [
+        room["label"]
+        for room in rooms
+        if door_counts[room["id"]] == 0
     ]
 
 
@@ -187,20 +208,18 @@ def test_room_with_only_narrow_shared_walls_still_gets_a_door():
 
 def test_no_room_ends_up_with_zero_doors_in_a_real_generated_layout():
     layout = _generate("3bhk house with 2 washrooms")
-    rooms = [r for r in layout["rooms"] if r["objectType"] == "room"]
-    doors = [r for r in layout["rooms"] if r["objectType"] == "door"]
+    assert _rooms_without_doors(layout) == []
 
-    def rect_of(room: dict) -> tuple[float, float, float, float]:
-        p, s = room["position"], room["size"]
-        return (p["x"] - s["w"] / 2, p["z"] - s["d"] / 2, p["x"] + s["w"] / 2, p["z"] + s["d"] / 2)
 
-    rects = {r["id"]: rect_of(r) for r in rooms}
-    doors_per_room = {r["id"]: 0 for r in rooms}
-    for door in doors:
-        x, z = door["position"]["x"], door["position"]["z"]
-        for room_id, (x1, z1, x2, z2) in rects.items():
-            if (x1 - 0.1 <= x <= x2 + 0.1) and (z1 - 0.1 <= z <= z2 + 0.1):
-                doors_per_room[room_id] += 1
-
-    zero_door_rooms = [r["label"] for r in rooms if doors_per_room[r["id"]] == 0]
-    assert zero_door_rooms == []
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "office with reception, open workspace, 2 meeting rooms, kitchen and bathroom",
+        "clinic with reception, waiting room, 2 consultation rooms, office and bathroom",
+        "school with 3 classrooms, hallway, office, storage and 2 bathrooms",
+        "restaurant with dining room, kitchen, bar, storage and 2 bathrooms",
+        "retail store with display area, checkout, changing room, storage and bathroom",
+    ],
+)
+def test_non_residential_rooms_have_an_interior_access_door(prompt: str):
+    assert _rooms_without_doors(_generate(prompt)) == []

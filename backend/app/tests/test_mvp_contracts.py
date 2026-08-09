@@ -1,9 +1,9 @@
 """MVP workflow Phase 0 — contract lock tests (Steps 0.3 + 0.4) and the
 extended /api/health (Step 0.1).
 
-Fixture note: the clinic fixture expresses consultation rooms as `study`
-(closed RoomType enum has no clinical types by design — the MVP is
-residential-first; `building_type: clinic` is what the extraction gate checks).
+Fixture note: the legacy clinic JSON still expresses consultation rooms as
+`study` for backward compatibility. Phase 8 extraction uses canonical
+`spaces` and preserves `consultation_room` directly.
 """
 import json
 from pathlib import Path
@@ -31,11 +31,17 @@ def test_fixture_validates_and_round_trips(name):
     assert again == spec
 
 
-def test_golden_prompt_suite_loads_with_ten_prompts():
+def test_golden_prompt_suite_includes_fifteen_non_residential_briefs():
     data = json.loads(GOLDEN.read_text())
-    assert len(data["prompts"]) == 10
+    assert len(data["prompts"]) >= 24
     ids = [p["id"] for p in data["prompts"]]
-    assert len(set(ids)) == 10
+    assert len(set(ids)) == len(ids)
+    non_residential = [
+        prompt
+        for prompt in data["prompts"]
+        if prompt["expect"].get("building_type") in {"clinic", "office", "other"}
+    ]
+    assert len(non_residential) >= 15
     assert all(p["prompt"].strip() for p in data["prompts"])
     assert all(p["expect"]["route"] in ("generate", "vague", "conflict") for p in data["prompts"])
 
@@ -68,6 +74,56 @@ def test_string_dimension_rejected():
 def test_extra_keys_rejected():
     with pytest.raises(ValidationError):
         RequirementsSpec.model_validate({"rooms": [], "hallucinated_field": True})
+
+
+@pytest.mark.parametrize("priority", [0, 101, 1.0, "10"])
+def test_space_priority_is_a_strict_bounded_integer(priority):
+    with pytest.raises(ValidationError):
+        RequirementsSpec.model_validate({
+            "spaces": [
+                {"space_type": "bedroom", "count": 1, "priority": priority},
+            ],
+        })
+
+
+def test_space_guess_metadata_and_free_string_constraints_are_validated():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [{
+            "space_type": "recording_studio",
+            "count": 1,
+            "zone_guess": "private",
+            "size_guess_m2": 18,
+            "confidence": 0.9,
+        }],
+        "adjacency": [{
+            "room_a": "recording_studio",
+            "room_b": "control_room",
+            "strength": "must",
+        }],
+        "avoid_adjacency": [{
+            "room_a": "recording_studio",
+            "room_b": "classroom",
+        }],
+    })
+
+    assert spec.spaces[0].zone_guess == "private"
+    assert spec.spaces[0].size_guess_m2 == 18
+    assert spec.adjacency[0].room_a == "recording_studio"
+    assert spec.avoid_adjacency[0].room_b == "classroom"
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.1, "0.9"])
+def test_space_confidence_is_numeric_and_bounded(confidence):
+    with pytest.raises(ValidationError):
+        RequirementsSpec.model_validate({
+            "spaces": [{
+                "space_type": "recording_studio",
+                "count": 1,
+                "zone_guess": "private",
+                "size_guess_m2": 18,
+                "confidence": confidence,
+            }],
+        })
 
 
 def test_plot_bounds_enforced():
@@ -109,6 +165,22 @@ def test_rotation_limited_to_quarter_turns():
 def test_door_requires_wall_ref():
     with pytest.raises(ValidationError):
         Door.model_validate({"id": "d1", "offset": 1.0})
+
+
+@pytest.mark.parametrize("model", [PlanRoom, Wall, Door])
+def test_geometry_floor_is_a_strict_non_negative_integer(model):
+    payloads = {
+        PlanRoom: {
+            "id": "r", "type": "bedroom", "label": "Bedroom",
+            "x": 0, "y": 0, "w": 3, "h": 3,
+        },
+        Wall: {"id": "w", "x1": 0, "y1": 0, "x2": 3, "y2": 0},
+        Door: {"id": "d", "wall_ref": "w", "offset": 1},
+    }
+    with pytest.raises(ValidationError):
+        model.model_validate({**payloads[model], "floor": "1"})
+    with pytest.raises(ValidationError):
+        model.model_validate({**payloads[model], "floor": -1})
 
 
 # ── Step 0.3 — QualityReport contract ────────────────────────────────────────

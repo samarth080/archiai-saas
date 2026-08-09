@@ -1,0 +1,17 @@
+{
+  "building_type": "villa",
+  "floors": 2,
+  "spaces": [
+    {"space_type": "living_room", "count": 1, "size_hint": "xlarge"},
+    {"space_type": "kitchen", "count": 1, "size_hint": "large"},
+    {"space_type": "dining_room", "count": 1, "size_hint": "large"},
+    {"space_type": "foyer", "count": 1, "size_hint": "medium"},
+    {"space_type": "study", "count": 1, "size_hint": "medium"},
+    {"space_type": "master_bedroom", "count": 1, "size_hint": "large"},
+    {"space_type": "bedroom", "count": 3, "size_hint": "medium"},
+    {"space_type": "bathroom", "count": 3, "size_hint": "small"},
+    {"space_type": "balcony", "count": 1, "size_hint": "medium"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}

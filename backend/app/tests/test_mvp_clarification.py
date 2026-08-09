@@ -112,6 +112,78 @@ def test_does_not_fit_error_becomes_plot_resolution_question():
     assert "plot" in result.questions[0].lower()
     assert "80" in result.questions[0]
     assert "54" in result.questions[0]
+    assert result.trade_offs == [
+        "Increase the plot to about 8×10.6 m.",
+        "Reduce one non-essential room count or preferred area while keeping required rooms.",
+    ]
+
+
+def test_fit_trade_offs_name_explicit_low_priority_space_and_should_constraint():
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {"space_type": "consultation_room", "count": 3, "priority": 10},
+            {"space_type": "balcony", "count": 1, "priority": 90},
+        ],
+        "adjacency": [
+            {"room_a": "bedroom", "room_b": "bathroom", "strength": "should"},
+        ],
+        "plot": {"width_m": 6, "depth_m": 9},
+    })
+    error = DoesNotFitError(
+        "plot too small",
+        required_area=80,
+        plot_area=54,
+    )
+
+    result = assess(spec, fit_error=error)
+
+    assert result.route == "conflict"
+    assert result.optional_missing == []
+    assert result.trade_offs == [
+        "Increase the plot to about 7.5×11.3 m.",
+        "Relax 1 preferred (SHOULD) adjacency constraint(s); MUST constraints stay intact.",
+        "Remove the lowest-priority space 'balcony'.",
+    ]
+
+
+def test_free_string_space_program_routes_without_residential_bathroom_default():
+    spec = RequirementsSpec.model_validate({
+        "building_type": "clinic",
+        "spaces": [{"space_type": "consultation_room", "count": 3}],
+    })
+
+    result = assess(spec)
+    defaulted = apply_defaults_with_report(spec)
+
+    assert result.route == "generate"
+    assert result.optional_missing == [PLOT_SIZE_QUESTION, FACING_QUESTION]
+    assert defaulted.requirements.rooms == []
+    assert defaulted.defaults_applied == ["9×12 m plot", "east facing"]
+
+
+def test_residential_space_program_gets_a_space_native_bathroom_default():
+    spec = RequirementsSpec.model_validate({
+        "building_type": "house",
+        "spaces": [
+            {"space_type": "bedroom", "count": 3},
+            {"space_type": "living_room", "count": 1},
+            {"space_type": "kitchen", "count": 1},
+        ],
+        "missing_info": ["bathroom_count"],
+    })
+
+    decision = assess(spec)
+    defaulted = apply_defaults_with_report(spec)
+
+    assert BATHROOM_QUESTION in decision.optional_missing
+    assert defaulted.requirements.rooms == []
+    assert [
+        (space.space_type, space.count)
+        for space in defaulted.requirements.spaces
+        if space.space_type == "bathroom"
+    ] == [("bathroom", 2)]
+    assert "2 bathrooms" in defaulted.defaults_applied
+    assert "bathroom_count" not in defaulted.requirements.missing_info
 
 
 def test_apply_defaults_is_non_mutating_transparent_and_fit_able():
@@ -190,7 +262,7 @@ def test_apply_defaults_cannot_bypass_blocking_clarification(
         apply_defaults_with_report(spec)
 
 
-def test_all_ten_golden_prompts_route_correctly_without_model_dependency():
+def test_all_golden_prompts_route_correctly_without_model_dependency():
     cases = json.loads(GOLDEN.read_text(encoding="utf-8"))["prompts"]
 
     routes = {}

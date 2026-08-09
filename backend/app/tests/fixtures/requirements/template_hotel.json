@@ -1,0 +1,14 @@
+{
+  "building_type": "other",
+  "floors": 3,
+  "spaces": [
+    {"space_type": "reception", "count": 1, "size_hint": "large"},
+    {"space_type": "waiting_room", "count": 1, "size_hint": "medium"},
+    {"space_type": "dining_room", "count": 1, "size_hint": "large"},
+    {"space_type": "kitchen", "count": 1, "size_hint": "medium"},
+    {"space_type": "bedroom", "count": 6, "size_hint": "medium"},
+    {"space_type": "bathroom", "count": 2, "size_hint": "small"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}

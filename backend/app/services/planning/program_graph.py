@@ -37,6 +37,7 @@ Zone = str          # public | private | semi_private | service | circulation | 
 
 _CIRCULATION_TYPES = frozenset({
     "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "lift", "elevator",
     "passage", "passageway", "landing", "atrium",
 })
 _SERVICE_TYPES = frozenset({
@@ -117,6 +118,7 @@ class Node:
     min_depth_m: Optional[float] = None
     preferred_aspect_ratio: Optional[float] = None
     floor_preference: str = "any"  # ground | upper | basement | any
+    floor_index: Optional[int] = None  # exact zero-based floor when structurally pinned
     privacy_level: int = 0  # 0 public … 3 most private
     daylight_need: str = "none"  # none | low | medium | high
     acoustic_need: str = "none"
@@ -341,12 +343,14 @@ def add_requirements_node(
     min_width_m: Optional[float] = None,
     min_depth_m: Optional[float] = None,
     size_hint: Optional[str] = None,
+    catalog_semantics: bool = False,
 ) -> None:
+    space = catalog.get(space_type) if catalog_semantics else None
     node = Node(
-        type=_classify_node_type(space_type),
+        type=space.node_type if space is not None else _classify_node_type(space_type),
         space_type=space_type,
         label=label,
-        zone=_classify_zone(space_type),
+        zone=space.zone if space is not None else _classify_zone(space_type),
         target_area_sqm=target_area_sqm,
         min_width_m=min_width_m,
         min_depth_m=min_depth_m,
@@ -372,12 +376,10 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
     per-instance label scheme (``RoomType.value``, not the catalog's
     post-alias key — e.g. "Dining", not "Dining Room").
 
-    ``spec.adjacency``/``spec.avoid_adjacency`` are still ``RoomType``-keyed
-    (the closed enum hasn't been retired from the contract yet); nodes built
-    from ``spec.rooms`` use the raw enum value as ``space_type`` (matched
-    directly), nodes built from ``spec.spaces`` use the catalog key (matched
-    via alias resolution) — either way this is id-level: every node of a
-    matching type gets its own edge, not one edge per type.
+    Constraint endpoints are free catalog-key strings. Nodes built from
+    ``spec.rooms`` retain raw legacy enum values; nodes built from
+    ``spec.spaces`` use canonical catalog keys. Alias resolution matches either
+    representation and remains id-level: every matching node gets an edge.
 
     Plot size and facing are engine-level facts, not graph nodes, and are
     intentionally left off the graph. Entry injection (the engine's
@@ -388,6 +390,11 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
     nodes_by_key: dict[str, list[Node]] = {}
 
     if spec.spaces:
+        plot_area = (
+            spec.plot.width_m * spec.plot.depth_m
+            if spec.plot.width_m is not None and spec.plot.depth_m is not None
+            else None
+        )
         for request in spec.spaces:
             # Fail fast at the true input boundary, same "reject, never
             # invent" posture as the closed RoomType enum — lets
@@ -396,15 +403,16 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
             # deep inside `to_engine_program`'s `_resolve_sizing` (which
             # stays lenient on purpose for hand-built/user-added graphs,
             # not user-typed requests).
-            catalog.get(request.space_type)
+            space_type = catalog.ensure_registered(request, plot_area_m2=plot_area)
             for i in range(1, request.count + 1):
                 add_requirements_node(
-                    graph, nodes_by_key, request.space_type,
+                    graph, nodes_by_key, space_type,
                     label=_numbered_label(
-                        request.space_type.replace("_", " ").title(), i, request.count
+                        space_type.replace("_", " ").title(), i, request.count
                     ),
                     target_area_sqm=request.area_m2,
                     size_hint=request.size_hint,
+                    catalog_semantics=True,
                 )
     else:
         # Raw RoomType.value (not the catalog-aliased key) — engine.py's own
@@ -426,10 +434,18 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
                     min_depth_m=sizing.min_d,
                 )
 
-    def nodes_for(room_type: RoomType) -> list[Node]:
-        # Try the raw enum value first (the `spec.rooms` branch above), then
-        # fall back to the catalog-aliased key (the `spec.spaces` branch).
-        return nodes_by_key.get(room_type.value) or nodes_by_key.get(_catalog_key(room_type), [])
+    def nodes_for(room_type: str) -> list[Node]:
+        raw = room_type.strip().lower().replace(" ", "_").replace("-", "_")
+        resolved = catalog.resolve_alias(raw)
+        direct = nodes_by_key.get(raw) or nodes_by_key.get(resolved or "")
+        if direct:
+            return direct
+        if resolved is None:
+            return []
+        for key, nodes in nodes_by_key.items():
+            if catalog.resolve_alias(key) == resolved:
+                return nodes
+        return []
 
     for pref in spec.adjacency:
         strength = pref.strength.upper()
@@ -442,7 +458,7 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
                     relation_type="adjacent",
                     strength=strength,
                     door_required=strength == "MUST",
-                    reason=f"requirements adjacency {pref.room_a.value}~{pref.room_b.value}",
+                    reason=f"requirements adjacency {pref.room_a}~{pref.room_b}",
                 ))
 
     for pair in spec.avoid_adjacency:
@@ -454,7 +470,7 @@ def from_requirements(spec: RequirementsSpec) -> ProgramGraph:
                     node_a=a.id, node_b=b.id,
                     relation_type="adjacent",
                     strength="AVOID",
-                    reason=f"requirements avoid {pair.room_a.value}~{pair.room_b.value}",
+                    reason=f"requirements avoid {pair.room_a}~{pair.room_b}",
                 ))
 
     return graph
@@ -683,7 +699,11 @@ def to_engine_program(graph: ProgramGraph) -> EngineProgram:
             min_d=min_d,
         ))
         zone_of[node.id] = node.zone
-        floor_of[node.id] = _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+        floor_of[node.id] = (
+            node.floor_index
+            if node.floor_index is not None
+            else _FLOOR_BY_PREFERENCE.get(node.floor_preference, 0)
+        )
 
     must_adjacent, should_adjacent, avoid = _edge_buckets(graph.edges)
     circulation_nodes = [n.id for n in buildable if n.type == "circulation"]

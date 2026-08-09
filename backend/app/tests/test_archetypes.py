@@ -8,13 +8,16 @@ import pytest
 
 from app.schemas.requirements import Facing
 from app.services.layout_engine.archetypes import (
+    BandEntry,
     BandPlan,
     double_loaded_corridor,
     hub_and_spoke,
     open_core,
     select_archetype,
+    vertical_core_bands,
     zoned_bands,
 )
+from app.services.layout_engine.geometry import Rect
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError
 from app.services.planning import EngineProgram
 
@@ -156,6 +159,19 @@ def test_bands_that_cannot_fit_raise_subdivision_error():
 
 def test_empty_program_returns_no_bands():
     assert zoned_bands(_program([], {}), 9.0, 12.0, Facing.east) == BandPlan(bands=[])
+
+
+def test_band_entries_add_zone_identity_without_breaking_tuple_consumers():
+    room = _need("room", "office", 12.0, 3.0, 3.0)
+    rect = Rect(0.0, 0.0, 4.0, 5.0)
+
+    default = BandPlan(bands=[(rect, [room])]).bands[0]
+    explicit = BandPlan(bands=[BandEntry(rect, [room], "zone-office")]).bands[0]
+
+    unpacked_rect, unpacked_rooms = default
+    assert (unpacked_rect, unpacked_rooms) == (rect, [room])
+    assert default.zone_id == "global"
+    assert explicit.zone_id == "zone-office"
 
 
 # ── corridor carving (workflow 4.3) ───────────────────────────────────────
@@ -370,6 +386,78 @@ def test_open_core_gives_the_largest_area_node_the_facing_band():
     assert {n.key for n in rest} == {"office", "storage"}
 
 
+# -- fixed vertical core (workflow Phase 7) -----------------------------------
+
+
+def _vertical_program(with_lift: bool = False) -> EngineProgram:
+    needs = [
+        _need("stair", "staircase", 2.88, 2.4, 1.2),
+        _need("corr", "corridor", 8.0, 1.2, 1.5),
+        _need("entry", "entry", 3.0, 1.2, 1.5),
+        _need("living", "living_room", 16.0, 3.3, 3.6),
+        _need("bed1", "bedroom", 12.0, 3.0, 3.0),
+        _need("bath", "bathroom", 4.0, 1.5, 2.1),
+        _need("bed2", "bedroom", 12.0, 3.0, 3.0),
+    ]
+    if with_lift:
+        needs.insert(1, _need("lift", "lift", 3.24, 1.8, 1.8))
+    return _program(
+        needs,
+        {
+            need.key: (
+                "circulation"
+                if need.type in {"staircase", "corridor", "lift"}
+                else "private"
+                if need.type == "bedroom"
+                else "service"
+                if need.type == "bathroom"
+                else "public"
+            )
+            for need in needs
+        },
+        must_adjacent=[("bed1", "bath")],
+    )
+
+
+def test_vertical_core_has_an_exact_stair_rect_and_tiles_the_plot():
+    plan = vertical_core_bands(_vertical_program(), 12.0, 14.0, Facing.east)
+
+    stair_rect = _band_containing(plan, "stair")
+    assert (stair_rect.x, stair_rect.y, stair_rect.w, stair_rect.d) == (0.0, 0.0, 1.2, 2.4)
+    assert sum(rect.area for rect, _ in plan.bands) == pytest.approx(12.0 * 14.0)
+    rects = [rect for rect, _ in plan.bands]
+    for index, rect in enumerate(rects):
+        for other in rects[index + 1:]:
+            assert not rect.overlaps(other)
+
+
+def test_vertical_core_private_components_touch_core_directly():
+    plan = vertical_core_bands(_vertical_program(), 12.0, 14.0, Facing.east)
+    core_rects = [
+        _band_containing(plan, "stair"),
+        _band_containing(plan, "corr"),
+    ]
+
+    for key in ("bed1", "bed2"):
+        room_rect = _band_containing(plan, key)
+        assert any(core.shared_edge(room_rect) is not None for core in core_rects)
+
+
+def test_vertical_core_precarves_an_aligned_lift_rect():
+    first = vertical_core_bands(_vertical_program(with_lift=True), 12.0, 14.0, Facing.east)
+    second = vertical_core_bands(_vertical_program(with_lift=True), 12.0, 14.0, Facing.west)
+
+    lift_a = _band_containing(first, "lift")
+    lift_b = _band_containing(second, "lift")
+    assert lift_a == lift_b == Rect(0.0, 2.4, 1.8, 1.8)
+    assert _band_containing(first, "stair") == Rect(0.0, 0.0, 1.8, 2.4)
+
+
+def test_vertical_core_rejects_a_plot_too_shallow_for_stair_and_lift():
+    with pytest.raises(SubdivisionError, match="vertical core needs"):
+        vertical_core_bands(_vertical_program(with_lift=True), 12.0, 5.0, Facing.east)
+
+
 # ── select_archetype graph-shape rules (workflow 3.2) ─────────────────────
 
 
@@ -414,6 +502,34 @@ def test_select_archetype_ignores_repeat_units_without_a_real_corridor_spine():
 
     assert key == "zoned_bands"
     assert reason
+
+
+def test_a_leaf_min_size_shortfall_falls_back_to_zoned_bands_before_refusing():
+    """The Phase 9 safety net caught a failed partition (SubdivisionError) and
+    a hard-invalid assembled plan, but not the leaf min-size gate in between:
+    a specialized archetype that partitioned fine yet left one room slightly
+    short on one side refused outright, even though the general-purpose comb
+    fits the identical program on the identical plot."""
+    from app.schemas.requirements import RequirementsSpec
+    from app.services.layout_engine import generate_plan
+    from app.services.quality.hard_constraints import validate
+
+    payload = {
+        "building_type": "other",
+        "floors": 1,
+        "spaces": [
+            {"space_type": "sales_floor", "count": 1},
+            {"space_type": "classroom", "count": 3},
+            {"space_type": "consultation_room", "count": 3},
+        ],
+        "plot": {"width_m": 19.8, "depth_m": 22.1},
+        "facing": "east",
+    }
+    spec = RequirementsSpec.model_validate(payload)
+    forced = RequirementsSpec.model_validate({**payload, "layout_style": "zoned_bands"})
+
+    assert validate(generate_plan(forced), forced) == []  # the fallback really does fit
+    assert validate(generate_plan(spec), spec) == []      # so selection must not refuse
 
 
 def test_select_archetype_does_not_flip_existing_residential_fixtures_with_three_plus_bedrooms():

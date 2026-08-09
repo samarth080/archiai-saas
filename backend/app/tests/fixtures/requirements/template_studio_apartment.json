@@ -1,0 +1,10 @@
+{
+  "building_type": "apartment",
+  "floors": 1,
+  "spaces": [
+    {"space_type": "open_plan_living", "count": 1, "size_hint": "large"},
+    {"space_type": "bathroom", "count": 1, "size_hint": "small"}
+  ],
+  "plot": {"width_m": 30.0, "depth_m": 40.0},
+  "facing": "east"
+}

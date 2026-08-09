@@ -6,29 +6,13 @@ import type {
   LayoutPlan,
   MvpQualitySnapshot,
   RequirementsSpec,
-  RoomType,
 } from '../types/contracts'
 import { canonicalQuarterTurn, quarterTurnSwapsAxes } from '../utils/quarterTurn'
 
 const WALL_HEIGHT_M = 3
 const FALLBACK_COLOR = '#94a3b8'
 
-const CANONICAL_ROOM_TYPES = new Set<RoomType>([
-  'bedroom',
-  'master_bedroom',
-  'bathroom',
-  'kitchen',
-  'living_room',
-  'dining',
-  'balcony',
-  'entry',
-  'pooja_room',
-  'study',
-  'utility',
-  'parking',
-])
-
-const ROOM_COLORS: Partial<Record<RoomType, string>> = {
+const ROOM_COLORS: Partial<Record<string, string>> = {
   living_room: '#b3b8e9',
   kitchen: '#6bc0a1',
   master_bedroom: '#dea97d',
@@ -60,12 +44,13 @@ function boundedCenter(origin: number, span: number, plotSpan: number) {
   return Math.min(plotSpan - half, Math.max(half, rounded))
 }
 
-function isCanonicalRoomType(value: unknown): value is RoomType {
-  return typeof value === 'string' && CANONICAL_ROOM_TYPES.has(value as RoomType)
+function isPlanRoomType(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function wallObject(layout: LayoutPlan, index: number): Room {
   const wall = layout.walls[index]
+  const floor = wall.floor ?? 0
   const dx = wall.x2 - wall.x1
   const dy = wall.y2 - wall.y1
   const horizontal = Math.abs(dx) >= Math.abs(dy)
@@ -75,11 +60,11 @@ function wallObject(layout: LayoutPlan, index: number): Room {
     label: `Wall ${index + 1}`,
     roomType: 'wall',
     objectType: 'wall',
-    floorId: 'floor_0',
-    floorLevel: 0,
+    floorId: `floor_${floor}`,
+    floorLevel: floor,
     position: {
       x: round3((wall.x1 + wall.x2) / 2),
-      y: WALL_HEIGHT_M / 2,
+      y: floor * WALL_HEIGHT_M + WALL_HEIGHT_M / 2,
       z: round3((wall.y1 + wall.y2) / 2),
     },
     size: {
@@ -96,6 +81,7 @@ function doorObject(layout: LayoutPlan, index: number): Room | null {
   const door = layout.doors[index]
   const wall = layout.walls.find((candidate) => candidate.id === door.wall_ref)
   if (!wall) return null
+  const floor = door.floor ?? wall.floor ?? 0
 
   const dx = wall.x2 - wall.x1
   const dy = wall.y2 - wall.y1
@@ -108,12 +94,12 @@ function doorObject(layout: LayoutPlan, index: number): Room | null {
     label: `Door ${index + 1}`,
     roomType: 'door',
     objectType: 'door',
-    floorId: 'floor_0',
-    floorLevel: 0,
+    floorId: `floor_${floor}`,
+    floorLevel: floor,
     hostWallId: wall.id,
     position: {
       x: round3(wall.x1 + (length ? dx / length : 0) * at),
-      y: 1.05,
+      y: floor * WALL_HEIGHT_M + 1.05,
       z: round3(wall.y1 + (length ? dy / length : 0) * at),
     },
     size: {
@@ -155,16 +141,18 @@ export function layoutPlanToCanvas(
 ): CanvasLayout {
   const roomObjects: Room[] = layout.rooms.map((room) => {
     const swapsAxes = quarterTurnSwapsAxes(room.rotation)
+    const floor = room.floor ?? 0
     return {
       id: room.id,
       label: room.label,
       roomType: room.type,
-      objectType: 'room',
-      floorId: 'floor_0',
-      floorLevel: 0,
+      objectType:
+        room.type === 'staircase' || room.type === 'stairs' ? 'stair' : 'room',
+      floorId: `floor_${floor}`,
+      floorLevel: floor,
       position: {
         x: boundedCenter(room.x, room.w, layout.plot.width_m),
-        y: WALL_HEIGHT_M / 2,
+        y: floor * WALL_HEIGHT_M + WALL_HEIGHT_M / 2,
         z: boundedCenter(room.y, room.h, layout.plot.depth_m),
       },
       size: {
@@ -174,9 +162,12 @@ export function layoutPlanToCanvas(
       },
       rotation: { x: 0, y: room.rotation, z: 0 },
       color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
+      ...(room.zone_id ? { zoneId: room.zone_id } : {}),
     }
   })
   const objects = [...roomObjects, ...layoutPlanDerivedObjects(layout)]
+  const totalFloors =
+    Math.max(0, ...layout.rooms.map((room) => room.floor ?? 0)) + 1
   const footprint = {
     x: 0,
     z: 0,
@@ -197,7 +188,7 @@ export function layoutPlanToCanvas(
       building_type: options.requirements?.building_type ?? 'house',
       buildingType: options.requirements?.building_type ?? 'house',
       room_count: roomObjects.length,
-      totalFloors: 1,
+      totalFloors,
       totalRooms: roomObjects.length,
       totalObjects: objects.length,
       totalAreaSqm,
@@ -205,21 +196,23 @@ export function layoutPlanToCanvas(
       mvpRequirements: options.requirements,
       mvpQuality: options.quality,
       mvpVastuEnabled: /va?astu/i.test(options.prompt ?? ''),
+      ...(layout.archetype_reasons?.length
+        ? { archetypeReasons: layout.archetype_reasons }
+        : {}),
     },
     building: {
       floorHeight: WALL_HEIGHT_M,
       footprint,
     },
-    floors: [
-      {
-        id: 'floor_0',
-        name: 'Ground Floor',
-        level: 0,
-        elevation: 0,
-        footprint,
-        rooms: objects,
-      },
-    ],
+    floors: Array.from({ length: totalFloors }, (_, floor) => ({
+      id: `floor_${floor}`,
+      name:
+        floor === 0 ? 'Ground Floor' : floor === 1 ? 'First Floor' : `Floor ${floor}`,
+      level: floor,
+      elevation: floor * WALL_HEIGHT_M,
+      footprint,
+      rooms: objects.filter((object) => (object.floorLevel ?? 0) === floor),
+    })),
     rooms: objects,
   }
 }
@@ -236,7 +229,9 @@ export function canvasObjectsToLayoutPlan(
 ): LayoutPlan {
   const rooms = objects
     .filter(
-      (object) => object.objectType === 'room' && isCanonicalRoomType(object.roomType),
+      (object) =>
+        (object.objectType === 'room' || object.objectType === 'stair')
+        && isPlanRoomType(object.roomType),
     )
     .map((room) => {
       const rotation = canonicalQuarterTurn(room.rotation.y)
@@ -245,13 +240,15 @@ export function canvasObjectsToLayoutPlan(
       const worldDepth = swapsAxes ? room.size.w : room.size.d
       return {
         id: room.id,
-        type: room.roomType as RoomType,
+        type: room.roomType as string,
         label: room.label,
         x: round3(room.position.x - worldWidth / 2 - footprint.x),
         y: round3(room.position.z - worldDepth / 2 - footprint.z),
         w: round3(worldWidth),
         h: round3(worldDepth),
         rotation,
+        floor: room.floorLevel ?? 0,
+        ...(typeof room.zoneId === 'string' ? { zone_id: room.zoneId } : {}),
       }
     })
 
@@ -282,6 +279,7 @@ export function canvasObjectsToLayoutPlan(
           : wall.position.z + length / 2 - footprint.z,
       ),
       thickness: round3(horizontal ? wall.size.d : wall.size.w),
+      floor: wall.floorLevel ?? 0,
     }
   })
   const wallById = new Map(walls.map((wall) => [wall.id, wall]))
@@ -300,6 +298,7 @@ export function canvasObjectsToLayoutPlan(
       wall_ref: wall.id,
       offset: round3(Math.max(0, centerAlong - width / 2)),
       width: round3(width),
+      floor: door.floorLevel ?? wall.floor ?? 0,
     }]
   })
 

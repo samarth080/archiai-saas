@@ -25,15 +25,6 @@ MAX_ROOMS_PER_LAYOUT = 30
 MAX_ROOM_ASPECT_RATIO = 2.5
 SLIVER_MERGE_UNDER_M = 0.5
 
-# Phase 6 soft-quality weights.  Hard violations are never averaged away: the
-# scorer reports them separately and caps an invalid plan below the valid range.
-QUALITY_RULE_WEIGHTS: dict[str, float] = {
-    "adjacency": 0.35,
-    "privacy": 0.20,
-    "natural_light": 0.20,
-    "bath_kitchen": 0.15,
-    "vastu": 0.10,
-}
 INVALID_QUALITY_SCORE_CAP = 49
 
 

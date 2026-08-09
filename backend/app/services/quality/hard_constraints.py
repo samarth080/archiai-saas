@@ -6,24 +6,22 @@ Rect math. Used three ways: engine self-check (Phase 1 tests), the
 must stay fast), and the reject tier of the scorer (Phase 6).
 
 Violation codes (stable API): overlap, out_of_bounds, below_min_size,
-unreachable, missing_requested_room, through_room_access.
+unreachable, missing_requested_room, through_room_access,
+staircase_alignment.
 
 Reachability walks the access graph derived from doors: each door's midpoint
 connects every room whose boundary touches that point (interior doors connect
 two rooms; the front door touches one and adds no edge). The walk starts from
 the entry room, or the first room if no entry exists (hand-built plans).
+Aligned stair/lift instances connect consecutive floors; geometry on different
+floors otherwise remains independent.
 
 ``through_room_access`` (workflow Phase 4.5, the privacy-chain check): a
-room with ``privacy_level >= 2`` (bedrooms, offices, ... — see
-``catalog.privacy_level_for``) must not be reachable ONLY by walking
-through another such room. Implemented by re-walking the same door graph
-with every OTHER privacy_level>=2 room deleted; if the room drops out of
-the reachable set, its only path required passing through a private
-neighbour. The one exception: a MUST-adjacency partner (an ensuite through
-its own bedroom is working as intended, not a defect) — that specific
-partner is never deleted from the walk. Only checked for rooms the plain
-reachability walk above already found reachable, so a genuinely
-disconnected room is reported once, as ``unreachable``, not twice.
+private room or sanitary room must not be reachable only by walking through a
+private room. The validator re-walks the door graph with private blockers
+removed. A MUST-adjacency partner remains exempt, so an explicitly attached
+ensuite through its own bedroom is intentional. Only reachable targets are
+checked, so a disconnected room is reported once as ``unreachable``.
 
 ``requirements`` is optional (Packet 7.1 — prompt-to-program truth gate): the
 fast per-drop editor endpoint has no RequirementsSpec to compare against and
@@ -37,6 +35,7 @@ requested room, and quality must not call that layout satisfactory.
 from app.schemas.layout_plan import Door, LayoutPlan, PlanRoom, Wall
 from app.schemas.quality_report import Violation
 from app.schemas.requirements import RequirementsSpec, RoomType
+from app.services.catalog import resolve_alias
 from app.services import catalog
 from app.services.layout_engine.geometry import EPS, Rect
 
@@ -78,11 +77,29 @@ def _door_adjacency(plan: LayoutPlan) -> dict[str, set[str]]:
         if wall is None:
             continue
         x, y = _door_point(door, wall)
-        touching = [room.id for room in plan.rooms if _touches(room, x, y)]
+        touching = [
+            room.id for room in plan.rooms
+            if room.floor == door.floor == wall.floor and _touches(room, x, y)
+        ]
         for a in touching:
             for b in touching:
                 if a != b:
                     adjacency[a].add(b)
+    vertical_types = {"staircase", "stairs", "lift", "elevator"}
+    vertical_rooms = [room for room in plan.rooms if room.type in vertical_types]
+    for room in vertical_rooms:
+        for other in vertical_rooms:
+            aligned = (
+                room.type == other.type
+                and other.floor == room.floor + 1
+                and abs(room.x - other.x) <= EPS
+                and abs(room.y - other.y) <= EPS
+                and abs(room.w - other.w) <= EPS
+                and abs(room.h - other.h) <= EPS
+            )
+            if aligned:
+                adjacency[room.id].add(other.id)
+                adjacency[other.id].add(room.id)
     return adjacency
 
 
@@ -99,6 +116,7 @@ def _walk(start: str, adjacency: dict[str, set[str]], blocked: frozenset[str] = 
 
 
 _PRIVACY_THRESHOLD = 2
+_SANITARY_TYPES = frozenset({"bathroom", "ensuite", "toilet", "washroom", "wc"})
 
 
 def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | None) -> set[frozenset]:
@@ -108,13 +126,18 @@ def _must_exempt_pairs(rooms: list[PlanRoom], requirements: RequirementsSpec | N
     against, same opt-in posture as `_missing_requested_rooms`."""
     if requirements is None:
         return set()
-    types_by_id = {r.id: r.type for r in rooms}
+    # Canonical on both sides: constraint endpoints are catalog keys, plan
+    # room types may be raw RoomType values ("entry" vs "foyer") — matching
+    # them literally would silently drop the ensuite exemption.
+    types_by_id = {r.id: (resolve_alias(r.type) or r.type) for r in rooms}
     exempt: set[frozenset] = set()
     for pref in requirements.adjacency:
         if pref.strength != "must":
             continue
-        a_ids = [rid for rid, t in types_by_id.items() if t == pref.room_a.value]
-        b_ids = [rid for rid, t in types_by_id.items() if t == pref.room_b.value]
+        pref_a = resolve_alias(pref.room_a) or pref.room_a
+        pref_b = resolve_alias(pref.room_b) or pref.room_b
+        a_ids = [rid for rid, t in types_by_id.items() if t == pref_a]
+        b_ids = [rid for rid, t in types_by_id.items() if t == pref_b]
         for a in a_ids:
             for b in b_ids:
                 if a != b:
@@ -132,13 +155,19 @@ def _through_room_access_violations(
     rooms = plan.rooms
     privacy = {r.id: catalog.privacy_level_for(r.type) for r in rooms}
     private_ids = {rid for rid, lvl in privacy.items() if lvl >= _PRIVACY_THRESHOLD}
-    if len(private_ids) < 2:
-        return []  # need at least one OTHER private room to block a path
+    sanitary_ids = {
+        room.id
+        for room in rooms
+        if (resolve_alias(room.type) or room.type) in _SANITARY_TYPES
+    }
+    target_ids = private_ids | sanitary_ids
+    if not private_ids:
+        return []  # no private room can act as a through-route blocker
 
     exempt_pairs = _must_exempt_pairs(rooms, requirements)
     labels = {r.id: r.label for r in rooms}
     violations: list[Violation] = []
-    for pid in sorted(private_ids):
+    for pid in sorted(target_ids):
         if pid == start or pid not in reachable:
             continue  # a disconnected room is already reported as `unreachable`
         blocked = frozenset(
@@ -149,7 +178,7 @@ def _through_room_access_violations(
             violations.append(Violation(
                 code="through_room_access",
                 room_ids=[pid],
-                message=f"{labels[pid]} is only reachable by walking through another private room",
+                message=f"{labels[pid]} is only reachable by walking through a private room",
             ))
     return violations
 
@@ -157,21 +186,30 @@ def _through_room_access_violations(
 def _missing_requested_rooms(
     rooms: list[PlanRoom], requirements: RequirementsSpec
 ) -> list[Violation]:
-    generated_counts: dict[RoomType, int] = {}
+    generated_counts: dict[str, int] = {}
     for room in rooms:
-        generated_counts[room.type] = generated_counts.get(room.type, 0) + 1
+        key = resolve_alias(room.type) or room.type
+        generated_counts[key] = generated_counts.get(key, 0) + 1
 
-    requested_counts: dict[RoomType, int] = {}
-    for requested in requirements.rooms:
-        requested_counts[requested.type] = (
-            requested_counts.get(requested.type, 0) + requested.count
-        )
+    requested_counts: dict[str, int] = {}
+    if requirements.spaces:
+        for requested in requirements.spaces:
+            key = resolve_alias(requested.space_type) or requested.space_type
+            requested_counts[key] = (
+                requested_counts.get(key, 0) + requested.count
+            )
+    else:
+        for requested in requirements.rooms:
+            key = resolve_alias(requested.type.value) or requested.type.value
+            requested_counts[key] = (
+                requested_counts.get(key, 0) + requested.count
+            )
 
     violations: list[Violation] = []
-    for room_type in sorted(requested_counts, key=lambda t: t.value):
+    for room_type in sorted(requested_counts):
         shortfall = requested_counts[room_type] - generated_counts.get(room_type, 0)
         if shortfall > 0:
-            label = room_type.value.replace("_", " ")
+            label = room_type.replace("_", " ")
             violations.append(Violation(
                 code="missing_requested_room",
                 room_ids=[],
@@ -183,6 +221,54 @@ def _missing_requested_rooms(
     return violations
 
 
+def _staircase_alignment_violations(
+    rooms: list[PlanRoom], expected_floors: int | None = None
+) -> list[Violation]:
+    floor_count = max(
+        expected_floors or 0,
+        max((room.floor for room in rooms), default=-1) + 1,
+    )
+    floors = list(range(floor_count))
+    if len(floors) <= 1:
+        return []
+    stairs = {
+        floor: sorted(
+            (
+                room for room in rooms
+                if room.floor == floor and room.type in {"staircase", "stairs"}
+            ),
+            key=lambda room: room.id,
+        )
+        for floor in floors
+    }
+    if any(not floor_stairs for floor_stairs in stairs.values()):
+        return [Violation(
+            code="staircase_alignment",
+            room_ids=[room.id for floor_stairs in stairs.values() for room in floor_stairs],
+            message="Every floor must have an aligned staircase",
+        )]
+
+    reference = stairs[floors[0]][0]
+    misaligned = [
+        floor_stairs[0]
+        for floor, floor_stairs in stairs.items()
+        if floor != floors[0]
+        and (
+            abs(floor_stairs[0].x - reference.x) > EPS
+            or abs(floor_stairs[0].y - reference.y) > EPS
+            or abs(floor_stairs[0].w - reference.w) > EPS
+            or abs(floor_stairs[0].h - reference.h) > EPS
+        )
+    ]
+    if not misaligned:
+        return []
+    return [Violation(
+        code="staircase_alignment",
+        room_ids=[reference.id, *(room.id for room in misaligned)],
+        message="Staircases must occupy the same footprint on every floor",
+    )]
+
+
 def validate(
     plan: LayoutPlan, requirements: RequirementsSpec | None = None
 ) -> list[Violation]:
@@ -192,13 +278,17 @@ def validate(
         violations.extend(_missing_requested_rooms(rooms, requirements))
     if not rooms:
         return violations
+    violations.extend(_staircase_alignment_violations(
+        rooms,
+        requirements.floors if requirements is not None else None,
+    ))
 
     plot = Rect(0.0, 0.0, plan.plot.width_m, plan.plot.depth_m)
 
     # (a) pairwise overlap, epsilon-aware
     for i, a in enumerate(rooms):
         for b in rooms[i + 1:]:
-            if _rect(a).overlaps(_rect(b)):
+            if a.floor == b.floor and _rect(a).overlaps(_rect(b)):
                 violations.append(Violation(
                     code="overlap",
                     room_ids=[a.id, b.id],

@@ -1,5 +1,23 @@
 import type { MvpQualitySnapshot, QualityWarning } from '../../types/contracts'
 
+const PACK_TITLES: Record<string, string> = {
+  generic: 'Layout guidance',
+  residential: 'Residential guidance',
+  healthcare: 'Healthcare guidance',
+  workplace: 'Workplace guidance',
+  hospitality_edu: 'Hospitality & education guidance',
+  vastu: 'Vastu guidance',
+}
+
+function packTitle(key: string): string {
+  if (PACK_TITLES[key]) return PACK_TITLES[key]
+  const label = key
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+  return `${label} guidance`
+}
+
 function GuidanceList({
   title,
   warnings,
@@ -34,8 +52,13 @@ function GuidanceList({
 }
 
 export function QualityPanel({ quality }: { quality: MvpQualitySnapshot }) {
-  const genericWarnings = quality.warnings.filter((warning) => warning.rule === 'generic')
-  const vastuWarnings = quality.warnings.filter((warning) => warning.rule === 'vastu')
+  const warningsByPack = quality.warnings.reduce<Record<string, QualityWarning[]>>(
+    (groups, warning) => {
+      (groups[warning.rule] ??= []).push(warning)
+      return groups
+    },
+    {},
+  )
 
   return (
     <section
@@ -77,8 +100,9 @@ export function QualityPanel({ quality }: { quality: MvpQualitySnapshot }) {
           No soft issues detected in this concept.
         </p>
       )}
-      <GuidanceList title="Layout guidance" warnings={genericWarnings} />
-      <GuidanceList title="Vastu guidance" warnings={vastuWarnings} />
+      {Object.entries(warningsByPack).map(([pack, warnings]) => (
+        <GuidanceList key={pack} title={packTitle(pack)} warnings={warnings} />
+      ))}
     </section>
   )
 }

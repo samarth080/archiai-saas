@@ -10,6 +10,7 @@ Conflicting requirements and a layout-engine ``DoesNotFitError`` require a
 human choice before generation continues.
 """
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,7 +20,14 @@ from app.config.mvp_defaults import (
     DEFAULT_PLOT_DEPTH_M,
     DEFAULT_PLOT_WIDTH_M,
 )
-from app.schemas.requirements import PlotSpec, RequirementsSpec, RoomRequest, RoomType
+from app.schemas.requirements import (
+    PlotSpec,
+    RequirementsSpec,
+    RoomRequest,
+    RoomType,
+    SpaceRequest,
+)
+from app.services.catalog import resolve_alias
 from app.services.layout_engine.engine import DoesNotFitError
 
 
@@ -31,6 +39,7 @@ FACING_QUESTION = (
     "Which direction should the main entrance face (north, south, east, or west)?"
 )
 BATHROOM_QUESTION = "How many bathrooms should the layout include?"
+_RESIDENTIAL_BUILDING_TYPES = frozenset({"house", "apartment", "villa", "duplex"})
 
 class ClarificationResult(BaseModel):
     """A deterministic decision for the API/UI orchestration layer."""
@@ -40,6 +49,7 @@ class ClarificationResult(BaseModel):
     route: Literal["vague", "generate", "conflict"]
     questions: list[str] = Field(default_factory=list)
     optional_missing: list[str] = Field(default_factory=list)
+    trade_offs: list[str] = Field(default_factory=list)
 
 
 class DefaultsApplication(BaseModel):
@@ -59,8 +69,29 @@ def _room_count(spec: RequirementsSpec, room_type: RoomType) -> int:
     return sum(room.count for room in spec.rooms if room.type == room_type)
 
 
+def _space_count(spec: RequirementsSpec, *space_types: str) -> int:
+    return sum(
+        space.count
+        for space in spec.spaces
+        if (resolve_alias(space.space_type) or space.space_type) in space_types
+    )
+
+
+def _is_residential(spec: RequirementsSpec) -> bool:
+    return spec.building_type.value in _RESIDENTIAL_BUILDING_TYPES
+
+
+def _bathroom_count(spec: RequirementsSpec) -> int:
+    if spec.spaces:
+        return _space_count(spec, "bathroom", "ensuite")
+    return _room_count(spec, RoomType.bathroom)
+
+
 def _has_room_program(spec: RequirementsSpec) -> bool:
-    return sum(room.count for room in spec.rooms) > 0
+    return (
+        sum(room.count for room in spec.rooms)
+        + sum(space.count for space in spec.spaces)
+    ) > 0
 
 
 def _optional_questions(spec: RequirementsSpec) -> list[str]:
@@ -69,7 +100,7 @@ def _optional_questions(spec: RequirementsSpec) -> list[str]:
         questions.append(PLOT_SIZE_QUESTION)
     if spec.facing is None:
         questions.append(FACING_QUESTION)
-    if _room_count(spec, RoomType.bathroom) == 0:
+    if _is_residential(spec) and _bathroom_count(spec) == 0:
         questions.append(BATHROOM_QUESTION)
     return questions
 
@@ -99,6 +130,56 @@ def _fit_question(error: DoesNotFitError) -> str:
     )
 
 
+def _fit_trade_offs(
+    spec: RequirementsSpec,
+    error: DoesNotFitError,
+) -> list[str]:
+    trade_offs: list[str] = []
+    if error.required_area is not None:
+        target_area = error.required_area * 1.05
+        if spec.plot.boundary is not None:
+            trade_offs.append(
+                f"Increase the plot boundary to at least {math.ceil(target_area)} m²."
+            )
+        else:
+            width = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
+            depth = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
+            ratio = width / depth
+            suggested_width = math.ceil(math.sqrt(target_area * ratio) * 10) / 10
+            suggested_depth = math.ceil(math.sqrt(target_area / ratio) * 10) / 10
+            trade_offs.append(
+                "Increase the plot to about "
+                f"{suggested_width:g}×{suggested_depth:g} m."
+            )
+    else:
+        trade_offs.append("Increase the plot dimensions and try again.")
+
+    should_count = sum(pref.strength == "should" for pref in spec.adjacency)
+    if should_count:
+        trade_offs.append(
+            f"Relax {should_count} preferred (SHOULD) adjacency "
+            "constraint(s); MUST constraints stay intact."
+        )
+
+    optional_spaces = [space for space in spec.spaces if space.priority is not None]
+    if optional_spaces:
+        space = max(optional_spaces, key=lambda item: item.priority)
+        label = space.space_type.replace("_", " ")
+        if space.count > 1:
+            trade_offs.append(
+                f"Reduce the lowest-priority space '{label}' from "
+                f"{space.count} to {space.count - 1}."
+            )
+        else:
+            trade_offs.append(f"Remove the lowest-priority space '{label}'.")
+    else:
+        trade_offs.append(
+            "Reduce one non-essential room count or preferred area while "
+            "keeping required rooms."
+        )
+    return trade_offs
+
+
 def assess(
     spec: RequirementsSpec,
     *,
@@ -122,11 +203,17 @@ def assess(
         f"I found conflicting requirements: {detail}. Which requirement should I use?"
         for detail in _conflict_details(spec)
     ]
+    trade_offs: list[str] = []
     if fit_error is not None:
         conflict_questions.append(_fit_question(fit_error))
+        trade_offs = _fit_trade_offs(spec, fit_error)
 
     if conflict_questions:
-        return ClarificationResult(route="conflict", questions=conflict_questions)
+        return ClarificationResult(
+            route="conflict",
+            questions=conflict_questions,
+            trade_offs=trade_offs,
+        )
 
     return ClarificationResult(
         route="generate",
@@ -192,14 +279,20 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
         defaults_applied.append(f"{facing.value} facing")
 
     rooms = [room.model_copy(deep=True) for room in spec.rooms]
-    bathroom_count = _room_count(spec, RoomType.bathroom)
-    if bathroom_count == 0:
+    spaces = [space.model_copy(deep=True) for space in spec.spaces]
+    bathroom_count = _bathroom_count(spec)
+    if bathroom_count == 0 and _is_residential(spec):
         bedroom_count = (
-            _room_count(spec, RoomType.bedroom)
+            _space_count(spec, "bedroom", "master_bedroom")
+            if spec.spaces
+            else _room_count(spec, RoomType.bedroom)
             + _room_count(spec, RoomType.master_bedroom)
         )
         bathroom_count = max(1, bedroom_count - 1)
-        rooms.append(RoomRequest(type=RoomType.bathroom, count=bathroom_count))
+        if spec.spaces:
+            spaces.append(SpaceRequest(space_type="bathroom", count=bathroom_count))
+        else:
+            rooms.append(RoomRequest(type=RoomType.bathroom, count=bathroom_count))
         noun = "bathroom" if bathroom_count == 1 else "bathrooms"
         defaults_applied.append(f"{bathroom_count} {noun}")
 
@@ -207,7 +300,7 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
         spec.missing_info,
         plot_complete=width is not None and depth is not None,
         facing_complete=facing is not None,
-        bathroom_complete=bathroom_count > 0,
+        bathroom_complete=not _is_residential(spec) or bathroom_count > 0,
     )
 
     requirements = spec.model_copy(
@@ -215,6 +308,7 @@ def apply_defaults_with_report(spec: RequirementsSpec) -> DefaultsApplication:
             "plot": PlotSpec(width_m=width, depth_m=depth),
             "facing": facing,
             "rooms": rooms,
+            "spaces": spaces,
             "missing_info": missing_info,
         },
         deep=True,

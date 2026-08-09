@@ -21,7 +21,7 @@ function parseWarning(value: unknown): QualityWarning | null {
   if (!isRecord(value)) return null
   if (typeof value.code !== 'string' || typeof value.message !== 'string') return null
   if (value.severity !== 'info' && value.severity !== 'warn') return null
-  if (value.rule !== 'generic' && value.rule !== 'vastu') return null
+  if (typeof value.rule !== 'string' || value.rule.trim() === '') return null
   return {
     code: value.code,
     message: value.message,

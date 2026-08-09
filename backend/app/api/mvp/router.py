@@ -25,7 +25,8 @@ from app.services.entitlement_service import (
     enforce_and_increment_usage,
 )
 from app.services.extraction import ExtractionFailed, extract_requirements
-from app.services.layout_engine import DoesNotFitError, generate_plan
+from app.services.layout_engine import DoesNotFitError
+from app.services.layout_engine.search import best_candidate
 from app.services.llm_client import (
     LLMError,
     LLMInvalidOutput,
@@ -160,7 +161,7 @@ async def generate_mvp_layout(
         "max_generations_per_period",
     )
     try:
-        layout = generate_plan(requirements)
+        layout = best_candidate(requirements)
     except DoesNotFitError as exc:
         raise _clarification_error(assess(requirements, fit_error=exc)) from exc
 

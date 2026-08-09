@@ -19,14 +19,26 @@ export type RoomType =
 export type Facing = 'north' | 'south' | 'east' | 'west'
 
 export interface RoomRequest { type: RoomType; count: number }
-export interface AdjacencyPref { room_a: RoomType; room_b: RoomType; strength: 'must' | 'should' }
-export interface AvoidPair { room_a: RoomType; room_b: RoomType }
+export interface SpaceRequest {
+  space_type: string
+  count: number
+  size_hint?: 'small' | 'medium' | 'large' | 'xlarge' | null
+  area_m2?: number | null
+  priority?: number | null
+  zone_guess?: 'public' | 'private' | 'semi_private' | 'service' | 'circulation' | 'outdoor' | 'technical' | null
+  size_guess_m2?: number | null
+  confidence?: number | null
+}
+export interface AdjacencyPref { room_a: string; room_b: string; strength: 'must' | 'should' }
+export interface AvoidPair { room_a: string; room_b: string }
 export interface PlotSpec { width_m: number | null; depth_m: number | null }
 
 export interface RequirementsSpec {
   building_type: BuildingType
   floors: number
+  accessibility_mode?: boolean
   rooms: RoomRequest[]
+  spaces?: SpaceRequest[]
   adjacency: AdjacencyPref[]
   avoid_adjacency: AvoidPair[]
   plot: PlotSpec
@@ -40,23 +52,55 @@ export interface PlanPlot { width_m: number; depth_m: number; facing: Facing }
 
 export interface PlanRoom {
   id: string
-  type: RoomType
+  type: string
   label: string
   x: number
   y: number
   w: number
   h: number
   rotation: Rotation
+  floor?: number
+  zone_id?: string
 }
 
-export interface Wall { id: string; x1: number; y1: number; x2: number; y2: number; thickness: number }
-export interface Door { id: string; wall_ref: string; offset: number; width: number }
+export interface PlanZoneSpan {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface ArchetypeReason {
+  zone_id: string
+  archetype: string
+  reason: string
+  room_ids: string[]
+  spans: PlanZoneSpan[]
+}
+
+export interface Wall {
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  thickness: number
+  floor?: number
+}
+export interface Door {
+  id: string
+  wall_ref: string
+  offset: number
+  width: number
+  floor?: number
+}
 
 export interface LayoutPlan {
   plot: PlanPlot
   rooms: PlanRoom[]
   walls: Wall[]
   doors: Door[]
+  archetype_reasons?: ArchetypeReason[]
 }
 
 export interface Violation { code: string; room_ids: string[]; message: string }
@@ -64,7 +108,7 @@ export interface QualityWarning {
   code: string
   message: string
   severity: 'info' | 'warn'
-  rule: 'generic' | 'vastu'
+  rule: string
 }
 export interface QualityReport {
   score: number

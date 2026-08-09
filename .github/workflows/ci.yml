@@ -37,6 +37,14 @@ jobs:
           DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
           SECRET_KEY: ci-only-dummy-secret-key-0123456789abcdef
 
+      - name: Print canonical layout benchmark table
+        run: |
+          python scripts/benchmark_mvp_engine.py
+          python scripts/benchmark_hierarchical_archetypes.py
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci-test.db
+          SECRET_KEY: ci-only-dummy-secret-key-0123456789abcdef
+
   frontend:
     name: Frontend tests and build
     runs-on: ubuntu-latest

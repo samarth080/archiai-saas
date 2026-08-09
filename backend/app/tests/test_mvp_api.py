@@ -12,6 +12,7 @@ from app.models.design_version import DesignVersion
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_engine.engine import generate_plan
 from app.services.llm_client import LLMInvalidOutput, LLMTimeout, LLMUnavailable
+from app.services.mvp_pipeline_service import understood_summary
 from app.tests.conftest import TestSessionLocal
 
 FIXTURES = Path(__file__).parent / "fixtures" / "requirements"
@@ -42,6 +43,23 @@ async def _project(client: AsyncClient, token: str, title: str = "MVP Project") 
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_understood_summary_uses_canonical_spaces_when_present():
+    spec = RequirementsSpec.model_validate({
+        "building_type": "other",
+        "rooms": [{"type": "study", "count": 1}],
+        "spaces": [
+            {"space_type": "consultation_room", "count": 3},
+            {"space_type": "waiting_room", "count": 1},
+        ],
+    })
+
+    summary = understood_summary(spec)
+
+    assert "3 consultation rooms" in summary
+    assert "1 waiting room" in summary
+    assert "1 study" not in summary
 
 
 async def test_mvp_pipeline_endpoints_require_access_token(client: AsyncClient):
@@ -185,20 +203,23 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
         assert design is not None
         assert version is not None
         # `spaces` (Phase 1 SpaceCatalog migration), `plot.boundary` (Phase 8
-        # polygon-boundary engine), and `layout_style` (Phase 3.2 archetype
+        # polygon-boundary engine), `layout_style` (Phase 3.2 archetype
+        # selector), and `rule_packs` (generalization Phase 6)
         # selector) are new additive fields with None/empty-list defaults;
         # the fixture predates all three, so the persisted, fully-validated
         # model legitimately has more keys than the raw input fixture — not
         # a round-trip fidelity loss.
         assert version.requirements_json == {
-            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+            "layout_style": None, "rule_packs": None, "accessibility_mode": False,
         }
         assert version.canonical_layout_json == body["layout"]
         assert version.quality_json == body["quality"]
         assert design.layout_json["metadata"]["pipeline"] == "mvp"
         assert design.layout_json["metadata"]["mvpVastuEnabled"] is False
         assert design.layout_json["metadata"]["mvpRequirements"] == {
-            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+            **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+            "layout_style": None, "rule_packs": None, "accessibility_mode": False,
         }
         assert design.layout_json["metadata"]["mvpQuality"] == body["quality"]
         assert version.layout_json["metadata"]["mvpQuality"] == body["quality"]
@@ -212,7 +233,8 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert latest.status_code == 200
     assert latest.json()["designId"] == body["designId"]
     assert latest.json()["metadata"]["mvpRequirements"] == {
-        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+        "layout_style": None, "rule_packs": None, "accessibility_mode": False,
     }
     assert latest.json()["metadata"]["mvpQuality"] == body["quality"]
     assert latest.json()["metadata"]["mvpVastuEnabled"] is False
@@ -224,8 +246,47 @@ async def test_generate_persists_all_canonical_artifacts_and_legacy_canvas_layou
     assert fetched.status_code == 200
     assert fetched.json()["layout"] == body["layout"]
     assert fetched.json()["requirements"] == {
-        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None}, "layout_style": None,
+        **spec, "spaces": [], "plot": {**spec["plot"], "boundary": None},
+        "layout_style": None, "rule_packs": None, "accessibility_mode": False,
     }
+
+
+async def test_generate_returns_multi_floor_canonical_and_canvas_geometry(
+    client: AsyncClient,
+):
+    token = await _register(client, "mvp-multifloor@example.com")
+    spec = {
+        "building_type": "duplex",
+        "floors": 2,
+        "rooms": [
+            {"type": "living_room", "count": 1},
+            {"type": "kitchen", "count": 1},
+            {"type": "bedroom", "count": 3},
+            {"type": "bathroom", "count": 2},
+        ],
+        "plot": {"width_m": 12, "depth_m": 14},
+        "facing": "east",
+    }
+
+    response = await client.post(
+        "/api/generate",
+        json={"requirements": spec},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["quality"]["valid"] is True
+    assert {room["floor"] for room in body["layout"]["rooms"]} == {0, 1}
+    stairs = [
+        room for room in body["layout"]["rooms"]
+        if room["type"] == "staircase"
+    ]
+    assert len(stairs) == 2
+    assert {
+        (room["x"], room["y"], room["w"], room["h"])
+        for room in stairs
+    } == {(0.0, 0.0, 1.2, 2.4)}
 
 
 async def test_generate_returns_structured_plot_clarification_when_program_does_not_fit(
@@ -245,6 +306,8 @@ async def test_generate_returns_structured_plot_clarification_when_program_does_
     error = response.json()["error"]
     assert error["route"] == "conflict"
     assert "plot" in error["questions"][0].lower()
+    assert error["trade_offs"]
+    assert "increase the plot" in error["trade_offs"][0].lower()
     assert response.json()["code"] == "UNPROCESSABLE_ENTITY"
 
 

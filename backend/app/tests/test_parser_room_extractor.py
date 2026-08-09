@@ -48,3 +48,17 @@ def test_guest_bedroom_keeps_guest_feature():
     guest_bedroom = next(room for room in rooms if room.room_type == "bedroom")
 
     assert guest_bedroom.features["guest"] is True
+
+
+def test_catalog_only_spaces_are_part_of_the_parser_vocabulary():
+    counts = _counts("gym with 2 classrooms and checkout")
+
+    assert counts["gym"] == 1
+    assert counts["classroom"] == 2
+    assert counts["checkout"] == 1
+
+
+def test_unknown_named_room_is_preserved_for_clarification():
+    counts = _counts("preschool with a sensory room")
+
+    assert counts["sensory_room"] == 1

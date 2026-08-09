@@ -28,7 +28,9 @@ from difflib import get_close_matches
 
 from app.config.mvp_defaults import ROOM_SIZING
 from app.schemas.requirements import RoomRequest, SpaceRequest
+from app.services.parser.data.room_vocabulary import ROOM_TERMS
 from app.services.parser.data.size_rules import BASE_SIZES
+from app.services.parser.data.synonyms import SYNONYMS
 
 # RoomType enum key -> the free-string catalog key it's an alias of, only
 # where the names differ (most match exactly: bedroom, bathroom, kitchen...).
@@ -41,6 +43,7 @@ _ENUM_ALIAS_OF = {
 
 _CIRCULATION_TYPES = frozenset({
     "hallway", "corridor", "entry", "foyer", "lobby", "staircase", "stairs",
+    "lift", "elevator",
     "passage", "passageway", "landing", "atrium",
 })
 _SERVICE_TYPES = frozenset({
@@ -183,6 +186,8 @@ def _build_catalog() -> dict[str, SpaceType]:
     # something meant to be a thin strip).
     for spine_key in ("corridor", "hallway"):
         room_sizing_by_free_key[spine_key] = (CIRCULATION_WIDTHS["residential"], _CIRCULATION_MIN_LENGTH_M)
+    room_sizing_by_free_key["staircase"] = (2.4, 1.2)
+    room_sizing_by_free_key["lift"] = (1.8, 1.8)
 
     catalog: dict[str, SpaceType] = {}
     for key, area in BASE_SIZES.items():
@@ -209,6 +214,19 @@ CATALOG: dict[str, SpaceType] = _build_catalog()
 # Enum-name aliases ("dining" -> "dining_room") resolve through the same
 # lookup as any other alias text.
 _ALIAS_TO_CANONICAL: dict[str, str] = dict(_ENUM_ALIAS_OF)
+_ALIAS_TO_CANONICAL.update({"stairs": "staircase", "elevator": "lift"})
+for alias, target in SYNONYMS.items():
+    normalized_target = target.strip().lower().replace(" ", "_").replace("-", "_")
+    if normalized_target in CATALOG:
+        _ALIAS_TO_CANONICAL[alias.strip().lower().replace(" ", "_").replace("-", "_")] = normalized_target
+for canonical, terms in ROOM_TERMS.items():
+    if canonical in CATALOG:
+        for term in terms:
+            _ALIAS_TO_CANONICAL[term.strip().lower().replace(" ", "_").replace("-", "_")] = canonical
+
+INFERRED_CONFIDENCE_FLOOR = 0.75
+_INFERRED_AREA_MIN_M2 = 2.0
+_INFERRED_AREA_MAX_M2 = 200.0
 
 
 def resolve_alias(text: str) -> str | None:
@@ -241,6 +259,60 @@ def register(space: SpaceType) -> None:
     validate them) — the clarification-flow-vs-guess decision belongs to the
     caller (e.g. extraction service), not this registry."""
     CATALOG[space.key] = space
+
+
+def ensure_registered(
+    request: SpaceRequest,
+    *,
+    plot_area_m2: float | None = None,
+) -> str:
+    """Return a canonical key, registering a self-describing unknown one.
+
+    Unknown requests without a confident zone and size remain hard failures;
+    callers can route that failure to clarification. Area guesses are bounded
+    to 40% of a known plot so one inferred space cannot consume the envelope.
+    """
+    resolved = resolve_alias(request.space_type)
+    if resolved is not None:
+        return resolved
+    if (
+        request.zone_guess is None
+        or request.size_guess_m2 is None
+        or request.confidence is None
+        or request.confidence < INFERRED_CONFIDENCE_FLOOR
+    ):
+        suggestions = get_close_matches(
+            request.space_type.strip().lower().replace(" ", "_").replace("-", "_"),
+            CATALOG.keys(),
+            n=1,
+        )
+        raise UnknownSpaceType(request.space_type, suggestions[0] if suggestions else None)
+
+    key = request.space_type.strip().lower().replace(" ", "_").replace("-", "_")
+    area_cap = _INFERRED_AREA_MAX_M2
+    if plot_area_m2 is not None:
+        area_cap = max(_INFERRED_AREA_MIN_M2, min(area_cap, plot_area_m2 * 0.4))
+    area = round(max(_INFERRED_AREA_MIN_M2, min(request.size_guess_m2, area_cap)), 2)
+    min_w, min_d = _derive_min_dimensions(area, _DEFAULT_MAX_ASPECT)
+    zone = request.zone_guess
+    node_type = "circulation" if zone == "circulation" else (
+        "service" if zone in {"service", "technical"} else "space"
+    )
+    privacy_level = 2 if zone == "private" else (
+        1 if zone in {"semi_private", "service", "technical"} else 0
+    )
+    register(SpaceType(
+        key=key,
+        label=key.replace("_", " ").title(),
+        node_type=node_type,
+        zone=zone,
+        min_w=min_w,
+        min_d=min_d,
+        preferred_area_m2=area,
+        privacy_level=privacy_level,
+        circulation_weight=2.0 if zone == "circulation" else 1.0,
+    ))
+    return key
 
 
 def min_dimensions(key: str, default: tuple[float, float] = (1.2, 1.2)) -> tuple[float, float]:
