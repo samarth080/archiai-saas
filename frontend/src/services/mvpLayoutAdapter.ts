@@ -142,6 +142,15 @@ export function layoutPlanToCanvas(
   const roomObjects: Room[] = layout.rooms.map((room) => {
     const swapsAxes = quarterTurnSwapsAxes(room.rotation)
     const floor = room.floor ?? 0
+    const centerX = boundedCenter(room.x, room.w, layout.plot.width_m)
+    const centerZ = boundedCenter(room.y, room.h, layout.plot.depth_m)
+    // `vertices` are already in the same NW-origin world frame as x/y (no
+    // rotation to undo - the backend enforces rotation=0 whenever vertices
+    // are set), so they carry over 1:1. `boundedCenter` can still nudge a
+    // room fully inside the plot on a clamped edge; shift every vertex by
+    // that same delta so the outline stays consistent with its own bbox.
+    const shiftX = centerX - (room.x + room.w / 2)
+    const shiftZ = centerZ - (room.y + room.h / 2)
     return {
       id: room.id,
       label: room.label,
@@ -151,9 +160,9 @@ export function layoutPlanToCanvas(
       floorId: `floor_${floor}`,
       floorLevel: floor,
       position: {
-        x: boundedCenter(room.x, room.w, layout.plot.width_m),
+        x: centerX,
         y: floor * WALL_HEIGHT_M + WALL_HEIGHT_M / 2,
-        z: boundedCenter(room.y, room.h, layout.plot.depth_m),
+        z: centerZ,
       },
       size: {
         w: swapsAxes ? room.h : room.w,
@@ -163,6 +172,14 @@ export function layoutPlanToCanvas(
       rotation: { x: 0, y: room.rotation, z: 0 },
       color: ROOM_COLORS[room.type] ?? FALLBACK_COLOR,
       ...(room.zone_id ? { zoneId: room.zone_id } : {}),
+      ...(room.vertices?.length
+        ? {
+            polygonVertices: room.vertices.map((vertex) => ({
+              x: round3(vertex.x + shiftX),
+              z: round3(vertex.y + shiftZ),
+            })),
+          }
+        : {}),
     }
   })
   const objects = [...roomObjects, ...layoutPlanDerivedObjects(layout)]
@@ -240,6 +257,33 @@ export function canvasObjectsToLayoutPlan(
         && isPlanRoomType(object.roomType),
     )
     .map((room) => {
+      // A polygon room's bounding box is derived from its own vertices, not
+      // from position/size - those two are kept roughly in sync by the
+      // vertex-edit helpers, but the vertices are the source of truth the
+      // backend actually validates against (`x/y/w/h` is documented as the
+      // bounding box "only" whenever `vertices` is set).
+      if (room.polygonVertices?.length) {
+        const xs = room.polygonVertices.map((vertex) => vertex.x - footprint.x)
+        const zs = room.polygonVertices.map((vertex) => vertex.z - footprint.z)
+        const minX = Math.min(...xs)
+        const minZ = Math.min(...zs)
+        return {
+          id: room.id,
+          type: room.roomType as string,
+          label: room.label,
+          x: round3(minX),
+          y: round3(minZ),
+          w: round3(Math.max(...xs) - minX),
+          h: round3(Math.max(...zs) - minZ),
+          rotation: 0 as const,
+          floor: room.floorLevel ?? 0,
+          vertices: room.polygonVertices.map((vertex) => ({
+            x: round3(vertex.x - footprint.x),
+            y: round3(vertex.z - footprint.z),
+          })),
+          ...(typeof room.zoneId === 'string' ? { zone_id: room.zoneId } : {}),
+        }
+      }
       const rotation = canonicalQuarterTurn(room.rotation.y)
       const swapsAxes = quarterTurnSwapsAxes(rotation)
       const worldWidth = swapsAxes ? room.size.d : room.size.w

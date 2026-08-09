@@ -31,7 +31,12 @@ export interface SpaceRequest {
 }
 export interface AdjacencyPref { room_a: string; room_b: string; strength: 'must' | 'should' }
 export interface AvoidPair { room_a: string; room_b: string }
-export interface PlotSpec { width_m: number | null; depth_m: number | null }
+/** Straight-edge boundary/room-outline point (workflow Phase 8, polygon
+ * boundary engine) - same meters/NW-origin convention as everything else
+ * here. Curves are out of scope; a vertex list cannot encode one. */
+export interface Vertex { x: number; y: number }
+
+export interface PlotSpec { width_m: number | null; depth_m: number | null; boundary?: Vertex[] | null }
 
 export interface RequirementsSpec {
   building_type: BuildingType
@@ -48,7 +53,7 @@ export interface RequirementsSpec {
 
 export type Rotation = 0 | 90 | 180 | 270
 
-export interface PlanPlot { width_m: number; depth_m: number; facing: Facing }
+export interface PlanPlot { width_m: number; depth_m: number; facing: Facing; boundary?: Vertex[] | null }
 
 export interface PlanRoom {
   id: string
@@ -61,6 +66,10 @@ export interface PlanRoom {
   rotation: Rotation
   floor?: number
   zone_id?: string
+  /** Set only for a non-rectangular room (workflow Phase 8/10.2). When
+   * present, x/y/w/h is the bounding box only - this is the real outline.
+   * Rotation is always 0 for a polygon room (backend-enforced). */
+  vertices?: Vertex[] | null
 }
 
 export interface PlanZoneSpan {

@@ -23,7 +23,10 @@ import { Plan2DObject } from './Plan2DObject'
 import {
   clientPointToPlan,
   derivePlanBounds,
+  insertPolygonVertex,
+  movePolygonVertex,
   planViewportMetrics,
+  removePolygonVertex,
   resizeRoomFromPlanHandle,
   type PlanBounds,
   type PlanPoint,
@@ -57,6 +60,24 @@ interface ActiveResize {
   historySnapshot: CanvasHistorySnapshot
 }
 
+interface ActiveVertexDrag {
+  pointerId: number
+  startRoom: Room
+  vertexIndex: number
+  historySnapshot: CanvasHistorySnapshot
+}
+
+function changedVertices(current: Room, previous: Room) {
+  const a = current.polygonVertices
+  const b = previous.polygonVertices
+  if (a === b) return false
+  if (!a || !b || a.length !== b.length) return true
+  return a.some(
+    (vertex, index) =>
+      Math.abs(vertex.x - b[index].x) > 0.001 || Math.abs(vertex.z - b[index].z) > 0.001,
+  )
+}
+
 interface ActivePan {
   pointerId: number
   startScreen: ScreenPoint
@@ -69,6 +90,7 @@ function cloneRoom(room: Room): Room {
     position: { ...room.position },
     size: { ...room.size },
     rotation: { ...room.rotation },
+    polygonVertices: room.polygonVertices?.map((vertex) => ({ ...vertex })),
   }
 }
 
@@ -100,6 +122,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const pendingMoveRef = useRef<PendingMove | null>(null)
   const activeResizeRef = useRef<ActiveResize | null>(null)
+  const activeVertexRef = useRef<ActiveVertexDrag | null>(null)
   const activePanRef = useRef<ActivePan | null>(null)
   const idSuffix = useId().replace(/:/g, '')
   const patternId = `plan-grid-${idSuffix}`
@@ -181,6 +204,7 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
   const resetPointerState = () => {
     pendingMoveRef.current = null
     activeResizeRef.current = null
+    activeVertexRef.current = null
     activePanRef.current = null
     setInteractionMode('select')
     setPointerIntent('idle')
@@ -204,6 +228,18 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
           {
             size: activeResize.startRoom.size,
             position: activeResize.startRoom.position,
+          },
+          { log: false },
+        )
+      }
+      const activeVertex = activeVertexRef.current
+      if (activeVertex) {
+        updateRoom(
+          activeVertex.startRoom.id,
+          {
+            polygonVertices: activeVertex.startRoom.polygonVertices,
+            position: activeVertex.startRoom.position,
+            size: activeVertex.startRoom.size,
           },
           { log: false },
         )
@@ -380,6 +416,98 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
     releasePointerCapture(event.currentTarget, event.pointerId)
     setInteractionMode('select')
     setPointerIntent('idle')
+  }
+
+  const handleVertexPointerDown = (
+    event: PointerEvent<SVGCircleElement>,
+    room: Room,
+    vertexIndex: number,
+  ) => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    activeVertexRef.current = {
+      pointerId: event.pointerId,
+      startRoom: cloneRoom(room),
+      vertexIndex,
+      historySnapshot: useCanvasStore.getState().createHistorySnapshot(),
+    }
+    setInteractionMode('resize')
+    setPointerIntent('resizing')
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  const handleVertexPointerMove = (event: PointerEvent<SVGCircleElement>) => {
+    const active = activeVertexRef.current
+    if (!active || active.pointerId !== event.pointerId) return
+    event.stopPropagation()
+    const point = pointFromEvent(event.clientX, event.clientY)
+    if (!point) return
+    const state = useCanvasStore.getState()
+    const roomFloor = state.floors.find(
+      (floor) => floor.level === (active.startRoom.floorLevel ?? 0),
+    )
+    const next = movePolygonVertex({
+      room: active.startRoom,
+      vertexIndex: active.vertexIndex,
+      point,
+      snapToGrid: state.snapToGrid,
+      gridSize: state.gridSize,
+      footprint: roomFloor?.footprint,
+    })
+    if (next) updateRoom(active.startRoom.id, next, { log: false })
+  }
+
+  const handleVertexPointerEnd = (event: PointerEvent<SVGCircleElement>) => {
+    const active = activeVertexRef.current
+    if (!active || active.pointerId !== event.pointerId) return
+    event.stopPropagation()
+    activeVertexRef.current = null
+    const current = useCanvasStore
+      .getState()
+      .rooms.find((room) => room.id === active.startRoom.id)
+    const cancelled = event.type === 'pointercancel'
+    if (current && changedVertices(current, active.startRoom)) {
+      if (cancelled) {
+        updateRoom(
+          current.id,
+          {
+            polygonVertices: active.startRoom.polygonVertices,
+            position: active.startRoom.position,
+            size: active.startRoom.size,
+          },
+          { log: false },
+        )
+      } else {
+        updateRoom(
+          current.id,
+          {
+            polygonVertices: current.polygonVertices,
+            position: current.position,
+            size: current.size,
+          },
+          {
+            action: 'object.resized',
+            previousValue: active.startRoom,
+            historySnapshot: active.historySnapshot,
+          },
+        )
+      }
+    }
+    releasePointerCapture(event.currentTarget, event.pointerId)
+    setInteractionMode('select')
+    setPointerIntent('idle')
+  }
+
+  const handleVertexDoubleClick = (room: Room, vertexIndex: number) => {
+    const next = removePolygonVertex(room, vertexIndex)
+    if (!next) return
+    updateRoom(room.id, next, { action: 'object.resized', previousValue: cloneRoom(room) })
+  }
+
+  const handleEdgeDoubleClick = (room: Room, edgeStartIndex: number) => {
+    const next = insertPolygonVertex(room, edgeStartIndex)
+    if (!next) return
+    updateRoom(room.id, next, { action: 'object.resized', previousValue: cloneRoom(room) })
   }
 
   const handleCanvasPointerDown = (event: PointerEvent<SVGSVGElement>) => {
@@ -561,6 +689,11 @@ export function Plan2D({ className, readOnly = false }: Plan2DProps) {
             onResizePointerDown={handleResizePointerDown}
             onResizePointerMove={handleResizePointerMove}
             onResizePointerEnd={handleResizePointerEnd}
+            onVertexPointerDown={handleVertexPointerDown}
+            onVertexPointerMove={handleVertexPointerMove}
+            onVertexPointerEnd={handleVertexPointerEnd}
+            onVertexDoubleClick={handleVertexDoubleClick}
+            onEdgeDoubleClick={handleEdgeDoubleClick}
           />
         ))}
 

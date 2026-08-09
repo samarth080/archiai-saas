@@ -25,6 +25,15 @@ interface Plan2DObjectProps {
   ) => void
   onResizePointerMove: (event: PointerEvent<SVGRectElement>) => void
   onResizePointerEnd: (event: PointerEvent<SVGRectElement>) => void
+  onVertexPointerDown?: (
+    event: PointerEvent<SVGCircleElement>,
+    room: Room,
+    vertexIndex: number,
+  ) => void
+  onVertexPointerMove?: (event: PointerEvent<SVGCircleElement>) => void
+  onVertexPointerEnd?: (event: PointerEvent<SVGCircleElement>) => void
+  onVertexDoubleClick?: (room: Room, vertexIndex: number) => void
+  onEdgeDoubleClick?: (room: Room, edgeStartIndex: number) => void
 }
 
 function handlePosition(room: Room, handle: PlanResizeHandle) {
@@ -61,8 +70,21 @@ export function Plan2DObject({
   onResizePointerDown,
   onResizePointerMove,
   onResizePointerEnd,
+  onVertexPointerDown,
+  onVertexPointerMove,
+  onVertexPointerEnd,
+  onVertexDoubleClick,
+  onEdgeDoubleClick,
 }: Plan2DObjectProps) {
   const definition = COMPONENT_REGISTRY[room.objectType]
+  const polygonVertices = room.polygonVertices
+  // Local (translate-relative) points - the enclosing <g> already carries
+  // room.position, and a polygon room's rotation is always 0.
+  const localVertices = polygonVertices?.map((vertex) => ({
+    x: vertex.x - room.position.x,
+    z: vertex.z - room.position.z,
+  }))
+  const polygonPoints = localVertices?.map((vertex) => `${vertex.x},${vertex.z}`).join(' ')
   const isSpace = definition.category === 'space'
   const isOpening = definition.category === 'opening'
   const isThin = definition.renderingTreatment === 'thin'
@@ -180,22 +202,34 @@ export function Plan2DObject({
         />
       )}
 
-      <rect
-        data-testid={isSpace ? `plan-space-surface-${room.id}` : undefined}
-        x={-room.size.w / 2}
-        y={-room.size.d / 2}
-        width={room.size.w}
-        height={room.size.d}
-        rx={surfaceRadius}
-        fill={displayRoomColor(room)}
-        fillOpacity={fillOpacity}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeDasharray={isOpenSpace ? `${fontSize * 0.65} ${fontSize * 0.35}` : undefined}
-        vectorEffect="non-scaling-stroke"
-      />
+      {polygonPoints ? (
+        <polygon
+          data-testid={isSpace ? `plan-space-surface-${room.id}` : undefined}
+          points={polygonPoints}
+          fill={displayRoomColor(room)}
+          fillOpacity={fillOpacity}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : (
+        <rect
+          data-testid={isSpace ? `plan-space-surface-${room.id}` : undefined}
+          x={-room.size.w / 2}
+          y={-room.size.d / 2}
+          width={room.size.w}
+          height={room.size.d}
+          rx={surfaceRadius}
+          fill={displayRoomColor(room)}
+          fillOpacity={fillOpacity}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeDasharray={isOpenSpace ? `${fontSize * 0.65} ${fontSize * 0.35}` : undefined}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
 
-      {isSpace && (
+      {isSpace && !polygonPoints && (
         <rect
           data-testid={`plan-space-inset-${room.id}`}
           x={-room.size.w / 2 + inset}
@@ -347,7 +381,7 @@ export function Plan2DObject({
         </g>
       )}
 
-      {selected && !readOnly && definition.canResize &&
+      {selected && !readOnly && definition.canResize && !localVertices &&
         PLAN_RESIZE_HANDLES.map((handle) => {
           const position = handlePosition(room, handle)
           return (
@@ -373,6 +407,59 @@ export function Plan2DObject({
             />
           )
         })}
+
+      {selected && !readOnly && localVertices && onEdgeDoubleClick &&
+        localVertices.map((vertex, index) => {
+          const next = localVertices[(index + 1) % localVertices.length]
+          const midpoint = { x: (vertex.x + next.x) / 2, z: (vertex.z + next.z) / 2 }
+          return (
+            <circle
+              key={`edge-${index}`}
+              aria-hidden="true"
+              data-testid={`plan-vertex-edge-${room.id}-${index}`}
+              cx={midpoint.x}
+              cy={midpoint.z}
+              r={handleSize * 0.32}
+              fill={EDITOR_PALETTE.selection}
+              fillOpacity={0.35}
+              stroke="#F5F5F6"
+              strokeOpacity={0.6}
+              strokeWidth={Math.max(0.03, fontSize * 0.08)}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'copy' }}
+              onDoubleClick={(event) => {
+                event.stopPropagation()
+                onEdgeDoubleClick(room, index)
+              }}
+            />
+          )
+        })}
+
+      {selected && !readOnly && localVertices &&
+        localVertices.map((vertex, index) => (
+          <circle
+            key={`vertex-${index}`}
+            aria-label={`Move ${room.label} vertex ${index + 1}`}
+            data-testid={`plan-vertex-${room.id}-${index}`}
+            cx={vertex.x}
+            cy={vertex.z}
+            r={handleSize * 0.45}
+            fill={EDITOR_PALETTE.selection}
+            stroke="#F5F5F6"
+            strokeWidth={Math.max(0.04, fontSize * 0.11)}
+            vectorEffect="non-scaling-stroke"
+            style={{ cursor: 'move' }}
+            onPointerDown={(event) => onVertexPointerDown?.(event, room, index)}
+            onPointerMove={onVertexPointerMove}
+            onPointerUp={onVertexPointerEnd}
+            onPointerCancel={onVertexPointerEnd}
+            onLostPointerCapture={onVertexPointerEnd}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              onVertexDoubleClick?.(room, index)
+            }}
+          />
+        ))}
     </g>
   )
 }

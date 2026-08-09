@@ -42,6 +42,13 @@ export interface Room {
   size: ComponentSize
   rotation: { x: number; y: number; z: number }
   color: string
+  /** Set only for a non-rectangular room (workflow Phase 8/10.2), in the
+   * same world x/z coordinates as `position` - absolute, not relative to
+   * center, since a polygon room's rotation is always 0 (no local-frame
+   * transform to undo). `position`/`size` stay the vertices' bounding-box
+   * center/extent, kept in sync by the move/resize helpers below, so every
+   * existing consumer that only reads position/size keeps working. */
+  polygonVertices?: { x: number; z: number }[]
 }
 
 export interface CanvasFloor {

@@ -330,4 +330,55 @@ describe('canonical MVP layout adapter', () => {
       mvpVastuEnabled: false,
     })
   })
+
+  it('carries a polygon room’s vertices through to the canvas object (Phase 10.2)', () => {
+    const polygonLayout: LayoutPlan = {
+      plot: { width_m: 10, depth_m: 10, facing: 'east' },
+      rooms: [
+        {
+          id: 'room-l',
+          type: 'living_room',
+          label: 'Living Room',
+          x: 1,
+          y: 1,
+          w: 6,
+          h: 6,
+          rotation: 0,
+          floor: 0,
+          vertices: [
+            { x: 1, y: 1 },
+            { x: 7, y: 1 },
+            { x: 7, y: 4 },
+            { x: 4, y: 4 },
+            { x: 4, y: 7 },
+            { x: 1, y: 7 },
+          ],
+        },
+      ],
+      walls: [],
+      doors: [],
+    }
+
+    const canvas = layoutPlanToCanvas(polygonLayout, { requirements })
+    const room = canvas.rooms.find((object) => object.id === 'room-l')
+    expect(room?.polygonVertices).toEqual([
+      { x: 1, z: 1 },
+      { x: 7, z: 1 },
+      { x: 7, z: 4 },
+      { x: 4, z: 4 },
+      { x: 4, z: 7 },
+      { x: 1, z: 7 },
+    ])
+
+    const roundTripped = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 10, d: 10 },
+      'east',
+    )
+    const roundTrippedRoom = roundTripped.rooms.find((r) => r.id === 'room-l')
+    expect(roundTrippedRoom).toMatchObject({
+      x: 1, y: 1, w: 6, h: 6, rotation: 0,
+      vertices: polygonLayout.rooms[0].vertices,
+    })
+  })
 })
