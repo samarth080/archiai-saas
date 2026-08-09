@@ -115,6 +115,60 @@ def test_search_finds_a_meaningfully_better_layout_than_single_shot():
     assert best_score - single_shot_score >= 8
 
 
+@pytest.mark.parametrize("name", FIXTURE_NAMES)
+def test_annealing_never_scores_worse_than_best_of_n_alone(name):
+    spec = _load(name)
+    plain = generate_candidates(spec, n=64, seed=0)
+    annealed = generate_candidates(spec, n=64, seed=0, anneal_iterations=50)
+    assert annealed[0].energy <= plain[0].energy
+    assert validate(annealed[0].plan) == []
+
+
+def test_annealing_is_deterministic_for_a_fixed_seed():
+    spec = _load("3bhk_adjacencies")
+    first = generate_candidates(spec, n=64, seed=0, anneal_iterations=50)
+    second = generate_candidates(spec, n=64, seed=0, anneal_iterations=50)
+    assert first[0].plan == second[0].plan
+    assert first[0].energy == second[0].energy
+
+
+def test_annealing_is_off_by_default():
+    spec = _load("3bhk_adjacencies")
+    default = generate_candidates(spec, n=64, seed=0)
+    explicit_off = generate_candidates(spec, n=64, seed=0, anneal_iterations=0)
+    assert default == explicit_off
+
+
+def test_anneal_can_actually_improve_a_suboptimal_starting_point():
+    """The real, measured finding from Phase 5.2's benchmark: annealing
+    starting from the best-of-64 *winner* finds nothing further on any of
+    the 5 fixtures — best-of-64 already reaches the same optimum. That is
+    not because annealing is a no-op; it's because there's nowhere better
+    left to go from an already-good start. Proven directly: annealing from
+    the plain single-shot ordering (worse than the best-of-64 winner) finds
+    its way to that exact same optimum energy."""
+    from app.config.mvp_defaults import DEFAULT_FACING, DEFAULT_PLOT_DEPTH_M, DEFAULT_PLOT_WIDTH_M
+    from app.services.layout_engine.engine import _build_program, plan_from_program
+    from app.services.layout_engine.search import Candidate, _anneal, energy
+    from app.services.planning import from_requirements
+    from app.services.planning.program_completion import ensure_corridor, ensure_entry
+
+    spec = _load("3bhk_adjacencies")
+    plot_w = spec.plot.width_m or DEFAULT_PLOT_WIDTH_M
+    plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
+    facing = spec.facing or DEFAULT_FACING
+    graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+    program = _build_program(spec)
+    single_shot_plan = plan_from_program(spec, program, plot_w, plot_d, facing)
+    start = Candidate(plan=single_shot_plan, energy=energy(single_shot_plan, spec, graph), seed=0)
+
+    refined = _anneal(start, program, spec, plot_w, plot_d, facing, graph, iterations=200, seed=0)
+    best_of_64_winner = generate_candidates(spec, n=64, seed=0)[0]
+
+    assert refined.energy < start.energy
+    assert refined.energy == pytest.approx(best_of_64_winner.energy)
+
+
 def test_best_candidate_preserves_the_polygon_generation_path():
     spec = RequirementsSpec.model_validate({
         "rooms": [{"type": "bedroom", "count": 1}],
