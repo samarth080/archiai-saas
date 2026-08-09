@@ -1,5 +1,6 @@
 """Canonical-to-canvas compatibility checks for the MVP layout adapter."""
 
+from app.schemas.layout_plan import LayoutPlan
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_adapter import layout_plan_to_canvas
 from app.services.layout_engine import generate_plan
@@ -35,6 +36,44 @@ def test_canvas_footprint_uses_min_corner_and_contains_converted_rooms():
         assert room["position"]["x"] + half_w <= footprint["x"] + footprint["w"]
         assert room["position"]["z"] - half_d >= footprint["z"]
         assert room["position"]["z"] + half_d <= footprint["z"] + footprint["d"]
+
+
+def test_rotated_room_keeps_its_world_footprint_on_the_canvas():
+    """Canonical w/h are world bounds; a canvas box is local and rendered
+    rotated, so a quarter turn must swap them (same rule as the frontend
+    adapter). Without the swap a saved rotated room reloads transposed."""
+
+    plan = LayoutPlan.model_validate(
+        {
+            "plot": {"width_m": 9.0, "depth_m": 12.0, "facing": "east"},
+            "rooms": [
+                {
+                    "id": "r1", "type": "bedroom", "label": "Bedroom 1",
+                    "x": 0.0, "y": 0.0, "w": 4.5, "h": 12.0, "rotation": 0,
+                },
+                {
+                    "id": "r2", "type": "bedroom", "label": "Bedroom 2",
+                    "x": 4.5, "y": 0.0, "w": 4.5, "h": 12.0, "rotation": 90,
+                },
+            ],
+            "walls": [],
+            "doors": [],
+        }
+    )
+
+    rooms = {
+        room["id"]: room
+        for room in layout_plan_to_canvas(plan)["rooms"]
+        if room["objectType"] == "room"
+    }
+
+    assert rooms["r1"]["size"] == {"w": 4.5, "h": 3.0, "d": 12.0}
+    assert rooms["r2"]["size"] == {"w": 12.0, "h": 3.0, "d": 4.5}
+    for room, canonical in zip(plan.rooms, (rooms["r1"], rooms["r2"])):
+        swapped = room.rotation in (90, 270)
+        world_w = canonical["size"]["d"] if swapped else canonical["size"]["w"]
+        world_d = canonical["size"]["w"] if swapped else canonical["size"]["d"]
+        assert (world_w, world_d) == (room.w, room.h)
 
 
 def test_canvas_metadata_preserves_explicit_vastu_opt_in_only():

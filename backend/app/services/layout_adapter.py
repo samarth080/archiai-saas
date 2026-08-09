@@ -9,7 +9,7 @@ to consume their established schema while canonical artifacts remain intact.
 from math import hypot, radians
 
 from app.config.mvp_defaults import WALL_HEIGHT_M
-from app.schemas.layout_plan import Door, LayoutPlan, Wall
+from app.schemas.layout_plan import Door, LayoutPlan, PlanRoom, Wall
 from app.services.layout_service import ROOM_COLORS
 from app.services.parser.vastu import is_vastu_requested
 
@@ -35,6 +35,21 @@ def _bounded_center(origin: float, span: float, plot_span: float) -> float:
     half = span / 2
     rounded = round(origin + half, 3)
     return min(plot_span - half, max(half, rounded))
+
+
+def _box_size(room: PlanRoom) -> dict[str, float]:
+    """Canvas boxes carry their LOCAL size and are rendered rotated; canonical
+    ``w``/``h`` are the room's WORLD bounds. A quarter turn therefore swaps
+    them, exactly as the frontend adapter (``mvpLayoutAdapter.ts``) does — a
+    rotated room written without the swap comes back with its footprint
+    transposed on reload/share/export.
+    """
+    swapped = room.rotation in (90, 270)
+    return {
+        "w": room.h if swapped else room.w,
+        "h": WALL_HEIGHT_M,
+        "d": room.w if swapped else room.h,
+    }
 
 
 def _wall_object(wall: Wall, index: int) -> dict:
@@ -117,7 +132,7 @@ def layout_plan_to_canvas(
                 "y": WALL_HEIGHT_M / 2,
                 "z": _bounded_center(room.y, room.h, plan.plot.depth_m),
             },
-            "size": {"w": room.w, "h": WALL_HEIGHT_M, "d": room.h},
+            "size": _box_size(room),
             "rotation": _rotation(room.rotation),
             "color": _room_color(room.type),
         }

@@ -82,6 +82,33 @@ def test_first_candidate_is_the_plain_single_shot_ordering():
     assert candidates[0].plan == generate_plan(spec)
 
 
+def test_candidates_honour_a_polygon_plot_boundary():
+    """`plan_from_program` is the rect pipeline; fed a boundary-only spec it
+    silently placed the program on the default 9x12 m rectangle — a layout
+    for a plot the caller never asked for, while `generate_plan(spec)` on the
+    same spec correctly returns the 20x14 boundary with clipped rooms."""
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "bedroom", "count": 2},
+            {"type": "kitchen", "count": 1},
+            {"type": "living_room", "count": 1},
+        ],
+        "plot": {"boundary": [
+            {"x": 0, "y": 0}, {"x": 20, "y": 0}, {"x": 20, "y": 14}, {"x": 8, "y": 14},
+        ]},
+        "facing": "east",
+    })
+
+    candidates = generate_candidates(spec, n=4, seed=0)
+
+    assert len(candidates) == 1  # nothing to permute on the polygon path
+    plan = candidates[0].plan
+    assert plan == generate_plan(spec)
+    assert plan.plot.boundary is not None
+    assert any(room.vertices for room in plan.rooms)  # real clipped geometry
+    assert generate_candidates(spec, n=0, seed=0) == []
+
+
 def test_generate_candidates_returns_empty_list_for_zero_requested():
     assert generate_candidates(_load("1bhk"), n=0, seed=0) == []
 

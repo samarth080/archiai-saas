@@ -25,7 +25,12 @@ from app.config.mvp_defaults import DEFAULT_FACING, DEFAULT_PLOT_DEPTH_M, DEFAUL
 from app.schemas.layout_plan import LayoutPlan
 from app.schemas.requirements import RequirementsSpec
 from app.services.layout_adapter import layout_plan_to_canvas
-from app.services.layout_engine.engine import DoesNotFitError, _build_program, plan_from_program
+from app.services.layout_engine.engine import (
+    DoesNotFitError,
+    _build_program,
+    generate_plan,
+    plan_from_program,
+)
 from app.services.planning import EngineProgram, ProgramGraph, from_requirements
 from app.services.planning.graph_scoring import score_graph_satisfaction
 from app.services.planning.program_completion import ensure_corridor, ensure_entry
@@ -78,6 +83,20 @@ def generate_candidates(spec: RequirementsSpec, *, n: int = 64, seed: int = 0) -
     facing = spec.facing or DEFAULT_FACING
 
     graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+
+    if spec.plot.boundary is not None:
+        # `plan_from_program` is the RECT pipeline (see its own docstring):
+        # fed a polygon-boundary spec it silently places the program on a
+        # `width_m x depth_m` rectangle — the default 9x12 when the spec only
+        # carries a boundary — producing a layout for a plot the caller never
+        # asked for. There is also no archetype/band structure to permute an
+        # ordering over on that path, so one honest candidate from the
+        # engine's own polygon pipeline is the whole search space.
+        if n <= 0:
+            return []
+        plan = generate_plan(spec)
+        return [Candidate(plan=plan, energy=energy(plan, spec, graph), seed=seed)]
+
     base_program = _build_program(spec)
 
     rng = random.Random(seed)

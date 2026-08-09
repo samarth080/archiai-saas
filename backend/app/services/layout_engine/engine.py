@@ -47,7 +47,12 @@ from app.schemas.layout_plan import Door, LayoutPlan, PlanPlot, PlanRoom, Vertex
 from app.schemas.requirements import Facing, RequirementsSpec, RoomType
 from app.services import catalog
 from app.services.layout_engine import polygon
-from app.services.layout_engine.archetypes import macro_zone, select_archetype, zoned_bands
+from app.services.layout_engine.archetypes import (
+    double_loaded_corridor,
+    macro_zone,
+    select_archetype,
+    zoned_bands,
+)
 from app.services.layout_engine.geometry import EPS, Rect, Segment
 from app.services.layout_engine.polygon_subdivision import subdivide_polygon
 from app.services.layout_engine.subdivision import RoomNeed, SubdivisionError, subdivide
@@ -321,7 +326,22 @@ def _place_doors(
             continue
         if any(w.id in doored_walls for _, walls in candidates for w in walls):
             continue  # already bridged to something non-private
-        _, best_walls = max(candidates, key=lambda pw: max(_wall_length(w) for w in pw[1]))
+        # Prefer a PUBLIC-macro-zone neighbour over merely a non-private one,
+        # even when its shared wall is shorter. "Non-private" (privacy < 2)
+        # also covers service rooms — a bathroom/utility that is itself
+        # landlocked inside the private wing, reachable only through the
+        # bedrooms it sits between. Bridging the corridor to one of those
+        # satisfies this step's letter while leaving its whole point unmet:
+        # the corridor's only route to the entry still runs through a private
+        # room. Found live on a 3-bed north-facing plan where the corridor's
+        # longest non-private wall was a 2.53 m bathroom in the wing while a
+        # real 0.47 m wall to the dining room sat unused.
+        def _rank(pw: tuple[frozenset, list[Wall]]) -> tuple[int, float]:
+            partner = next(iter(pw[0] - {corridor_key}))
+            public = macro_zone(zone_of.get(partner, "semi_private")) == "public"
+            return (0 if public else 1, -max(_wall_length(w) for w in pw[1]))
+
+        best_walls = min(candidates, key=_rank)[1]
         best = max(best_walls, key=_wall_length)
         if _wall_length(best) >= _MIN_DOOR_EDGE:
             add_door(best, DOOR_WIDTH_M)
@@ -427,6 +447,31 @@ def _place_doors(
     return doors
 
 
+# Repair order for a plan that breaks workflow 4.5's privacy chain: the two
+# comb-arranging archetypes first (they are the ones that can actually fix it),
+# general-purpose before wing-splitting. `hub_and_spoke`/`open_core` never comb,
+# so they are not repair candidates.
+_FALLBACK_ARCHETYPES = (
+    ("zoned_bands", zoned_bands),
+    ("double_loaded_corridor", double_loaded_corridor),
+)
+
+
+def _through_room_violations(plan: LayoutPlan, spec: RequirementsSpec) -> list:
+    """Workflow 4.5's privacy-chain violations only, ignoring every other
+    validator code (a plan built here is zero-gap/zero-overlap by
+    construction, and `missing_requested_room` is a requirements problem no
+    archetype swap can fix). ``spec`` is passed so a MUST-attached ensuite
+    behind its own bedroom stays exempt, same as the scorer's own call."""
+    # Local import: `quality.hard_constraints` imports `layout_engine.geometry`,
+    # and `layout_engine/__init__.py` eagerly imports this module — a
+    # module-level import would be a cycle at package-init time. Same pattern
+    # `program_graph.to_engine_program` already uses for the mirror case.
+    from app.services.quality.hard_constraints import validate
+
+    return [v for v in validate(plan, spec) if v.code == "through_room_access"]
+
+
 # ── Public entrypoint ─────────────────────────────────────────────────────────
 
 
@@ -520,6 +565,47 @@ def plan_from_program(
             result.extend(subdivide(group, band_rect, facing))
         return result
 
+    def _finish(placed: list[tuple[RoomNeed, Rect]]) -> LayoutPlan:
+        for need, rect in placed:  # leaf min-size gate (swap-tolerant)
+            fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
+                rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
+            )
+            if not fits:
+                raise DoesNotFitError(
+                    f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its minimum "
+                    f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
+                )
+
+        walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
+        doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
+
+        # Round EDGES (not x/w independently) so adjacent rooms share the exact
+        # same rounded coordinate — independent rounding lets edges drift apart by
+        # >1 mm and register as phantom overlaps (caught by the property gate).
+        rooms = [
+            PlanRoom(
+                id=need.key,
+                # `need.type` is already validated by this point — a raw RoomType
+                # value from `spec.rooms` (Pydantic-enforced closed enum) or a
+                # catalog-checked key from `spec.spaces` (`from_requirements`
+                # calls `catalog.get()` eagerly) — no cast needed, and casting
+                # via `RoomType(...)` would reject any non-residential type here.
+                type=need.type,
+                label=need.label,
+                x=_round(rect.x), y=_round(rect.y),
+                w=round(_round(rect.x2) - _round(rect.x), 3),
+                h=round(_round(rect.y2) - _round(rect.y), 3),
+                rotation=0,
+            )
+            for need, rect in placed
+        ]
+        return LayoutPlan(
+            plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
+            rooms=rooms,
+            walls=walls,
+            doors=doors,
+        )
+
     archetype_key, archetype_fn, _ = select_archetype(program, spec.layout_style)
     try:
         placed = _place(program, archetype_fn)
@@ -544,46 +630,38 @@ def plan_from_program(
             placed = _place(program, zoned_bands)
         except SubdivisionError:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
+        archetype_key = "zoned_bands"
 
-    for need, rect in placed:  # leaf min-size gate (swap-tolerant)
-        fits = (rect.w >= need.min_w - EPS and rect.d >= need.min_d - EPS) or (
-            rect.w >= need.min_d - EPS and rect.d >= need.min_w - EPS
-        )
-        if not fits:
-            raise DoesNotFitError(
-                f"{need.label} would be {rect.w:.1f}x{rect.d:.1f} m, below its minimum "
-                f"{need.min_w:.1f}x{need.min_d:.1f} m — increase plot size"
-            )
+    plan = _finish(placed)
 
-    walls, wall_rooms = _build_walls(placed, plot_w, plot_d)
-    doors = _place_doors(placed, walls, wall_rooms, spec, facing, program.zone_of)
-
-    # Round EDGES (not x/w independently) so adjacent rooms share the exact
-    # same rounded coordinate — independent rounding lets edges drift apart by
-    # >1 mm and register as phantom overlaps (caught by the property gate).
-    rooms = [
-        PlanRoom(
-            id=need.key,
-            # `need.type` is already validated by this point — a raw RoomType
-            # value from `spec.rooms` (Pydantic-enforced closed enum) or a
-            # catalog-checked key from `spec.spaces` (`from_requirements`
-            # calls `catalog.get()` eagerly) — no cast needed, and casting
-            # via `RoomType(...)` would reject any non-residential type here.
-            type=need.type,
-            label=need.label,
-            x=_round(rect.x), y=_round(rect.y),
-            w=round(_round(rect.x2) - _round(rect.x), 3),
-            h=round(_round(rect.y2) - _round(rect.y), 3),
-            rotation=0,
-        )
-        for need, rect in placed
-    ]
-    return LayoutPlan(
-        plot=PlanPlot(width_m=plot_w, depth_m=plot_d, facing=facing),
-        rooms=rooms,
-        walls=walls,
-        doors=doors,
-    )
+    # Workflow 4.5's privacy-chain guarantee is only structural in the two
+    # comb-arranging archetypes (`zoned_bands`, `double_loaded_corridor`);
+    # `hub_and_spoke`/`open_core` don't comb at all, and even the comb can be
+    # defeated when the corridor's only door to a non-private neighbour lands
+    # on a service room that is itself landlocked in the private wing. Either
+    # way a plan the project's own hard validator rejects with
+    # `through_room_access` could be returned, breaking the "zero hard
+    # violations or an honest DoesNotFitError" contract `generate_plan` is
+    # held to (reachable from the API: `layout_style` is a client-supplied
+    # RequirementsSpec field, and the auto-selector reaches it too).
+    #
+    # Retry with the other archetypes — the same proven fallback shape the
+    # SubdivisionError branch above already uses, just over the whole set
+    # instead of `zoned_bands` alone, since a comb that cannot FIT is no
+    # better than one that does not exist. A replacement is kept only when it
+    # genuinely fixes the chain, so an already-valid plan is never touched and
+    # the extra placements are paid for only on the broken path.
+    if _through_room_violations(plan, spec):
+        for key, fn in _FALLBACK_ARCHETYPES:
+            if key == archetype_key:
+                continue
+            try:
+                fallback = _finish(_place(program, fn))
+            except (SubdivisionError, DoesNotFitError):
+                continue
+            if not _through_room_violations(fallback, spec):
+                return fallback
+    return plan
 
 
 def _generate_plan_polygon(spec: RequirementsSpec) -> LayoutPlan:

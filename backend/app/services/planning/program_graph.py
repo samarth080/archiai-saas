@@ -522,7 +522,15 @@ def merge(base: ProgramGraph, other: ProgramGraph) -> ProgramGraph:
     for node in other.nodes:
         new_id = node.id
         if not new_id or new_id in seen:
-            new_id = f"node-{len(merged.nodes)}"
+            # Keep bumping: `node-{len}` can land on the very id it is meant
+            # to replace (base ["node-0", "node-2"] + other "node-2" -> len is
+            # 2 -> "node-2" again), which appended a SECOND "node-2" and made
+            # one of them unreachable through get_node/edges — the exact
+            # silent drop this function's docstring promises not to do.
+            index = len(merged.nodes)
+            while f"node-{index}" in seen:
+                index += 1
+            new_id = f"node-{index}"
         if new_id != node.id:
             remap[node.id] = new_id
         node.id = new_id
