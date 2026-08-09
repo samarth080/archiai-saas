@@ -31,7 +31,7 @@ bearer = HTTPBearer(auto_error=False)
     "/register",
     response_model=AuthResponse,
     status_code=201,
-    dependencies=[Depends(rate_limit("auth_register", limit=5, window_seconds=60))],
+    dependencies=[Depends(rate_limit("auth_register", limit=5, window_seconds=60, by_ip=True))],
 )
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return await register_user(db, data)
@@ -40,7 +40,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 @router.post(
     "/login",
     response_model=AuthResponse,
-    dependencies=[Depends(rate_limit("auth_login", limit=10, window_seconds=60))],
+    dependencies=[Depends(rate_limit("auth_login", limit=10, window_seconds=60, by_ip=True))],
 )
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await login_user(db, data)

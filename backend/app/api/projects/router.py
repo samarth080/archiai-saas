@@ -82,6 +82,9 @@ async def duplicate(
     user_id: str = Depends(_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
+    # Duplicating creates a project like `create` does, so it has to clear the
+    # same plan gate — otherwise the free-tier cap is bypassed by duplicating.
+    await require_within_project_limit(db, user_id)
     return await duplicate_project(db, user_id, project_id)
 
 

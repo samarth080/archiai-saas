@@ -67,11 +67,18 @@ def _identity(request: Request) -> str:
     return f"ip:{_client_ip(request)}"
 
 
-def rate_limit(name: str, limit: int, window_seconds: float = 60.0):
-    """Build a FastAPI dependency enforcing `limit` requests per window."""
+def rate_limit(name: str, limit: int, window_seconds: float = 60.0, *, by_ip: bool = False):
+    """Build a FastAPI dependency enforcing `limit` requests per window.
+
+    `by_ip` pins the bucket to the client IP even when a valid bearer token is
+    present. Credential endpoints must use it: otherwise an attacker exhausts
+    the IP bucket, then attaches a token from a throwaway account of their own
+    to mint a fresh bucket, multiplying their brute-force budget from one IP.
+    """
 
     async def dependency(request: Request) -> None:
-        key = f"{name}:{_identity(request)}"
+        identity = f"ip:{_client_ip(request)}" if by_ip else _identity(request)
+        key = f"{name}:{identity}"
         if not rate_limiter.allow(key, limit, window_seconds):
             raise HTTPException(
                 status_code=429,
