@@ -6,7 +6,12 @@ import {
   layoutPlanToCanvas,
   replaceDerivedCanvasObjects,
 } from './mvpLayoutAdapter'
-import type { GenerateMvpResponse, LayoutPlan, RequirementsSpec } from '../types/contracts'
+import type {
+  GenerateMvpResponse,
+  LayoutPlan,
+  RequirementsSpec,
+  RoomType,
+} from '../types/contracts'
 
 const requirements: RequirementsSpec = {
   building_type: 'house',
@@ -103,6 +108,36 @@ describe('canonical MVP layout adapter', () => {
     )
 
     expect(restored).toEqual(layout)
+  })
+
+  it('keeps engine rooms outside the twelve residential types', () => {
+    // The engine injects a `corridor` room. Dropping it here deleted it from
+    // the plan sent for scoring, so every room it served came back
+    // `unreachable` after any edit.
+    const withCorridor: LayoutPlan = {
+      ...layout,
+      rooms: [
+        ...layout.rooms,
+        {
+          id: 'corridor-1',
+          type: 'corridor' as RoomType,
+          label: 'Corridor',
+          x: 0,
+          y: 0,
+          w: 1.2,
+          h: 12,
+          rotation: 0,
+        },
+      ],
+    }
+    const canvas = layoutPlanToCanvas(withCorridor)
+    const restored = canvasObjectsToLayoutPlan(
+      canvas.rooms,
+      { x: 0, z: 0, w: 9, d: 12 },
+      'east',
+    )
+
+    expect(restored.rooms.map((room) => room.id)).toContain('corridor-1')
   })
 
   it('serializes a rotated canvas room from its visible world bounds', () => {

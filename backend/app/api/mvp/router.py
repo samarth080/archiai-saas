@@ -208,6 +208,10 @@ async def generate_mvp_layout(
     response_model=(
         MvpValidationSyncResponse | MvpQualitySnapshot | HardQualitySnapshot
     ),
+    # The editor calls this on a 300 ms debounce while dragging, so the ceiling
+    # is deliberately high — it exists to stop an abusive caller looping the
+    # (CPU-bound, event-loop-blocking) validator, not to throttle real editing.
+    dependencies=[Depends(rate_limit("mvp_validate", limit=120, window_seconds=60))],
 )
 async def validate_mvp_layout(
     request: ValidateMvpRequest,

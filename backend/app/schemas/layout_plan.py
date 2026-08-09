@@ -146,9 +146,15 @@ class LayoutPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     plot: PlanPlot
-    rooms: list[PlanRoom] = Field(default_factory=list)
-    walls: list[Wall] = Field(default_factory=list)
-    doors: list[Door] = Field(default_factory=list)
+    # Bounded because `quality.hard_constraints.validate` is O(n^2) in the room
+    # count (pairwise overlap) and emits one Violation per overlapping pair — an
+    # unbounded list let a single /api/validate request burn ~48 s of CPU on the
+    # event loop and build millions of violation objects. 200 is ~14x the largest
+    # real fixture (4bhk: 14 rooms), so it bounds the validator without
+    # constraining any layout the engine can actually produce.
+    rooms: list[PlanRoom] = Field(default_factory=list, max_length=200)
+    walls: list[Wall] = Field(default_factory=list, max_length=2000)
+    doors: list[Door] = Field(default_factory=list, max_length=2000)
     archetype_reasons: list[ArchetypeReason] | None = None
 
     @model_serializer(mode="wrap")

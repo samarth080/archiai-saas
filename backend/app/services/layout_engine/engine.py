@@ -453,7 +453,22 @@ def _place_doors(
             continue
         if any(w.id in doored_walls for _, walls in candidates for w in walls):
             continue  # already bridged to something non-private
-        _, best_walls = max(candidates, key=lambda pw: max(_wall_length(w) for w in pw[1]))
+        # Prefer a PUBLIC-macro-zone neighbour over merely a non-private one,
+        # even when its shared wall is shorter. "Non-private" (privacy < 2)
+        # also covers service rooms — a bathroom/utility that is itself
+        # landlocked inside the private wing, reachable only through the
+        # bedrooms it sits between. Bridging the corridor to one of those
+        # satisfies this step's letter while leaving its whole point unmet:
+        # the corridor's only route to the entry still runs through a private
+        # room. Found live on a 3-bed north-facing plan where the corridor's
+        # longest non-private wall was a 2.53 m bathroom in the wing while a
+        # real 0.47 m wall to the dining room sat unused.
+        def _rank(pw: tuple[frozenset, list[Wall]]) -> tuple[int, float]:
+            partner = next(iter(pw[0] - {corridor_key}))
+            public = macro_zone(zone_of.get(partner, "semi_private")) == "public"
+            return (0 if public else 1, -max(_wall_length(w) for w in pw[1]))
+
+        best_walls = min(candidates, key=_rank)[1]
         best = max(best_walls, key=_wall_length)
         if _wall_length(best) >= _MIN_DOOR_EDGE:
             add_door(best, DOOR_WIDTH_M)
@@ -757,6 +772,7 @@ def plan_from_program(
             placed, used_band_plan = _place_checked(program, zoned_bands)
         except SubdivisionError:
             raise DoesNotFitError(f"{exc} — increase plot size") from exc
+        archetype_key = "zoned_bands"
 
     walls, wall_rooms = _build_walls(
         placed,

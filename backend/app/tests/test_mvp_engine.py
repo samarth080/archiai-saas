@@ -439,6 +439,77 @@ def test_demo_three_bhk_fits_a_thirty_by_forty_foot_plot():
     assert len(plan.rooms) == _expected_room_count(spec)
 
 
+# ── Workflow 4.5 privacy chain: generate_plan must never RETURN a plan that
+# breaks it, whichever archetype places the rooms (found by fuzzing the real
+# generate_plan entrypoint against its own hard validator). ────────────────
+
+
+def test_corridor_door_prefers_a_public_neighbour_over_a_landlocked_service_room():
+    """`_place_doors` step 1.5 guarantees a corridor a door to a NON-PRIVATE
+    neighbour, but picked the longest such wall — which can be a bathroom
+    that is itself landlocked inside the private wing. The corridor's only
+    route to the entry then still ran through a bedroom. Real geometry: the
+    corridor's longest non-private wall here is a 2.53 m bathroom in the
+    wing, while a genuine 0.47 m wall to the dining room sat unused."""
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "bedroom", "count": 3}, {"type": "bathroom", "count": 2},
+            {"type": "kitchen", "count": 1}, {"type": "living_room", "count": 1},
+            {"type": "dining", "count": 1}, {"type": "balcony", "count": 1},
+        ],
+        "adjacency": [{"room_a": "bedroom", "room_b": "bathroom", "strength": "must"}],
+        "plot": {"width_m": 8.6, "depth_m": 18.6},
+        "facing": "north",
+    })
+
+    plan = generate_plan(spec)
+
+    assert validate(plan) == []
+
+
+@pytest.mark.parametrize("style", ["zoned_bands", "double_loaded_corridor", "hub_and_spoke", "open_core"])
+def test_no_archetype_returns_a_plan_that_breaks_the_privacy_chain(style):
+    """`hub_and_spoke`/`open_core` never comb-arrange the rooms a corridor
+    serves, so they used to return `through_room_access`-violating geometry
+    for most real residential programs — reachable straight from the API,
+    since `layout_style` is a client-supplied RequirementsSpec field.
+    generate_plan now repairs with a comb-arranging archetype instead."""
+    spec = RequirementsSpec.model_validate({
+        "rooms": [
+            {"type": "bedroom", "count": 3}, {"type": "bathroom", "count": 2},
+            {"type": "kitchen", "count": 1}, {"type": "living_room", "count": 1},
+        ],
+        "plot": {"width_m": 15.7, "depth_m": 8.5},
+        "facing": "west",
+        "layout_style": style,
+    })
+
+    try:
+        plan = generate_plan(spec)
+    except DoesNotFitError:
+        return  # the contract's other permitted outcome, same as the gate above
+
+    assert validate(plan) == []
+
+
+def test_auto_selected_open_core_keeps_every_private_space_directly_reachable():
+    # Same defect via the AUTO selector (no layout_style), on the free-string
+    # `spec.spaces` path: one dominant node >= 50% of the program area picks
+    # open_core, and its two private studies ended up chained.
+    spec = RequirementsSpec.model_validate({
+        "spaces": [
+            {"space_type": "workspace", "count": 1},
+            {"space_type": "study", "count": 2},
+        ],
+        "plot": {"width_m": 15.7, "depth_m": 9.4},
+        "facing": "north",
+    })
+
+    plan = generate_plan(spec)
+
+    assert validate(plan) == []
+
+
 # ── Step 1.3 — hand-broken plans trigger exactly their violation codes ────────
 
 

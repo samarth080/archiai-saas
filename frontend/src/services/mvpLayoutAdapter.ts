@@ -219,8 +219,14 @@ export function layoutPlanToCanvas(
 
 /**
  * Convert the editor's center-based objects back to the locked NW-origin MVP
- * contract for post-edit validation. This bridge is deliberately limited to
- * canonical rooms plus the wall/hosted-door objects emitted by this adapter.
+ * contract for post-edit validation, covering every room object plus the
+ * wall/hosted-door objects emitted by this adapter.
+ *
+ * Every `objectType: 'room'` object is included — `PlanRoom.type` is an open
+ * string validated against the server's space catalog, and the engine already
+ * emits types outside the twelve residential ones (e.g. the injected
+ * `corridor`). Filtering those out here silently deleted them from the plan
+ * sent for scoring, which made every room they served report `unreachable`.
  */
 export function canvasObjectsToLayoutPlan(
   objects: Room[],

@@ -180,6 +180,27 @@ async def test_login_is_rate_limited(client: AsyncClient):
     assert blocked.json()["code"] == "TOO_MANY_REQUESTS"
 
 
+async def test_login_rate_limit_cannot_be_reset_with_an_attackers_own_token(
+    client: AsyncClient,
+):
+    """The login bucket is keyed on IP only. Before this, attaching a valid
+    bearer token switched the bucket to `user:<that token's sub>`, so an
+    attacker could mint a fresh 10-attempt budget per throwaway account from
+    the same IP."""
+    attacker = await _register(client, "bucket-attacker@example.com")
+    creds = {"email": "bucket-victim@example.com", "password": "whatever12"}
+
+    for _ in range(11):
+        await client.post("/api/auth/login", json=creds)
+
+    retried = await client.post(
+        "/api/auth/login",
+        json=creds,
+        headers={"Authorization": f"Bearer {attacker['access_token']}"},
+    )
+    assert retried.status_code == 429
+
+
 async def test_expired_access_token_rejected(client: AsyncClient):
     await _register(client, "expired@example.com")
     expired = jwt.encode(

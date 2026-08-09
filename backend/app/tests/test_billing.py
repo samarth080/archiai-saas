@@ -110,6 +110,22 @@ async def test_project_limit_returns_402_when_exceeded(client: AsyncClient):
     assert blocked.json()["code"] == "PAYMENT_REQUIRED"
 
 
+async def test_duplicate_project_is_gated_by_the_same_project_limit(client: AsyncClient):
+    """Duplicating creates a project, so it must clear the plan gate too —
+    otherwise the free-tier cap is bypassed by duplicating an existing project."""
+    token, _ = await _register(client, "dup-limit@example.com")
+    first = await client.post("/api/projects", json={"title": "P0"}, headers=_headers(token))
+    project_id = first.json()["id"]
+    for i in range(1, 3):
+        assert (
+            await client.post("/api/projects", json={"title": f"P{i}"}, headers=_headers(token))
+        ).status_code == 201
+
+    blocked = await client.post(f"/api/projects/{project_id}/duplicate", headers=_headers(token))
+    assert blocked.status_code == 402
+    assert blocked.json()["code"] == "PAYMENT_REQUIRED"
+
+
 async def test_generation_quota_returns_402_when_exceeded(client: AsyncClient, monkeypatch):
     token, user_id = await _register(client, "gen-limit@example.com")
     # Lower the generation quota to 1 via a per-user entitlement override.

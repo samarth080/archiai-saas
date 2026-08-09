@@ -130,6 +130,28 @@ def test_merge_rebases_colliding_ids_and_keeps_all_nodes():
     assert len({n.id for n in merged.nodes}) == 2  # id collision was re-based
 
 
+def test_merge_rebase_does_not_reuse_the_id_it_is_replacing():
+    """The generated replacement was `node-{len(merged.nodes)}`, which lands
+    on the colliding id itself whenever the base's own ids are sparse
+    (["node-0", "node-2"] + an incoming "node-2" -> len is 2 -> "node-2").
+    That appended a second "node-2", so get_node and every edge resolved to
+    only one of them — a silent drop of exactly the kind merge promises not
+    to do."""
+    base = ProgramGraph(nodes=[Node(id="node-0", label="A"), Node(id="node-2", label="B")])
+    other = ProgramGraph(
+        nodes=[Node(id="node-2", label="C")],
+        edges=[Edge(node_a="node-2", node_b="node-0")],
+    )
+
+    merged = merge(base, other)
+
+    ids = [n.id for n in merged.nodes]
+    assert len(ids) == len(set(ids)) == 3
+    assert {n.label for n in merged.nodes} == {"A", "B", "C"}
+    # the re-based edge points at the incoming node, not the base's namesake
+    assert merged.get_node(merged.edges[0].node_a).label == "C"
+
+
 # ── Validation ────────────────────────────────────────────────────────────────
 
 

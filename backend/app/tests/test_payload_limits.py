@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from pydantic import ValidationError
 
 from app.schemas.design import SaveDesignRequest
+from app.schemas.layout_plan import LayoutPlan
 
 
 async def _token(client: AsyncClient, email: str) -> str:
@@ -33,6 +34,49 @@ def test_oversize_layout_json_rejected_by_schema():
 def test_normal_layout_accepted_by_schema():
     layout = {"version": "1.0", "rooms": [{"id": "a", "label": "Bedroom"}]}
     assert SaveDesignRequest(layout=layout).layout == layout
+
+
+def _plan_room(index: int) -> dict:
+    return {
+        "id": f"r{index}",
+        "type": "bedroom",
+        "label": "Bedroom",
+        "x": 0.0,
+        "y": 0.0,
+        "w": 3.0,
+        "h": 3.0,
+        "rotation": 0,
+    }
+
+
+def _plan(room_count: int) -> dict:
+    return {
+        "plot": {"width_m": 90.0, "depth_m": 90.0},
+        "rooms": [_plan_room(i) for i in range(room_count)],
+        "walls": [],
+        "doors": [],
+    }
+
+
+def test_layout_plan_rejects_an_unbounded_room_list():
+    """`hard_constraints.validate` is O(n^2) in the room count and emits a
+    Violation per overlapping pair, so an unbounded list let one /api/validate
+    request block the event loop for ~48 s. A realistic plan is well under the
+    cap (the largest fixture has 14 rooms)."""
+    with pytest.raises(ValidationError):
+        LayoutPlan.model_validate(_plan(201))
+    assert len(LayoutPlan.model_validate(_plan(200)).rooms) == 200
+
+
+async def test_validate_endpoint_rejects_an_oversize_room_list(client: AsyncClient):
+    token = await _token(client, "big-layout@example.com")
+    response = await client.post(
+        "/api/validate",
+        json={"layout": _plan(500)},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "UNPROCESSABLE_ENTITY"
 
 
 async def test_request_body_size_guard_returns_413(client: AsyncClient):

@@ -555,6 +555,23 @@ describe('drag clamp to footprint', () => {
     expect(room.position.x).toBe(6)
     expect(room.position.z).toBe(5)
   })
+
+  it('clamps a rotation-only turn back inside the footprint', () => {
+    loadFootprintFloor()
+    // 2 x 6 room parked against the right edge: it fits before the turn
+    // (world width 2 -> x in [6, 8]) but not after it (world width 6).
+    useCanvasStore
+      .getState()
+      .updateRoom('r1', { size: { w: 2, h: 3, d: 6 }, position: { x: 7, y: 1.5, z: 4 } }, { log: false })
+    expect(useCanvasStore.getState().rooms.find((r) => r.id === 'r1')!.position.x).toBe(7)
+
+    useCanvasStore.getState().updateRoom('r1', { rotation: { x: 0, y: 90, z: 0 } })
+
+    const room = useCanvasStore.getState().rooms.find((candidate) => candidate.id === 'r1')!
+    expect(room.position.x).toBe(5)
+    // Rotating must not move the object vertically.
+    expect(room.position.y).toBe(1.5)
+  })
 })
 
 describe('resizeRoom', () => {

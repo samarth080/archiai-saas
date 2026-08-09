@@ -1,5 +1,6 @@
 import type { Room } from '../../store/canvasStore'
 import { COMPONENT_REGISTRY, clampComponentSize } from '../../store/componentRegistry'
+import { quarterTurnPlanDirection, quarterTurnPlanSize } from '../../utils/quarterTurn'
 
 export interface PlanBounds {
   x: number
@@ -130,15 +131,22 @@ function snappedDimension(value: number, enabled: boolean, gridSize: number) {
 
 function maxAnchoredSpan(
   anchor: number,
-  direction: -1 | 0 | 1,
+  direction: number,
   min: number,
   span: number,
 ) {
-  if (direction === 1) return min + span - anchor
-  if (direction === -1) return anchor - min
+  if (direction > 0) return min + span - anchor
+  if (direction < 0) return anchor - min
   return Number.POSITIVE_INFINITY
 }
 
+/**
+ * Handles are drawn inside the object's rotated group, so `handle.sx/sz` are
+ * local directions while `point` is a world plan coordinate. The whole resize
+ * therefore runs on the world axes (like the 3D corner grips) and converts the
+ * result back to local box dimensions, so a quarter-turned room resizes along
+ * the edge the user actually grabbed.
+ */
 export function resizeRoomFromPlanHandle({
   room,
   handle,
@@ -154,39 +162,48 @@ export function resizeRoomFromPlanHandle({
   gridSize: number
   footprint?: PlanBounds
 }) {
-  const anchorX = room.position.x - (handle.sx * room.size.w) / 2
-  const anchorZ = room.position.z - (handle.sz * room.size.d) / 2
-  const rawSize = {
+  const rotationY = room.rotation.y
+  const world = quarterTurnPlanDirection(handle, rotationY)
+  const startWorldSize = quarterTurnPlanSize(room.size, rotationY)
+  const anchorX = room.position.x - (world.sx * startWorldSize.w) / 2
+  const anchorZ = room.position.z - (world.sz * startWorldSize.d) / 2
+  const rawWorldSize = {
     w:
-      handle.sx === 0
-        ? room.size.w
+      world.sx === 0
+        ? startWorldSize.w
         : snappedDimension(Math.abs(point.x - anchorX), snapToGrid, gridSize),
-    h: room.size.h,
     d:
-      handle.sz === 0
-        ? room.size.d
+      world.sz === 0
+        ? startWorldSize.d
         : snappedDimension(Math.abs(point.z - anchorZ), snapToGrid, gridSize),
   }
   const definition = COMPONENT_REGISTRY[room.objectType]
-  const size = clampComponentSize(room.objectType, rawSize, room.size)
+  const size = clampComponentSize(
+    room.objectType,
+    { ...room.size, ...quarterTurnPlanSize(rawWorldSize, rotationY) },
+    room.size,
+  )
+  const worldSize = quarterTurnPlanSize(size, rotationY)
 
   if (validBounds(footprint)) {
-    const maxW = maxAnchoredSpan(anchorX, handle.sx, footprint.x, footprint.w)
-    const maxD = maxAnchoredSpan(anchorZ, handle.sz, footprint.z, footprint.d)
-    if (handle.sx !== 0) {
-      size.w = Math.max(definition.minSize.w, Math.min(size.w, maxW))
+    const worldMinSize = quarterTurnPlanSize(definition.minSize, rotationY)
+    if (world.sx !== 0) {
+      const maxW = maxAnchoredSpan(anchorX, world.sx, footprint.x, footprint.w)
+      worldSize.w = Math.max(worldMinSize.w, Math.min(worldSize.w, maxW))
     }
-    if (handle.sz !== 0) {
-      size.d = Math.max(definition.minSize.d, Math.min(size.d, maxD))
+    if (world.sz !== 0) {
+      const maxD = maxAnchoredSpan(anchorZ, world.sz, footprint.z, footprint.d)
+      worldSize.d = Math.max(worldMinSize.d, Math.min(worldSize.d, maxD))
     }
   }
 
+  const localPlanSize = quarterTurnPlanSize(worldSize, rotationY)
   return {
-    size,
+    size: { ...size, w: localPlanSize.w, d: localPlanSize.d },
     position: {
-      x: handle.sx === 0 ? room.position.x : anchorX + (handle.sx * size.w) / 2,
+      x: world.sx === 0 ? room.position.x : anchorX + (world.sx * worldSize.w) / 2,
       y: room.position.y,
-      z: handle.sz === 0 ? room.position.z : anchorZ + (handle.sz * size.d) / 2,
+      z: world.sz === 0 ? room.position.z : anchorZ + (world.sz * worldSize.d) / 2,
     },
   }
 }

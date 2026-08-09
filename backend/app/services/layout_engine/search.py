@@ -43,6 +43,7 @@ from app.services.layout_adapter import layout_plan_to_canvas
 from app.services.layout_engine.engine import (
     DoesNotFitError,
     _build_program,
+    _guard_program_size,
     generate_plan,
     plan_from_program,
 )
@@ -155,9 +156,28 @@ def generate_candidates(
     plot_d = spec.plot.depth_m or DEFAULT_PLOT_DEPTH_M
     facing = spec.facing or DEFAULT_FACING
 
-    # `_build_program` first: it carries the program-size guard, and building
-    # the scoring graph before it would pay the full node-explosion cost of an
-    # oversized program the guard is there to refuse cheaply.
+    # `_guard_program_size` first, before any graph is built, on both branches
+    # below: building the scoring graph before it would pay the full
+    # node-explosion cost of an oversized program the guard exists to refuse
+    # cheaply (a polygon-boundary spec can carry just as large a `spec.spaces`
+    # list as a rectangular one, so the boundary branch needs the same
+    # ordering, not just the `_build_program` branch).
+    _guard_program_size(spec)
+
+    if spec.plot.boundary is not None:
+        # `plan_from_program` is the RECT pipeline (see its own docstring):
+        # fed a polygon-boundary spec it silently places the program on a
+        # `width_m x depth_m` rectangle — the default 9x12 when the spec only
+        # carries a boundary — producing a layout for a plot the caller never
+        # asked for. There is also no archetype/band structure to permute an
+        # ordering over on that path, so one honest candidate from the
+        # engine's own polygon pipeline is the whole search space.
+        if n <= 0:
+            return []
+        graph = ensure_corridor(ensure_entry(from_requirements(spec)))
+        plan = generate_plan(spec)
+        return [Candidate(plan=plan, energy=energy(plan, spec, graph), seed=seed)]
+
     base_program = _build_program(spec)
     graph = ensure_corridor(ensure_entry(from_requirements(spec)))
 
